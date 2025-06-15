@@ -24,8 +24,6 @@ app.use('/auth', authRoutes);
 
 
 app.get("/", async (req, res) => {
-    res.status(200).json({ msg: 'Welcome to the API' });
-    return;
     if (req.headers.action.toLowerCase() === 'ping') {
         res.status(200).json({ msg: 'Welcome to the API' });
     }

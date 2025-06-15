@@ -1,7 +1,10 @@
 <script setup>
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
 import { ref } from 'vue';
-import axios from 'axios';
+import { useRouter } from 'vue-router';
+import axiosInstance from '@/api/axiosInstance';
+
+const router = useRouter();
 
 const email = ref('');
 const password = ref('');
@@ -9,22 +12,33 @@ const checked = ref(false);
 
 const handleLogin = async () => {
     try {
-        const response = await axios.post('http://127.0.0.1:3000/auth/login', {
+        axiosInstance.setActionHeader('login');
+
+        const response = await axiosInstance.post('http://127.0.0.1:3000/auth/login', {
             email: email.value,
             password: password.value
         });
+
         if (response.status === 200) {
             console.log('Login successful:', response.data);
             //router.push('/');
-        } else
+        }
+        else
             console.error('Login failed:', response.data.message || 'Unexpected response');
     } catch (error) {
+        if (error.response?.status === 401) {
+            console.error('Login failed: Invalid credentials');
+            router.push('/auth/access');
+            return;
+        }
+
         console.error('Login failed:', error.response?.data || error.message);
         alert('An error occurred during login. Please try again.');
     }
 };
 
 </script>
+
 
 <template>
     <FloatingConfigurator />
@@ -50,7 +64,7 @@ const handleLogin = async () => {
                                 />
                             </g>
                         </svg>
-                        <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">Welcome to PrimeLand!</div>
+                        <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">Welcome!</div>
                         <span class="text-muted-color font-medium">Sign in to continue</span>
                     </div>
 
@@ -75,6 +89,7 @@ const handleLogin = async () => {
         </div>
     </div>
 </template>
+
 
 <style scoped>
 .pi-eye {

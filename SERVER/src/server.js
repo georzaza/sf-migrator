@@ -4,7 +4,6 @@ const axios = require('axios');
 const app = express();
 app.use(cors());
 app.use(express.json());
-const apiRoutes = express.Router();
 
 const PORT = 3000;
 

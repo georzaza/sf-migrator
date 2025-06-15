@@ -61,7 +61,7 @@ const handleRegister = async () => {
                             <!-- SVG content -->
                         </svg>
                         <div class="text-surface-900 dark:text-surface-0 text-3xl font-medium mb-4">Welcome!</div>
-                        <span class="text-muted-color font-medium">Sign in to continue</span>
+                        <span class="text-muted-color font-medium">Register below to get started.</span>
                     </div>
 
                     <div>
@@ -86,11 +86,11 @@ const handleRegister = async () => {
     <!-- Redirect Alert Overlay -->
     <div v-if="showRedirectAlert" class="fixed inset-0 bg-transparent flex items-center justify-center z-50">
         <div class="bg-white p-8 rounded-lg shadow-lg text-center">
-            <h2 class="text-xl font-bold mb-4">Redirecting...</h2>
-            <p class="text-gray-700">You will be redirected shortly.</p>
+            <p class="text-gray-700">Redirecting to Dashboard...</p>
         </div>
     </div>
 </template>
+
 
 <style scoped>
 .pi-eye {

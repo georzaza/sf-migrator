@@ -9,18 +9,24 @@ const apiRoutes = express.Router();
 const PORT = 3000;
 
 
+const authRoutes = require('./routes/auth');
 
 // Error handler middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);
-    res.status(500).json({ 
-        message: 'Internal server error', 
-        details: err.message 
+    res.status(500).json({
+        message: 'Internal server error',
+        details: err.message
     });
 });
 
 
+app.use('/auth', authRoutes);
+
+
 app.get("/", async (req, res) => {
+    res.status(200).json({ msg: 'Welcome to the API' });
+    return;
     if (req.headers.action.toLowerCase() === 'ping') {
         res.status(200).json({ msg: 'Welcome to the API' });
     }
@@ -28,7 +34,6 @@ app.get("/", async (req, res) => {
         res.status(400).json({ msg: 'Unknown GET action' });
     }
 });
-
 
 
 //POST requests
@@ -42,6 +47,7 @@ app.post("/", async (req, res) => {
         res.end();
     }
 });
+
 
 
 app.listen(3000, () => {

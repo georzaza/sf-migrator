@@ -1,10 +1,29 @@
 <script setup>
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
 import { ref } from 'vue';
+import axios from 'axios';
 
 const email = ref('');
 const password = ref('');
 const checked = ref(false);
+
+const handleLogin = async () => {
+    try {
+        const response = await axios.post('http://127.0.0.1:3000/auth/login', {
+            email: email.value,
+            password: password.value
+        });
+        if (response.status === 200) {
+            console.log('Login successful:', response.data);
+            //router.push('/');
+        } else
+            console.error('Login failed:', response.data.message || 'Unexpected response');
+    } catch (error) {
+        console.error('Login failed:', error.response?.data || error.message);
+        alert('An error occurred during login. Please try again.');
+    }
+};
+
 </script>
 
 <template>
@@ -49,7 +68,7 @@ const checked = ref(false);
                             </div>
                             <span class="font-medium no-underline ml-2 text-right cursor-pointer text-primary">Forgot password?</span>
                         </div>
-                        <Button label="Sign In" class="w-full" as="router-link" to="/"></Button>
+                        <Button label="Sign In" class="w-full" @click="handleLogin"></Button>
                     </div>
                 </div>
             </div>

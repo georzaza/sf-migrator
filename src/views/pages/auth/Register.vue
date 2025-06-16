@@ -59,7 +59,8 @@ const handleRegister = async () => {
         <div class="flex flex-col items-center justify-center">
             <div style="border-radius: 56px; padding: 0.3rem; background: linear-gradient(180deg, var(--primary-color) 10%, rgba(33, 150, 243, 0) 30%)">
                 <div class="w-full bg-surface-0 dark:bg-surface-900 py-20 px-8 sm:px-20" style="border-radius: 53px">
-                        <h3 class="text-surface-900 dark:text-surface-0 text-xl mb-8">Register</h3>
+                    <img src="../../../../assets/logos/1024.webp" alt="Logo" class="w-16 h-16 mx-auto mb-4"  style="object-fit: cover;" />
+                    <h3 class="text-surface-900 dark:text-surface-0 text-xl mb-8 text-center">Register</h3>
 
                     <div>
                         <!-- todo update reactive class condition based on the response from the server, aka handle userExists assignment correctly.-->

@@ -48,6 +48,7 @@ const handleLogin = async () => {
                 <div class="w-full bg-surface-0 dark:bg-surface-900 py-20 px-8 sm:px-20" style="border-radius: 53px">
                     <div class="text-center mb-8">
                         <img src="../../../../assets/logos/1024.webp" alt="Logo" class="w-16 h-16 mx-auto mb-4"  style="object-fit: cover;" />
+
                         <h3 class="text-surface-900 dark:text-surface-0 text-xl mb-8 text-center">Login</h3>
                     </div>
 
@@ -65,7 +66,14 @@ const handleLogin = async () => {
                             </div>
                             <span class="font-medium no-underline ml-2 text-right cursor-pointer text-primary">Forgot password?</span>
                         </div>
-                        <Button label="Sign In" class="w-full" @click="handleLogin"></Button>
+
+                        <div class="flex flex-col gap-4">
+                            <Button label="Sign In" class="text-center" severity="success" rounded @click="handleLogin">
+                            </Button>
+
+                            <Button label="Register" class="text-center" severity="info" rounded outlined @click="router.push('/auth/register')">
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </div>

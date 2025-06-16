@@ -1,6 +1,11 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
+// todo replace with actual logic.
+const isLoggedIn = () => {
+    return !!localStorage.getItem('authToken'); // Example: Check for a token in localStorage
+};
+
 const router = createRouter({
     history: createWebHistory(),
     routes: [
@@ -138,6 +143,22 @@ const router = createRouter({
             component: () => import('@/views/pages/auth/Error.vue')
         }
     ]
+});
+
+// Global navigation guard (middleware-like)
+router.beforeEach((to, from, next) => {
+    if (to.path.startsWith('/auth/')) {
+        next();
+        return;
+    }
+    const publicPages = ['/auth/login', '/auth/register']; // Define public routes
+    const authRequired = !publicPages.includes(to.path); // Check if the route requires authentication
+    console.log(`Navigating to: ${to.path}, Auth Required: ${authRequired}`);
+    if (authRequired && !isLoggedIn()) {
+        next('/auth/access'); // Redirect to login if not authenticated
+    } else {
+        next(); // Allow navigation
+    }
 });
 
 export default router;

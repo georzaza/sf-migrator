@@ -69,19 +69,15 @@ const handleRegister = async () => {
 
                         <!-- todo add error focus if password strength validation does not pass -->
                         <label for="password1" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Password</label>
-                        <Password id="password1" v-model="password" placeholder="Password" :toggleMask="true" class="mb-4" fluid :feedback="false"></Password>
+                        <Password id="password1" v-model="password" placeholder="Password" :toggleMask="true" class="mb-8" fluid :feedback="false"></Password>
 
-                        <Button label="Sign Up" class="w-full mb-8" @click="handleRegister"></Button>
+                        <Button label="Sign Up" class="w-full mb-4" severity="success" rounded @click="handleRegister"></Button>
 
                         <Message v-if="userExists" severity="error" class="mt-4">
                             <span>User already exists.</span>
                         </Message>
 
-                        <Message severity="info" class="mt-4 mx-auto text-center" style="max-width: fit-content;">
-                            <button class="text-blue-500 hover:text-blue-700" severity="info" rounded outlined>
-                                <a href="/auth/login/"><span>Back to Login</span></a>
-                            </button>
-                        </Message>
+                        <Button label="Login" class="w-full mb-4" severity="info" rounded outlined @click="router.push('/auth/login/')"></Button>
 
                     </div>
                 </div>

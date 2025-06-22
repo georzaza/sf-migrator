@@ -1,25 +1,24 @@
 {
     "scripts": {
-        "serve": "nodemon server.js"
+        "serve": "nodemon server.js",
+        "seed" : "node seeds/index.js"
     },
     "dependencies": {
-        "@sequelize/postgres": "^7.0.0-alpha.44",
         "bcrypt": "^5.1.1",
         "cors": "^2.8.5",
-        "crypto-browserify": "^3.12.1",
         "crypto-js": "^4.2.0",
+        "crypto.js": "^3.3.4",
         "dotenv": "^16.4.7",
         "express": "^4.21.2",
-        "exstream.js": "^0.25.0",
         "fs": "^0.0.1-security",
         "jsforce": "^3.6.5",
-        "pg": "^8.13.3",
+        "pg": "^8.16.2",
         "pg-hstore": "^2.3.4",
-        "sequelize": "^6.37.6",
-        "stream": "^0.0.3",
-        "stream-browserify": "^3.0.0",
-        "timers-browserify": "^2.0.12",
+        "sequelize": "^6.37.7",
         "validator": "^13.15.15",
         "ws": "^8.18.1"
+    },
+    "devDependencies": {
+        "sequelize-cli": "^6.6.3"
     }
 }

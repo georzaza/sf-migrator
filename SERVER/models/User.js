@@ -31,6 +31,15 @@ module.exports = (sequelize, DataTypes) => {
                 return `${this.firstname} ${this.lastname}`;
             }
         },
+        username: {
+            type: DataTypes.STRING,
+            allowNull: false,
+            unique: true,
+            validate: {
+                len: [3, 32],
+                is: /^[a-zA-Z0-9_.]+$/i // only letters, numbers, underscore, dot
+            }
+        },
         role: {
             type: DataTypes.ENUM('admin', 'user'),
             defaultValue: 'user',

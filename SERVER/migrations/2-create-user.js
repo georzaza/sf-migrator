@@ -26,6 +26,15 @@ module.exports = {
                 type: Sequelize.STRING,
                 allowNull: false
             },
+            username: {
+                type: Sequelize.STRING,
+                allowNull: false,
+                unique: true,
+                validate: {
+                    len: [3, 32],
+                    is: /^[a-zA-Z0-9_.]+$/i // only letters, numbers, underscore, dot
+                }
+            },
             role: {
                 type: Sequelize.ENUM('admin', 'user'),
                 defaultValue: 'user',

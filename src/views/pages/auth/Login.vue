@@ -6,7 +6,7 @@ import axiosInstance from '@/api/axiosInstance';
 
 const router = useRouter();
 
-const email = ref('');
+const userIdentifier = ref('');
 const password = ref('');
 const checked = ref(false);
 
@@ -15,7 +15,7 @@ const handleLogin = async () => {
         axiosInstance.setActionHeader('login');
 
         const response = await axiosInstance.post('http://127.0.0.1:3000/auth/login', {
-            email: email.value,
+            userIdentifier: userIdentifier.value,
             password: password.value
         });
 
@@ -53,8 +53,8 @@ const handleLogin = async () => {
                     </div>
 
                     <div>
-                        <label for="email1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Email</label>
-                        <InputText id="email1" type="text" placeholder="Email address" class="w-full md:w-[30rem] mb-8" v-model="email" />
+                        <label for="email1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Username or Email</label>
+                        <InputText id="email1" type="text" placeholder="Email address" class="w-full md:w-[30rem] mb-8" v-model="userIdentifier" />
 
                         <label for="password1" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Password</label>
                         <Password id="password1" v-model="password" placeholder="Password" :toggleMask="true" class="mb-4" fluid :feedback="false"></Password>
@@ -71,7 +71,7 @@ const handleLogin = async () => {
                             <Button label="Sign In" class="text-center" severity="success" rounded @click="handleLogin">
                             </Button>
 
-                            <Button label="Register" class="text-center" severity="info" rounded outlined @click="router.push('/auth/register')">
+                            <Button label="Register" class="text-center" severity="info" rounded @click="router.push('/auth/register')">
                             </Button>
                         </div>
                     </div>

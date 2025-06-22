@@ -8,42 +8,85 @@ const router = useRouter();
 
 const email = ref('');
 const password = ref('');
+const firstname = ref('');
+const lastname = ref('');
+const username = ref('');
 
 const userExists = ref(false);
+const formErrorMissingInput = ref(false);
+const formErrorEmail = ref(false);
+const formErrorUsername = ref(false);
+const formErrorPassword = ref(false);
+const formErrorMessage = ref('');
+
 const showRedirectAlert = ref(false);
 
-// todo handle actual response for user exists case, or password strength.
-// todo add same validations for password strength as in the server?
-// todo maybe server is just enough for handling this, but add focus to password strength validation errors in the UI.
 const handleRegister = async () => {
+    userExists.value             = false;
+    formErrorEmail.value         = false;
+    formErrorUsername.value      = false;
+    formErrorPassword.value      = false;
+    formErrorMessage.value       = '';
+    formErrorMissingInput.value  = false;
+
     try {
         axiosInstance.setActionHeader('register');
 
         const response = await axiosInstance.post('http://127.0.0.1:3000/auth/register', {
             email: email.value,
-            password: password.value
+            password: password.value,
+            firstname: firstname.value,
+            lastname: lastname.value,
+            username: username.value
         });
 
-        if (response.status === 200) {
-            console.log('Register successful:', response.data);
-            showRedirectAlert.value = true;
-            setTimeout ( () => {
-                router.push('/');
-            }, 3000);
-
+        switch (response.status) {
+            case 201:
+                console.log('Register successful:', response.data);
+                showRedirectAlert.value = true;
+                setTimeout(() => {
+                    <!-- todo automatic login of the user before redirection -->
+                    router.push('/');
+                }, 3000);
+                break;
+            case 409:
+                userExists.value = true;
+                break;
+            case 400:
+                switch (response.data?.message) {
+                    case 'All fields are required.':
+                        formErrorMissingInput.value = true;
+                        break;
+                    case 'Invalid email format.':
+                    case 'Email is required.':
+                        formErrorEmail.value = true;
+                        break;
+                    case 'Did you also set your password to "password"?':
+                    case 'Username can only contain letters, numbers, underscores, and dots.':
+                    case 'Username must be between 3 and 32 characters.':
+                    case 'Username is required.':
+                        formErrorUsername.value = true;
+                        break;
+                    case 'Password must contain at least one lowercase letter.':
+                    case 'Password must contain at least one uppercase letter.':
+                    case 'Password must contain at least one digit.':
+                    case 'Password must contain at least one special character.':
+                    case 'Password must be between 8 and 64 characters long.':
+                        formErrorPassword.value = true;
+                        break;
+                    default:
+                        alert('There is an issue with the form. Check your inputs and try again.');
+                        break;
+                }
+                console.error(response.data?.message);
+                break;
+            default:
+                break;
         }
-        else {
-            console.error('Register failed:', response.data.message || 'Unexpected response');
-            userExists.value = true;
-        }
+        formErrorMessage.value = response.data?.message || 'An unexpected error occurred. Please try again.';
     } catch (error) {
-        if (error.response?.status === 409) {
-            console.error('Register failed: User exists.');
-            userExists.value = true;
-        }
-
-        console.error('Register failed:', error.response?.data || error.message);
-        alert('An error occurred during Register. Please try again.');
+        console.error('Register failed:', error?.message);
+        alert('There might be an issue with the server. Please try again later.');
     }
 };
 
@@ -63,21 +106,28 @@ const handleRegister = async () => {
                     <h3 class="text-surface-900 dark:text-surface-0 text-xl mb-8 text-center">Register</h3>
 
                     <div>
-                        <!-- todo update reactive class condition based on the response from the server, aka handle userExists assignment correctly.-->
-                        <label for="email1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Email</label>
-                        <InputText id="email1" type="text" placeholder="Email address" class="w-full md:w-[30rem] mb-8" :class="{ 'p-invalid': userExists }" v-model="email" />
+                        <label for="firstname1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">First Name</label>
+                        <InputText id="firstname1" type="text" placeholder="First name" class="w-full md:w-[30rem] mb-8" :class="{ 'p-invalid': formErrorMissingInput }" v-model="firstname" />
 
-                        <!-- todo add error focus if password strength validation does not pass -->
+                        <label for="lastname1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Last Name</label>
+                        <InputText id="lastname1" type="text" placeholder="Last name" class="w-full md:w-[30rem] mb-8" :class="{ 'p-invalid': formErrorMissingInput }" v-model="lastname" />
+
+                        <label for="username1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Username</label>
+                        <InputText id="username1" type="text" placeholder="Username" class="w-full md:w-[30rem] mb-8" :class="{ 'p-invalid': formErrorMissingInput || formErrorUsername || userExists }" v-model="username" />
+
+                        <label for="email1" class="block text-surface-900 dark:text-surface-0 text-xl font-medium mb-2">Email</label>
+                        <InputText id="email1" type="text" placeholder="Email address" class="w-full md:w-[30rem] mb-8" :class="{ 'p-invalid': formErrorMissingInput || formErrorEmail || userExists }" v-model="email" />
+
                         <label for="password1" class="block text-surface-900 dark:text-surface-0 font-medium text-xl mb-2">Password</label>
-                        <Password id="password1" v-model="password" placeholder="Password" :toggleMask="true" class="mb-8" fluid :feedback="false"></Password>
+                        <Password id="password1" v-model="password" placeholder="Password" :toggleMask="true" class="mb-8" :class="{ 'p-invalid': formErrorMissingInput || formErrorPassword }" fluid :feedback="false"></Password>
 
                         <Button label="Sign Up" class="w-full mb-4" severity="success" rounded @click="handleRegister"></Button>
 
-                        <Message v-if="userExists" severity="error" class="mt-4">
-                            <span>User already exists.</span>
+                        <Message v-if="formErrorEmail || formErrorUsername || formErrorPassword || formErrorMissingInput || userExists" severity="error" class="mt-4">
+                            <span> {{ formErrorMessage }}</span>
                         </Message>
 
-                        <Button label="Login" class="w-full mb-4" severity="info" rounded outlined @click="router.push('/auth/login/')"></Button>
+                        <Button label="Login" class="w-full mb-4" severity="info" rounded @click="router.push('/auth/login/')"></Button>
 
                     </div>
                 </div>
@@ -122,5 +172,10 @@ const handleRegister = async () => {
 
 .z-50 {
     z-index: 50;
+}
+
+.p-invalid {
+    border-color: #f87171;
+    box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.2);
 }
 </style>

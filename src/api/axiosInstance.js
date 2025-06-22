@@ -6,6 +6,10 @@ const axiosInstance = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
+    validateStatus: function (status) {
+        // Accept all status codes < 500 as "not an error"
+        return status < 500;
+    }
 });
 
 axiosInstance.setActionHeader = (action) => {

@@ -1,7 +1,13 @@
 {
     "scripts": {
         "serve": "nodemon server.js",
-        "seed" : "node seeds/index.js"
+        "migrate": "echo 'Migrations are only allowed in development.' && npx sequelize-cli db:migrate",
+        "migrate-status": "echo 'Checking migration status in development.' && npx sequelize-cli db:migrate:status",
+        "seed" : "echo 'Seeding is only allowed in development.' && npx sequelize-cli db:seed:all",
+        "seed-undo": "echo 'Undoing all seeds in development.' && npx sequelize-cli db:seed:undo:all",
+        "seed-users": "echo 'Seeding users in development.' && npx sequelize-cli db:seed --seed 1-create-users.js",
+        "seed-projects": "echo 'Seeding users in development.' && npx sequelize-cli db:seed --seed 2-create-projects.js",
+        "migrate-seed": "echo 'Running migrations and seeding in development.' && npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all"
     },
     "dependencies": {
         "bcrypt": "^5.1.1",

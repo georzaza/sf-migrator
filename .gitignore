@@ -13,3 +13,7 @@ dist
 **/.DS_Store
 SAKAI_TEMPLATE
 .package-lock.json
+
+SERVER/config/config.json
+SERVER/config/config.md
+

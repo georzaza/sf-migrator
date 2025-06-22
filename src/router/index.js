@@ -9,6 +9,7 @@ const isLoggedIn = () => {
 const router = createRouter({
     history: createWebHistory(),
     routes: [
+        /* / */
         {
             path: '/',
             component: AppLayout,
@@ -111,32 +112,37 @@ const router = createRouter({
                 }
             ]
         },
+        /* /landing */
         {
             path: '/landing',
             name: 'landing',
             component: () => import('@/views/pages/Landing.vue')
         },
+        /* /pages/notfound */
         {
             path: '/pages/notfound',
             name: 'notfound',
             component: () => import('@/views/pages/NotFound.vue')
         },
-
+        /* /auth/login */
         {
             path: '/auth/login',
             name: 'login',
             component: () => import('@/views/pages/auth/Login.vue')
         },
+        /* /auth/register */
         {
             path: '/auth/register',
             name: 'register',
             component: () => import('@/views/pages/auth/Register.vue')
         },
+        /* /auth/access */
         {
             path: '/auth/access',
             name: 'accessDenied',
             component: () => import('@/views/pages/auth/Access.vue')
         },
+        /* /auth/error */
         {
             path: '/auth/error',
             name: 'error',

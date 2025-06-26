@@ -1,9 +1,11 @@
 import AppLayout from '@/layout/AppLayout.vue';
+import { useUserStore } from '@/stores/userStore';
 import { createRouter, createWebHistory } from 'vue-router';
 
 // todo replace with actual logic.
 const isLoggedIn = () => {
-    return !!localStorage.getItem('authToken'); // Example: Check for a token in localStorage
+    const userStore = useUserStore();
+    return userStore.isAuthenticated;
 };
 
 const router = createRouter({

@@ -7,18 +7,33 @@ const validator = require('./validator.js');
 
 const saltRounds = 10;
 
-router.post('/login', (req, res) => {
-    if (!req.body || !req.body.email || !req.body.password || !req.headers || !req.headers.action || !req.headers.action.toLowerCase() === 'login') {
-        return res.status(400).json({ success: false, message: 'Wrong request.' });
+router.post('/login', async (req, res) => {
+    if (!req.body || !req.body.userIdentifier || !req.body.password || !req.headers || !req.headers.action || !req.headers.action.toLowerCase() === 'login') {
+        return res.status(400).json({ success: false, message: 'Bad request.' });
     }
 
-    const { email, password } = req.body;
-    // todo
-    if (email === 'georzaza@gmail.com' && password === 'georzaza') {
-        res.status(200).json({ success: true, message: 'Login successful' });
+    const { userIdentifier, password } = req.body;
+
+    try {
+        const userByEmail = await userService.getUserByEmail(userIdentifier);
+        const userByUsername = await userService.getUserByUsername(userIdentifier);
+
+        if (!userByEmail && !userByUsername) {
+            return res.status(404).json({ success: false, message: 'User not found.' });
+        }
+
+        if (userByEmail || userByUsername) {
+            const user = userByEmail || userByUsername;
+            const isPasswordValid = await bcrypt.compare(password, user.password);
+            if (isPasswordValid)
+                return res.status(200).json({ success: true, message: 'Login successful', data: { email: user.email, username: user.username } });
+            else
+                return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        }
     }
-    else {
-        res.status(401).json({ success: false, message: 'Invalid credentials' });
+    catch (error) {
+        console.error(`Login | Error while fetching user ${userIdentifier} | Is the DB up and running? `, error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
     }
 });
 

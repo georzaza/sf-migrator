@@ -2,9 +2,11 @@
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAuth } from '@/composables/auth/useAuth';
 import axiosInstance from '@/api/axiosInstance';
 
 const router = useRouter();
+const { login } = useAuth();
 
 const email = ref('');
 const password = ref('');
@@ -30,9 +32,10 @@ const handleRegister = async () => {
     formErrorMissingInput.value  = false;
 
     try {
-        axiosInstance.setActionHeader('register');
+        axiosInstance.resetHeaders();
+        axiosInstance.setHeaders('register');
 
-        const response = await axiosInstance.post('http://127.0.0.1:3000/auth/register', {
+        const response = await axiosInstance.post('/auth/register', {
             email: email.value,
             password: password.value,
             firstname: firstname.value,
@@ -42,12 +45,11 @@ const handleRegister = async () => {
 
         switch (response.status) {
             case 201:
-                console.log('Register successful:', response.data);
+                const loginResponse = await login(email.value, password.value);
+                if (loginResponse.status !== 200)
+                    console.error('Login failed:', loginResponse.data.message);
                 showRedirectAlert.value = true;
-                setTimeout(() => {
-                    <!-- todo automatic login of the user before redirection -->
-                    router.push('/');
-                }, 3000);
+                setTimeout(() => { router.push('/'); }, 1000);
                 break;
             case 409:
                 userExists.value = true;
@@ -84,7 +86,8 @@ const handleRegister = async () => {
                 break;
         }
         formErrorMessage.value = response.data?.message || 'An unexpected error occurred. Please try again.';
-    } catch (error) {
+    }
+    catch (error) {
         console.error('Register failed:', error?.message);
         alert('There might be an issue with the server. Please try again later.');
     }

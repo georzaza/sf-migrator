@@ -2,9 +2,10 @@
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import axiosInstance from '@/api/axiosInstance';
+import { useAuth } from '@/composables/auth/useAuth';
 
 const router = useRouter();
+const { login } = useAuth();
 
 const userIdentifier = ref('');
 const password = ref('');
@@ -12,20 +13,12 @@ const checked = ref(false);
 
 const handleLogin = async () => {
     try {
-        axiosInstance.setActionHeader('login');
-
-        const response = await axiosInstance.post('http://127.0.0.1:3000/auth/login', {
-            userIdentifier: userIdentifier.value,
-            password: password.value
-        });
-
-        if (response.status === 200) {
-            console.log('Login successful:', response.data);
-            //router.push('/');
-        }
-        else
-            console.error('Login failed:', response.data.message || 'Unexpected response');
-    } catch (error) {
+        const loginResponse = await login(userIdentifier.value, password.value);
+        if (loginResponse.status !== 200)
+            console.error('Login failed:', loginResponse.data.message);
+        setTimeout(() => { router.push('/'); }, 1000);
+    }
+    catch (error) {
         if (error.response?.status === 401) {
             console.error('Login failed: Invalid credentials');
             router.push('/auth/access');

@@ -6,13 +6,10 @@ const axiosInstance = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
-    validateStatus: function (status) {
-        // Accept all status codes < 500 as "not an error"
-        return status < 500;
-    }
+    validateStatus: status => status < 500
 });
 
-axiosInstance.setActionHeader = (action) => {
+axiosInstance.setHeaders = (action) => {
     const actionHeader = predefinedHeaders[action.toLowerCase()];
     if (actionHeader) {
         axiosInstance.defaults.headers = {
@@ -24,5 +21,10 @@ axiosInstance.setActionHeader = (action) => {
     }
 };
 
+axiosInstance.resetHeaders = () => {
+    axiosInstance.defaults.headers = {
+        'Content-Type': 'application/json'
+    };
+};
 
 export default axiosInstance

@@ -53,6 +53,7 @@ function onClose() {
 }
 
 async function onSave() {
+    console.log('Saving org...');
     try {
         const payload = { ...form.value };
 
@@ -81,6 +82,7 @@ async function onSave() {
     catch (error) {
         console.error('Failed to update org:', error);
     }
+    console.log('Org saved!');
 }
 </script>
 

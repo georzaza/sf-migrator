@@ -1,12 +1,12 @@
 <script setup>
-import { ref } from 'vue';
+import { computed } from 'vue';
 import { useOrgStore } from '@/stores/orgStore';
 
 import AppMenuItem from './AppMenuItem.vue';
 
 
 const orgStore = useOrgStore();
-const model = ref(orgStore.menuItems || []);
+const model = computed(() => orgStore.menuItems);
 
 </script>
 

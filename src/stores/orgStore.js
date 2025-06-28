@@ -3,7 +3,9 @@ import axiosInstance from '@/api/axiosInstance';
 
 export const useOrgStore = defineStore('orgs', {
 
-    persist: true,
+    persist: {
+        paths: ['projects', 'orgs', 'selectedProject', 'selectedOrg', 'orgToEdit'],
+    },
 
     state: () => ({
         projects: [],
@@ -28,21 +30,12 @@ export const useOrgStore = defineStore('orgs', {
             this.selectedOrg = org;
         },
 
-        openEditOrgDialog(org, project) {
-            // need to ensure we get the latest org/project from the store (e.g. for after 'Edit' dialog)
-            const freshOrg = this.orgs.find(o => o.id === org.id) || org;
-            const freshProject = this.projects.find(p => p.id === project.id) || project;
-            this.orgToEdit = { ...freshOrg, project: freshProject };
-            this.showEditOrgDialog = true;
-        },
-
         closeEditOrgDialog() {
             this.showEditOrgDialog = false;
             this.orgToEdit = null;
         },
 
         async loadProjects() {
-            console.log('Loading projects...');
             const response = await axiosInstance.get('/',
                 {
                     headers: {
@@ -52,7 +45,8 @@ export const useOrgStore = defineStore('orgs', {
             );
             if (response.data.success) {
                 this.projects = response.data.data;
-                if (!this.loadOrgs()) {
+                const loadedOrgs = await this.loadOrgs();
+                if (!loadedOrgs) {
                     console.error('Failed to load Salesforce Orgs');
                 }
                 this.setMenuItems();
@@ -63,7 +57,6 @@ export const useOrgStore = defineStore('orgs', {
         },
 
         async loadOrgs() {
-            console.log('Loading  Orgs...');
             const response = await axiosInstance.get('/',
                 {
                     headers: {
@@ -82,7 +75,6 @@ export const useOrgStore = defineStore('orgs', {
         },
 
         setMenuItems() {
-            console.log('Setting menu items...');
             const projectsAndOrgs = this.projects.map(project => ({
                 key: project.id,
                 label: project.name,
@@ -104,13 +96,10 @@ export const useOrgStore = defineStore('orgs', {
                                 icon: 'mdi-pencil',
                                 to: null, // todo correct after route handling is done
                                 command: () => {
-                                    // todo fill in accordingly
                                     this.selectedOrg = org;
                                     this.selectedProject = project;
-                                    // need to ensure we get the latest org/project from the store (e.g. for after 'Edit' dialog)
-                                    const freshOrg = this.orgs.find(o => o.id === org.id);
-                                    const freshProject = this.projects.find(p => p.id === project.id);
-                                    this.openEditOrgDialog(freshOrg, freshProject);
+                                    this.showEditOrgDialog = true;
+                                    this.orgToEdit = this.selectedOrg;
                                 },
                             },
                             {
@@ -168,7 +157,6 @@ export const useOrgStore = defineStore('orgs', {
                     items: projectsAndOrgs,
                 },
             ];
-
         }
     },
 });

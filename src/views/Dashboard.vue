@@ -1,22 +1,25 @@
 <script setup>
-import BestSellingWidget from '@/components/dashboard/BestSellingWidget.vue';
-import NotificationsWidget from '@/components/dashboard/NotificationsWidget.vue';
-import RecentSalesWidget from '@/components/dashboard/RecentSalesWidget.vue';
-import RevenueStreamWidget from '@/components/dashboard/RevenueStreamWidget.vue';
-import StatsWidget from '@/components/dashboard/StatsWidget.vue';
+import { ref, watch, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useOrgStore } from '@/stores/orgStore';
+import { useUserStore } from '@/stores/userStore';
+import { useGlobalStore } from '@/stores/globalStore';
+import axiosInstance from '@/api/axiosInstance';
+
+const orgStore = useOrgStore();
+const userStore = useUserStore();
+const globalStore = useGlobalStore();
+const router = useRouter();
+
+
+onMounted( async () => {
+    await orgStore.loadProjects();
+})
+
 </script>
 
-<template>
-    <div class="grid grid-cols-12 gap-8">
-        <StatsWidget />
 
-        <div class="col-span-12 xl:col-span-6">
-            <RecentSalesWidget />
-            <BestSellingWidget />
-        </div>
-        <div class="col-span-12 xl:col-span-6">
-            <RevenueStreamWidget />
-            <NotificationsWidget />
-        </div>
-    </div>
+
+<template>
+
 </template>

@@ -45,11 +45,22 @@ const handleRegister = async () => {
 
         switch (response.status) {
             case 201:
-                const loginResponse = await login(email.value, password.value);
-                if (loginResponse.status !== 200)
-                    console.error('Login failed:', loginResponse.data.message);
-                showRedirectAlert.value = true;
-                setTimeout(() => { router.push('/'); }, 1000);
+                try {
+                    const loginResponse = await login(email.value, password.value);
+                    if (loginResponse.status !== 200)
+                        console.error('Login failed:', loginResponse.data.message);
+                    showRedirectAlert.value = true;
+                    setTimeout(() => { router.push('/'); }, 1000);
+                }
+                catch (error) {
+                    if (error.response?.status === 401) {
+                        console.error('Register | Login after register failed: Invalid credentials?');
+                        router.push('/auth/access');
+                        return;
+                    }
+                    console.error('Register | Login after register failed:', error.response?.data || error.message);
+                    alert('An error occurred during logging in with the new credentials. Try again to login.');
+                }
                 break;
             case 409:
                 userExists.value = true;

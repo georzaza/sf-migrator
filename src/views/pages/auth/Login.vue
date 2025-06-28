@@ -14,8 +14,11 @@ const checked = ref(false);
 const handleLogin = async () => {
     try {
         const loginResponse = await login(userIdentifier.value, password.value);
-        if (loginResponse.status !== 200)
+        if (loginResponse.status !== 200) {
             console.error('Login failed:', loginResponse.data.message);
+            router.push('/auth/access');
+            return;
+        }
         setTimeout(() => { router.push('/'); }, 1000);
     }
     catch (error) {

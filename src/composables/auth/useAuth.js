@@ -12,7 +12,6 @@ export function useAuth() {
                 userIdentifier: email,
                 password: password
             });
-            console.warn('Login response:', loginResponse);
 
             if (loginResponse.status === 200) {
                 axiosInstance.resetHeaders();

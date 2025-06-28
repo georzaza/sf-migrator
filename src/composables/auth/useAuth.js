@@ -1,6 +1,6 @@
 import axiosInstance from '@/api/axiosInstance';
 import { useUserStore } from '@/stores/userStore';
-import { useRouter } from 'vue-router';
+import axios from 'axios';
 
 const userStore = useUserStore();
 
@@ -19,14 +19,25 @@ export function useAuth() {
                 userIdentifier: email,
                 password: password
             });
+            console.warn('Login response:', loginResponse);
 
             if (loginResponse.status === 200) {
-                userStore.isAuthenticated = true;
-                userStore.email = loginResponse.data.data.email;
-                userStore.username = loginResponse.data.data.username;
+                axiosInstance.resetHeaders();
+                axiosInstance.setHeaders('whoami');
+                const whoamiResponse = await axiosInstance.get('/auth/whoami', {withCredentials: true});
+                console.warn('Whoami response:', whoamiResponse);
+                if (whoamiResponse.status === 200) {
+                    userStore.isAuthenticated = true;
+                    userStore.email = whoamiResponse.data.data.email;
+                    userStore.username = whoamiResponse.data.data.username;
+                }
+                else {
+                    console.error('Whoami request failed:', whoamiResponse);
+                }
+                return whoamiResponse;
             }
 
-            return await loginResponse;
+            return loginResponse;
 
         }
         catch (error) {

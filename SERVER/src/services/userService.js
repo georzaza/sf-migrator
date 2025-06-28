@@ -16,9 +16,31 @@ async function getUserById(id) {
     return await User.findByPk(id);
 }
 
+// keeping the function as asynchronous as lastLogin is not being used currently.
+function setUserLastLogin(id) {
+    getUserById(id)
+    .then(user => {
+        if (user) {
+            user.lastLogin = Date.now();
+            try {
+                return user.save();
+            }
+            catch (error) {
+                console.error('Error saving last login:', error);
+            }
+        }
+        return null;
+    })
+    .catch(err => {
+        console.error('Error updating last login:', err);
+        return null;
+    });
+}
+
 module.exports = {
     getUserByEmail,
     getUserByUsername,
     createUser,
-    getUserById
+    getUserById,
+    setUserLastLogin,
 };

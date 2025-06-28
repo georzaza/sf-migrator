@@ -5,4 +5,7 @@ export const predefinedHeaders = {
     register: {
         action: 'register',
     },
+    whoami: {
+        action: 'whoami',
+    }
 };

@@ -2,11 +2,12 @@ import axios from 'axios';
 import { predefinedHeaders } from './headers';
 
 const axiosInstance = axios.create({
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: 'http://localhost:3000',
     headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
     },
-    validateStatus: status => status < 500
+    validateStatus: status => status < 500,
+    withCredentials: true,
 });
 
 axiosInstance.setHeaders = (action) => {
@@ -23,7 +24,7 @@ axiosInstance.setHeaders = (action) => {
 
 axiosInstance.resetHeaders = () => {
     axiosInstance.defaults.headers = {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json; charset=utf-8'
     };
 };
 

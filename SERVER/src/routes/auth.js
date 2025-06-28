@@ -1,15 +1,25 @@
 const express = require('express');
-const router = express.Router();
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const router = express.Router();
 
 const userService = require('../services/userService');
 const validator = require('./validator.js');
 
-const saltRounds = 10;
+const sendResponse = require('../utils/sendResponse.js');
+const parseCookies = require('../utils/parseCookies.js');
 
+require('dotenv').config({ path: '../.env' });
+
+const SALT_ROUNDS = 10;
+
+// ============================= LOGIN =============================
 router.post('/login', async (req, res) => {
-    if (!req.body || !req.body.userIdentifier || !req.body.password || !req.headers || !req.headers.action || !req.headers.action.toLowerCase() === 'login') {
-        return res.status(400).json({ success: false, message: 'Bad request.' });
+    if (
+        !req.body || !req.body.userIdentifier || !req.body.password  || !req.headers ||
+        !req.headers.action || !req.headers.action.toLowerCase() === 'login')
+    {
+        return sendResponse(res, 400, false, 'Bad request.');
     }
 
     const { userIdentifier, password } = req.body;
@@ -19,25 +29,51 @@ router.post('/login', async (req, res) => {
         const userByUsername = await userService.getUserByUsername(userIdentifier);
 
         if (!userByEmail && !userByUsername) {
-            return res.status(404).json({ success: false, message: 'User not found.' });
+            return sendResponse(res, 404, false, 'User not found. Did you forget your credentials?');
         }
 
         if (userByEmail || userByUsername) {
             const user = userByEmail || userByUsername;
             const isPasswordValid = await bcrypt.compare(password, user.password);
-            if (isPasswordValid)
-                return res.status(200).json({ success: true, message: 'Login successful', data: { email: user.email, username: user.username } });
-            else
-                return res.status(401).json({ success: false, message: 'Invalid credentials' });
+
+            if (isPasswordValid) {
+
+                userService.setUserLastLogin(user.id); // asynchronous
+
+                const token = jwt.sign(
+                    {
+                        id: user.id,
+                        email: user.email,
+                        username: user.username,
+                        role: user.role,
+                    },
+                    process.env.JWT_SECRET, {
+                    expiresIn: process.env.JWT_EXPIRATION || '12h'
+                })
+
+                res.setHeader(
+                    'Set-Cookie',
+                    `auth_token=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${process.env.JWT_EXPIRATION || '43200'}; ${process.env.NODE_ENV === 'production' ? ' Secure; SameSite=Strict;' : 'SameSite=Lax'}`
+                );
+
+                return sendResponse(res, 200, true, 'Login successful', {
+                    email: user.email,
+                    username: user.username,
+                });
+            }
+            else {
+                return sendResponse(res, 401, false, 'Invalid credentials');
+            }
         }
     }
     catch (error) {
         console.error(`Login | Error while fetching user ${userIdentifier} | Is the DB up and running? `, error);
-        return res.status(500).json({ success: false, message: 'Internal server error' });
+        return sendResponse(res, 500, false, 'Internal server error');
     }
 });
 
 
+// ============================= REGISTER =============================
 router.post('/register', async (req, res) => {
     try {
         const { email, password, firstname, lastname, username } = req.body;
@@ -46,7 +82,7 @@ router.post('/register', async (req, res) => {
         const validateEmail = validator.validateEmail(email);
         const validateUsername = validator.validateUsername(username);
         const validatePassword = validator.validatePassword(password);
-        const hashedPassword = await bcrypt.hash(password, saltRounds);
+        const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
         const newUser = {
             email: email,
             password: hashedPassword,
@@ -62,41 +98,83 @@ router.post('/register', async (req, res) => {
         };
 
         if (!email || !password || !firstname || !lastname || !username)
-            return res.status(400).json({ success: false, message: 'All fields are required.' });
+            return sendResponse(res, 400, false, 'All fields are required.');
 
         if (existingUserEmail || existingUsername)
-            return res.status(409).json({ success: false, message: 'User already exists' });
+            return sendResponse(res, 409, false, 'User already exists');
 
         if (validateEmail)
-            return res.status(400).json({ success: false, message: validateEmail });
+            return sendResponse(res, 400, false, validateEmail);
 
         if (validateUsername)
-            return res.status(400).json({ success: false, message: validateUsername });
+            return sendResponse(res, 400, false, validateUsername);
 
-        console.log('validatePassword', validatePassword);
         if (validatePassword)
-            return res.status(400).json({ success: false, message: validatePassword });
+            return sendResponse(res, 400, false, validatePassword);
 
         try {
             const createdUser = await userService.createUser(newUser);
-            res.status(201).json({
-                success: true,
-                message: 'Registration was successful.',
-                data: {
-                    email: createdUser.email,
-                    username: createdUser.username,
-                }
+            return sendResponse(res, 201, true, 'Registration was successful.', {
+                email: createdUser.email,
+                username: createdUser.username,
             });
         }
         catch (error) {
-            console.error('Error creating user:', error);
-            return res.status(500).json({ success: false, message: 'Internal server error' });
+            console.error('Register | Error while creating user:', error);
+            return sendResponse(res, 500, false, 'Internal server error');
         }
     }
     catch (error) {
-        console.error('Error during registration:', error);
-        return res.status(500).json({ success: false, message: 'Internal server error' });
+        console.error('Register | Error while processing registration request:', error);
+        return sendResponse(res, 500, false, 'Internal server error');
     }
 });
+
+
+// ============================= WHOAMI =============================
+router.get('/whoami', async (req, res) => {
+    if (!req.headers || !req.headers.action || !req.headers.action.toLowerCase() === 'whoami')
+        return sendResponse(res, 400, false, 'Bad request.');
+    const cookies = parseCookies(req.headers.cookie);
+    console.log(req.headers);
+    const token = cookies.auth_token;
+
+    if (!token) {
+        console.error('Whoami | No token provided in cookies.');
+        return res.status(401).json({
+            success: false,
+            message: 'Unauthorized.'
+        });
+    }
+
+    try {
+        const userData = jwt.verify(token, process.env.JWT_SECRET);
+        const fullUser = await userService.getUserById(userData.id);
+        if (!fullUser) {
+            console.error(`Whoami | User with ID ${userData.id} not found.`);
+            return sendResponse(res, 404, false, 'User not found. Token validation failed.');
+        }
+        return sendResponse(res, 200, true, 'User is authenticated.', {
+            email: fullUser.email,
+            username: fullUser.username,
+        });
+    }
+    catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            console.error('Whoami | Token has expired.');
+            return sendResponse(res, 401, false, 'Unauthorized. Token has expired.');
+        }
+        console.error('Whoami | Error while verifying token:', error);
+        return sendResponse(res, 403, false, 'Unauthorized. Invalid token.');
+    }
+});
+
+
+// ============================= LOGOUT =============================
+router.get('/logout', (req, res) => {
+    res.setHeader('Set-Cookie', 'auth_token=; HttpOnly; Path=/; Max-Age=0;');
+    return sendResponse(res, 200, true, 'Logout successful');
+});
+
 
 module.exports = router;

@@ -1,16 +1,22 @@
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
 const app = express();
-app.use(cors());
-app.use(express.json());
-
-const PORT = 3000;
-
-
+const PORT = process.env.PORT || 3000;
 const authRoutes = require('./routes/auth');
 
-// Error handler middleware
+require('dotenv').config();
+
+// Middleware to parse JSON bodies
+app.use(express.json());
+
+// Middleware CORS, to allow cross-origin requests
+app.use(cors ({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173', // allow requests from VUE frontend only. For Prod, update to actual domain
+    credentials: true
+}));
+
+
+// Middleware for error handling
 app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({
@@ -19,10 +25,11 @@ app.use((err, req, res, next) => {
     });
 });
 
-
+// Additional routes
 app.use('/auth', authRoutes);
 
 
+// ===================== GET Requests =====================
 app.get("/", async (req, res) => {
     if (req.headers.action.toLowerCase() === 'ping') {
         res.status(200).json({ msg: 'Welcome to the API' });
@@ -33,7 +40,7 @@ app.get("/", async (req, res) => {
 });
 
 
-//POST requests
+// ===================== POST Requests =====================
 app.post("/", async (req, res) => {
     if (req.headers.action.toLowerCase() === 'ping') {
         res.json({ msg: 'pong' });
@@ -47,6 +54,6 @@ app.post("/", async (req, res) => {
 
 
 
-app.listen(3000, () => {
+app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });

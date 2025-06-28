@@ -136,7 +136,6 @@ router.get('/whoami', async (req, res) => {
     if (!req.headers || !req.headers.action || !req.headers.action.toLowerCase() === 'whoami')
         return sendResponse(res, 400, false, 'Bad request.');
     const cookies = parseCookies(req.headers.cookie);
-    console.log(req.headers);
     const token = cookies.auth_token;
 
     if (!token) {

@@ -1,12 +1,7 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import { useUserStore } from '@/stores/userStore';
 import { createRouter, createWebHistory } from 'vue-router';
-
-// todo replace with actual logic.
-const isLoggedIn = () => {
-    const userStore = useUserStore();
-    return userStore.isAuthenticated;
-};
+import { isLoggedIn } from '@/composables/auth/useAuth';
 
 const router = createRouter({
     history: createWebHistory(),
@@ -154,15 +149,16 @@ const router = createRouter({
 });
 
 // Global navigation guard (middleware-like)
-router.beforeEach((to, from, next) => {
+router.beforeEach( async (to, from, next) => {
     if (to.path.startsWith('/auth/')) {
         next();
         return;
     }
     const publicPages = ['/auth/login', '/auth/register']; // Define public routes
     const authRequired = !publicPages.includes(to.path); // Check if the route requires authentication
-    console.log(`Navigating to: ${to.path}, Auth Required: ${authRequired}`);
-    if (authRequired && !isLoggedIn()) {
+    const loggedIn = await isLoggedIn(); // Check if the user is logged in
+    console.log(`Navigating to: ${to.path}, Auth Required: ${authRequired}, Logged In? ${loggedIn}`);
+    if (authRequired && !loggedIn) {
         next('/auth/access'); // Redirect to login if not authenticated
     } else {
         next(); // Allow navigation

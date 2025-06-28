@@ -26,6 +26,7 @@ export function useAuth() {
                         headers: {
                             'action': 'whoami',
                         },
+                        withCredentials: true,
                     }
                 );
                 if (whoamiResponse.status === 200) {
@@ -60,6 +61,7 @@ export async function isLoggedIn() {
                 headers: {
                     'action': 'whoami',
                 },
+                withCredentials: true,
             }
         );
         if (whoamiResponse.status === 200) {

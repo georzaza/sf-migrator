@@ -97,6 +97,28 @@ app.post("/", authMiddleware, async (req, res) => {
 });
 
 
+// ===================== PUT Requests =====================
+app.put("/", authMiddleware, async (req, res) => {
+
+    /** update-org */
+    if (req.headers.action.toLowerCase() === 'update-org') {
+        const orgId = req.headers.orgid;
+
+        try {
+            const org = await sfOrgService.updateSfOrg(orgId, req.body);
+            sendResponse(res, 200, true, 'Salesforce Org updated successfully');
+        }
+        catch (error) {
+            console.error('Error updating Salesforce Org:', error);
+            sendResponse(res, 500, false, 'Failed to update Salesforce Org');
+        }
+    }
+    else {
+        res.status(400).json({ msg: 'Unknown PUT action' });
+    }
+});
+
+
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });

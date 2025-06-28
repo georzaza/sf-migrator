@@ -24,10 +24,19 @@ async function getSfOrgsByUserId(userId) {
     return await SfOrg.findAll({ where: { projectId: projectIds } });
 }
 
+async function updateSfOrg(id, sfOrgData) {
+    const sfOrg = await SfOrg.findByPk(id);
+    if (!sfOrg) {
+        throw new Error('Salesforce Org not found');
+    }
+    return await sfOrg.update(sfOrgData);
+}
+
 module.exports = {
     getSfOrgById,
     getSfOrgsByProjectId,
     createSfOrg,
     getAllSfOrgs,
     getSfOrgsByUserId,
+    updateSfOrg,
 };

@@ -31,7 +31,6 @@ const validateEmail = (email) => {
 
 
 const validatePassword = (password) => {
-    console.log('heer!', password)
     const pwdRules = [
         { regexp: /[a-z]/, msg: "Password must contain at least one lowercase letter." },
         { regexp: /[A-Z]/, msg: "Password must contain at least one uppercase letter." },

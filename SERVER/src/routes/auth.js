@@ -53,7 +53,7 @@ router.post('/login', async (req, res) => {
 
                 res.setHeader(
                     'Set-Cookie',
-                    `auth_token=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${process.env.JWT_EXPIRATION || '43200'}; ${process.env.NODE_ENV === 'production' ? ' Secure; SameSite=Strict;' : 'SameSite=Lax'}`
+                    `auth_token=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age='43200'}; ${process.env.NODE_ENV === 'production' ? ' Secure; SameSite=Strict;' : 'SameSite=Lax'}`
                 );
 
                 return sendResponse(res, 200, true, 'Login successful', {

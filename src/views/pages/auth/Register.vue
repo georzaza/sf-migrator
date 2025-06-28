@@ -32,15 +32,18 @@ const handleRegister = async () => {
     formErrorMissingInput.value  = false;
 
     try {
-        axiosInstance.resetHeaders();
-        axiosInstance.setHeaders('register');
-
-        const response = await axiosInstance.post('/auth/register', {
+        const response = await axiosInstance.post('/auth/register',
+        {
             email: email.value,
             password: password.value,
             firstname: firstname.value,
             lastname: lastname.value,
             username: username.value
+        },
+        {
+            headers: {
+                'action': 'register',
+            },
         });
 
         switch (response.status) {

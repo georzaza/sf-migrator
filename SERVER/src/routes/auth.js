@@ -140,10 +140,7 @@ router.get('/whoami', async (req, res) => {
 
     if (!token) {
         console.error('Whoami | No token provided in cookies.');
-        return res.status(401).json({
-            success: false,
-            message: 'Unauthorized.'
-        });
+        sendResponse(res, 401, false, 'Unauthorized.');
     }
 
     try {

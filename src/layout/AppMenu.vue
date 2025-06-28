@@ -3,6 +3,9 @@ import { ref } from 'vue';
 
 import AppMenuItem from './AppMenuItem.vue';
 
+// todo use store to manage menu state of Projects & orgs.
+
+/*
 const model = ref([
     {
         label: 'Home',
@@ -137,6 +140,7 @@ const model = ref([
         ]
     }
 ]);
+*/
 </script>
 
 <template>

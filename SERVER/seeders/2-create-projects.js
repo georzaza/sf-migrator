@@ -24,16 +24,16 @@ module.exports = {
 
             projects.push({
                 id: project1id,
-                name: `Demo project for User ${name}`,
-                description: `This is a demo project created for user ${name}.`,
+                name: `Project 0, ${name}`,
+                description: `Project 0, ${name}`,
                 userId: user.id,
                 createdAt: new Date(),
                 updatedAt: new Date()
             });
             projects.push({
                 id: project2id,
-                name: `Test project for User ${name}`,
-                description: `This is a test project created for user ${name}.`,
+                name: `Project 1, ${name}`,
+                description: `Project 1, ${name}`,
                 userId: user.id,
                 createdAt: new Date(),
                 updatedAt: new Date()

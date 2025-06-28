@@ -7,6 +7,7 @@
         "seed-undo": "echo 'Undoing all seeds in development.' && npx sequelize-cli db:seed:undo:all",
         "seed-users": "echo 'Seeding users in development.' && npx sequelize-cli db:seed --seed 1-create-users.js",
         "seed-projects": "echo 'Seeding users in development.' && npx sequelize-cli db:seed --seed 2-create-projects.js",
+        "seed-sforgs": "echo 'Seeding SF orgs in development.' && npx sequelize-cli db:seed --seed 3-create-sf-orgs.js",
         "migrate-seed": "echo 'Running migrations and seeding in development.' && npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all"
     },
     "dependencies": {

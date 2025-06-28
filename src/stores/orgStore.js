@@ -42,6 +42,7 @@ export const useOrgStore = defineStore('orgs', {
         },
 
         async loadProjects() {
+            console.log('Loading projects...');
             const response = await axiosInstance.get('/',
                 {
                     headers: {
@@ -146,17 +147,6 @@ export const useOrgStore = defineStore('orgs', {
                                     this.selectedProject = project;
                                 },
                             },
-                            {
-                                key: project.id + '-' + org.id + '-orgDescription',
-                                label: org.description,
-                                icon: 'mdi-information',
-                                command: () => {
-                                    // todo fill in accordingly
-                                    this.selectedOrg = org;
-                                    this.selectedProject = project;
-                                },
-                            },
-
                         ],
                         command: () => {
                             // todo fill in accordingly

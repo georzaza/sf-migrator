@@ -65,17 +65,19 @@ export const useOrgStore = defineStore('orgs', {
         },
 
         setMenuItems() {
-            this.menuItems = this.projects.map(project => ({
+            const projectsAndOrgs = this.projects.map(project => ({
+                key: project.id,
                 label: project.name,
                 icon: null, // todo maybe different icon to differentiate from orgs
                 to: null, // todo correct after route handling is done
                 items: this.orgs
                     .filter(org => org.projectId === project.id)
                     .map(org => ({
+                        key: project.id + '-' + org.id,
                         label: org.name,
                         icon: null, // todo maybe if org is analyzed a green, if not a red icon
-                        url: org.loginURL || null, // todo review if needed
-                        target: org.loginURL ? '_blank' : null, //todo review
+                        //url: org.loginURL || null, // todo review if needed
+                        //target: org.loginURL ? '_blank' : null, //todo review
                         to: null, // todo correct after route handling is done
                         items: [], // could perhaps add action items, e.g. analyze org, set as source org, etc.
                         command: () => {
@@ -86,6 +88,15 @@ export const useOrgStore = defineStore('orgs', {
                     // todo fill in accordingly
                 },
             }));
+
+            this.menuItems = [
+                {
+                    key: 'projects-and-orgs',
+                    label: 'Projects and Orgs',
+                    items: {...projectsAndOrgs},
+                },
+            ];
+
         }
     },
 });

@@ -92,8 +92,8 @@ const logout = async () => {
             <div class="layout-topbar-menu hidden lg:block">
                 <div class="layout-topbar-menu-content">
                     <button type="button" class="layout-topbar-action" @click="logout">
-                        <i class="pi pi-calendar"></i>
-                        <span>Logout</span>
+                        <i class="pi pi-sign-out"></i>
+                        Logout
                     </button>
                 </div>
             </div>

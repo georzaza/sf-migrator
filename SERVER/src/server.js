@@ -75,7 +75,6 @@ app.get("/", authMiddleware, async (req, res) => {
 app.post("/", authMiddleware, async (req, res) => {
     /** get-orgs-for-project */
     if (req.headers.action.toLowerCase() === 'get-orgs-for-project') {
-        //const user = req.user;
         const projectId = req.body.projectId;
         if (!projectId) {
             return sendResponse(res, 400, false, 'Project ID is required');
@@ -113,9 +112,49 @@ app.put("/", authMiddleware, async (req, res) => {
             sendResponse(res, 500, false, 'Failed to update Salesforce Org');
         }
     }
+
+    /** add project */
+    else if (req.headers.action.toLowerCase() === 'add-project') {
+        const user = req.user;
+        const projectData = {
+            name: req.body.name,
+            description: req.body.description,
+            userId: user.id
+        }
+        try {
+            const project = await projectService.createProject(projectData);
+            sendResponse(res, 201, true, 'Project added successfully', project);
+        }
+        catch (error) {
+            console.error('Error adding project:', error);
+            sendResponse(res, 500, false, 'Failed to add project');
+        }
+    }
+
+    /** add org */
+    else if (req.headers.action.toLowerCase() === 'add-org') {
+        const projectId = req.body.projectId;
+        if (!projectId) {
+            return sendResponse(res, 400, false, 'Project ID is required');
+        }
+        try {
+            const org = await sfOrgService.createSfOrg(req.body);
+            sendResponse(res, 201, true, 'Salesforce Org added successfully', org);
+        }
+        catch (error) {
+            if (error.name === 'SequelizeValidationError') {
+                return sendResponse(res, 400, false, error.message);
+            }
+            console.error('Error adding Salesforce Org:', error);
+            sendResponse(res, 500, false, 'Failed to add Salesforce Org');
+        }
+    }
+
+    /** Unknown action */
     else {
         res.status(400).json({ msg: 'Unknown PUT action' });
     }
+
 });
 
 

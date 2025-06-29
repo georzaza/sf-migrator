@@ -51,10 +51,10 @@ module.exports = (sequelize, DataTypes) => {
         validate: {
             connectionTypeCheck() {
                 if (this.connectionType === 'OAuth' && (!this.clientId || !this.clientSecret)) {
-                    throw new Error('Client ID and Client Secret are required for OAuth connection type.');
+                    throw new Error('ClientId and ClientSecret are required for OAuth connection type.');
                 }
                 if (this.connectionType === 'Credentials' && (!this.username || !this.password || !this.securityToken)) {
-                    throw new Error('Username and Password are required for Credentials connection type.');
+                    throw new Error('Username, Password and SecurityToken are required for Credentials connection type.');
                 }
             },
         }

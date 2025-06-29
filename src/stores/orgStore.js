@@ -1,11 +1,10 @@
 import { defineStore } from 'pinia';
 import axiosInstance from '@/api/axiosInstance';
+import salesforceLogo from '../../assets/logos/Salesforce.com_logo.svg.png';
 
 export const useOrgStore = defineStore('orgs', {
 
-    persist: {
-        paths: ['projects', 'orgs', 'selectedProject', 'selectedOrg', 'orgToEdit'],
-    },
+    persist: true,
 
     state: () => ({
         projects: [],
@@ -14,7 +13,8 @@ export const useOrgStore = defineStore('orgs', {
         selectedOrg: null,
         menuItems: [],
         showEditOrgDialog: false,
-        orgToEdit: null,
+        showAddProjectDialog: false,
+        showAddOrgDialog: false,
     }),
 
     actions: {
@@ -32,7 +32,15 @@ export const useOrgStore = defineStore('orgs', {
 
         closeEditOrgDialog() {
             this.showEditOrgDialog = false;
-            this.orgToEdit = null;
+            this.selectedOrg = null;
+        },
+
+        closeAddProjectDialog() {
+            this.showAddProjectDialog = false;
+        },
+
+        closeAddOrgDialog() {
+            this.showAddOrgDialog = false;
         },
 
         async loadProjects() {
@@ -75,86 +83,109 @@ export const useOrgStore = defineStore('orgs', {
         },
 
         setMenuItems() {
-            const projectsAndOrgs = this.projects.map(project => ({
-                key: project.id,
-                label: project.name,
-                icon: null, // todo maybe different icon to differentiate from orgs
-                to: null, // todo correct after route handling is done
-                items: this.orgs
-                    .filter(org => org.projectId === project.id)
-                    .map(org => ({
-                        key: project.id + '-' + org.id,
-                        label: org.name,
-                        icon: null, // todo maybe if org is analyzed a green, if not a red icon
-                        //url: org.loginURL || null, // todo review if needed
-                        //target: org.loginURL ? '_blank' : null, //todo review
-                        to: null, // todo correct after route handling is done
-                        items: [
-                            {
-                                key: project.id + '-' + org.id + '-edit',
-                                label: 'Edit Org Info',
-                                icon: 'mdi-pencil',
-                                to: null, // todo correct after route handling is done
-                                command: () => {
-                                    this.selectedOrg = org;
-                                    this.selectedProject = project;
-                                    this.showEditOrgDialog = true;
-                                    this.orgToEdit = this.selectedOrg;
-                                },
-                            },
-                            {
-                                key: project.id + '-' + org.id + '-delete',
-                                label: 'Delete Org',
-                                icon: 'mdi-delete',
-                                to: null, // todo correct after route handling is done
-                                command: () => {
-                                    // todo fill in accordingly
-                                    this.selectedOrg = org;
-                                    this.selectedProject = project;
-                                },
-                            },
-                            {
-                                key: project.id + '-' + org.id + '-analyze',
-                                label: 'Start Analysis',
-                                icon: 'mdi-chart-line',
-                                to: null, // todo correct after route handling is done
-                                command: () => {
-                                    // todo fill in accordingly
-                                    this.selectedOrg = org;
-                                    this.selectedProject = project;
-                                },
-                            },
-                            {
-                                key: project.id + '-' + org.id + '-openOrg',
-                                label: 'Open Org',
-                                icon: 'mdi-open-in-new',
-                                url: org.loginURL || null,
-                                target: org.loginURL ? '_blank' : null,
-                                command: () => {
-                                    // todo fill in accordingly
-                                    this.selectedOrg = org;
-                                    this.selectedProject = project;
-                                },
-                            },
-                        ],
-                        command: () => {
-                            // todo fill in accordingly
-                            this.selectedOrg = org;
-                            this.selectedProject = project;
-                        },
-                    })),
+
+            const addProjectButton = {
+                key: 'add-project',
+                label: 'Add Project',
+                icon: 'pi pi-plus',
+                styleClass: 'menu-action-highlight', // use the custom highlight class
                 command: () => {
-                    // todo fill in accordingly
-                    this.selectedOrg = null;
-                    this.selectedProject = project;
+                    this.showAddProjectDialog = true; // open Add Project dialog
                 },
-            }));
+            };
+
+            const projectsAndOrgs = this.projects.map(project => {
+
+                const addOrgButton = {
+                    key: project.id + '_add-org',
+                    label: 'Add Org',
+                    icon: 'pi pi-plus',
+                    styleClass: 'menu-action-highlight', // use the custom highlight class
+                    command: () => {
+                        this.selectedProject = project;
+                        this.showAddOrgDialog = true; // open Add Org dialog
+                    },
+                };
+
+                const orgItems = this.orgs.filter(org => org.projectId === project.id).map(org => ({
+                    key: project.id + '_' + org.id,
+                    label: org.name,
+                    icon: null, // todo maybe if org is analyzed a green, if not a red icon
+                    //url: org.loginURL || null, // todo review if needed
+                    //target: org.loginURL ? '_blank' : null, //todo review
+                    to: null, // todo correct after route handling is done
+                    items: [
+                        {
+                            key: project.id + '_' + org.id + '_edit',
+                            label: 'Edit Org Info',
+                            icon: 'pi pi-pencil',
+                            to: null, // todo correct after route handling is done
+                            command: () => {
+                                this.selectedOrg = org;
+                                this.selectedProject = project;
+                                this.showEditOrgDialog = true;
+                            },
+                        },
+                        {
+                            key: project.id + '_' + org.id + '_delete',
+                            label: 'Delete Org',
+                            icon: 'pi pi-times',
+                            to: null, // todo correct after route handling is done
+                            command: () => {
+                                // todo fill in accordingly
+                                this.selectedOrg = org;
+                                this.selectedProject = project;
+                            },
+                        },
+                        {
+                            key: project.id + '_' + org.id + '_analyze',
+                            label: 'Start Analysis',
+                            icon: 'pi pi-cloud-download',
+                            to: null, // todo correct after route handling is done
+                            command: () => {
+                                // todo fill in accordingly
+                                this.selectedOrg = org;
+                                this.selectedProject = project;
+                            },
+                        },
+                        {
+                            key: project.id + '_' + org.id + '_openOrg',
+                            label: 'Open Org',
+                            imgIcon: salesforceLogo,
+                            url: org.loginURL || null,
+                            target: org.loginURL ? '_blank' : null,
+                            command: () => {
+                                this.selectedOrg = org;
+                                this.selectedProject = project;
+                            },
+                        },
+                    ],
+                    command: () => {
+                        // todo fill in accordingly
+                        this.selectedOrg = org;
+                        this.selectedProject = project;
+                    },
+                }));
+
+                return {
+                    key: project.id,
+                    label: project.name,
+                    icon: null, // todo maybe different icon to differentiate from orgs
+                    to: null, // todo correct after route handling is done
+                    items: [addOrgButton, ...orgItems],
+                    command: () => {
+                        // todo fill in accordingly
+                        this.selectedOrg = null;
+                        this.selectedProject = project;
+                    },
+                };
+            });
 
             this.menuItems = [
                 {
                     key: 'projects-and-orgs',
                     label: 'Your Projects and Orgs',
-                    items: projectsAndOrgs,
+                    items: [addProjectButton, ...projectsAndOrgs],
                 },
             ];
         }

@@ -1,24 +1,18 @@
 <script setup>
-import { ref, watch, computed } from 'vue';
+import { ref, computed } from 'vue';
 import { useOrgStore } from '@/stores/orgStore';
 import axiosInstance from '@/api/axiosInstance';
 
 import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
-import Textarea from 'primevue/textarea';
-import Select from 'primevue/select';
 import Button from 'primevue/button';
+import Select from 'primevue/select';
 
 const orgStore = useOrgStore();
 const visible = computed({
-    get: () => orgStore.showEditOrgDialog,
-    set: (val) => { if (!val) orgStore.closeEditOrgDialog(); }
+    get: () => orgStore.showAddOrgDialog,
+    set: (val) => { if (!val) orgStore.showAddOrgDialog = false; }
 });
-
-const connectionTypes = [
-    { label: 'OAuth', value: 'OAuth' },
-    { label: 'Credentials', value: 'Credentials' }
-];
 
 const form = ref({
     name: '',
@@ -32,65 +26,69 @@ const form = ref({
     clientSecret: ''
 });
 
-watch(() => orgStore.selectedOrg, (org) => {
-    console.log('Selected org changed:', org);
-    if (org) {
-        form.value = {
-            name: org.name || '',
-            description: org.description || '',
-            loginURL: org.loginURL || '',
-            connectionType: org.connectionType || 'Credentials',
-            username: '',
-            password: '',
-            securityToken: '',
-            clientId: '',
-            clientSecret: ''
-        };
-    }
-}, { immediate: true });
+const connectionTypes = [
+    { label: 'OAuth', value: 'OAuth' },
+    { label: 'Credentials', value: 'Credentials' }
+];
+
+const credsError = ref(false);
+const oauthError = ref(false);
 
 function onClose() {
-    orgStore.closeEditOrgDialog();
+    orgStore.showAddOrgDialog = false;
 }
 
 async function onSave() {
     console.log('Saving org...');
+
+    // Reset errors
+    credsError.value = false;
+    oauthError.value = false;
+
+    const payload = {
+        ...form.value,
+        projectId: orgStore.selectedProject.id
+    };
+
     try {
-        const payload = { ...form.value };
-
-         ['clientId', 'clientSecret', 'password', 'username', 'securityToken']
-         .forEach(key => {
-            if (!payload[key]) {
-                delete payload[key];
-            }
-        });
-
-        await axiosInstance.put('/',
+        const response = await axiosInstance.put('/',
             payload,
             {
                 headers: {
-                    action: 'update-org',
-                    orgid: orgStore.selectedOrg.id
+                    action: 'add-org',
                 },
                 withCredentials: true
             }
         );
+        console.log('Response:', response.data.message);
+        if (response.status === 201) {
+            await orgStore.loadProjects();
+            onClose();
+        }
+        else if (response.status === 400 && !response.data.success) {
+            if (response.data.message === 'Validation error: Username, Password and SecurityToken are required for Credentials connection type.') {
+                credsError.value = true;
+            }
+            else if (response.data.message === 'Validation error: ClientId and ClientSecret are required for OAuth connection type.') {
+                console.log('HERE');
+                oauthError.value = true;
+            }
+        }
+        else {
+            console.warn('Some error occured while adding the new org');
+        }
 
-        await orgStore.loadProjects();
-
-        orgStore.closeEditOrgDialog();
+        orgStore.closeAddProjectDialog();
     }
     catch (error) {
-        console.error('Failed to update org:', error);
+        console.error('Failed to add org:', error);
     }
-    console.log('Org saved!');
 }
 </script>
 
-
 <template>
-    <Dialog v-model:visible="visible" header="Edit Org Info" @hide="onClose" modal dismissableMask>
-        <form id="form" @submit.prevent="onSave" class="edit-org-form">
+    <Dialog v-model:visible="visible" header="Add Org" @hide="onClose" modal dismissableMask>
+        <form id="add-org-form" @submit.prevent="onSave" class="add-org-form">
             <div class="fields-container">
                 <div class="field-row">
                     <label for="org-name">Name*</label>
@@ -98,7 +96,7 @@ async function onSave() {
                 </div>
                 <div class="field-row">
                     <label for="org-description">Description</label>
-                    <Textarea id="org-description" v-model="form.description" autoResize />
+                    <InputText id="org-description" v-model="form.description" />
                 </div>
                 <div class="field-row">
                     <label for="org-loginURL">Login URL*</label>
@@ -116,19 +114,19 @@ async function onSave() {
                     />
                 </div>
 
-                <!-- Credentials -->
+                <!-- Creds -->
                 <template v-if="form.connectionType === 'Credentials'">
                     <div class="field-row">
                         <label for="org-username">Username*</label>
-                        <InputText id="org-username" placeholder="New Username" v-model="form.username" />
+                        <InputText id="org-username" v-model="form.username" :class="{ 'input-error': credsError }" />
                     </div>
                     <div class="field-row">
                         <label for="org-password">Password*</label>
-                        <Password id="org-password" placeholder="New Password" v-model="form.password" type="password" :toggleMask="true" fluid :feedback="false" />
+                        <InputText id="org-password" v-model="form.password" type="password" :class="{ 'input-error': credsError }" />
                     </div>
                     <div class="field-row">
                         <label for="org-securityToken">Security Token*</label>
-                        <Password id="org-securityToken" placeholder="New Security Token" v-model="form.securityToken" type="password" :toggleMask="true" fluid :feedback="false" />
+                        <InputText id="org-securityToken" v-model="form.securityToken" type="password" :class="{ 'input-error': credsError }" />
                     </div>
                 </template>
 
@@ -136,25 +134,37 @@ async function onSave() {
                 <template v-else-if="form.connectionType === 'OAuth'">
                     <div class="field-row">
                         <label for="org-clientId">Client ID</label>
-                        <InputText id="org-clientId" placeholder="New Client ID" v-model="form.clientId" />
+                        <InputText id="org-clientId" v-model="form.clientId" :class="{ 'input-error': oauthError }" />
                     </div>
                     <div class="field-row">
                         <label for="org-clientSecret">Client Secret</label>
-                        <Password id="org-clientSecret" placeholder="New Client Secret" v-model="form.clientSecret" type="password" :toggleMask="true" fluid :feedback="false" />
+                        <InputText id="org-clientSecret" v-model="form.clientSecret" type="password" :class="{ 'input-error': oauthError }" />
                     </div>
                 </template>
             </div>
         </form>
         <template #footer>
             <Button label="Cancel" @click="onClose" class="p-button-text" />
-            <Button label="Save" type="submit" form="form"/>
+            <Button label="Save" type="submit" form="add-org-form" />
         </template>
     </Dialog>
 </template>
 
-
 <style scoped>
-.edit-org-form {
+
+.input-error {
+    border: 1.5px solid #e53935 !important;
+    background: #fff6f6 !important;
+}
+
+.add-org-form :deep(.p-inputtext.input-error),
+.add-org-form :deep(.p-password-input.input-error),
+.add-org-form :deep(input.input-error) {
+    border: 1.5px solid #e53935 !important;
+    background: #fff6f6 !important;
+}
+
+.add-org-form {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -162,42 +172,22 @@ async function onSave() {
     max-width: 500px;
     margin: 0 auto;
 }
-
 .fields-container {
     display: flex;
     flex-direction: column;
     gap: 1rem;
 }
-
 .field-row {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
 }
-
 label {
     font-weight: 500;
     margin-bottom: 0.1rem;
     color: #333;
 }
-
-.p-inputtext,
-.p-dropdown,
-.p-textarea {
+.p-inputtext {
     width: 100%;
-}
-
-.p-dialog .p-dialog-content {
-    padding-bottom: 0;
-}
-
-.pi-eye {
-    transform: scale(1.6);
-    margin-right: 1rem;
-}
-
-.pi-eye-slash {
-    transform: scale(1.6);
-    margin-right: 1rem;
 }
 </style>

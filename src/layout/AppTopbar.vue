@@ -12,7 +12,7 @@ const logout = async () => {
     localStorage.clear();
     sessionStorage.clear();
     try {
-        axiosInstance.post('/auth/logout',
+        axiosInstance.get('/auth/logout',
         {
             headers: {
                 action: 'logout'

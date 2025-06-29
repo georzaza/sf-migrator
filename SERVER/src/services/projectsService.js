@@ -9,7 +9,9 @@ async function getProjectsByUserId(userId) {
 }
 
 async function createProject(projectData) {
-    return await Project.create(projectData);
+    const project = await Project.create(projectData);
+    console.log('Project created:', project);
+    return project;
 }
 
 async function getAllProjects() {

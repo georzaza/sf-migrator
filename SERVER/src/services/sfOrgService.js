@@ -9,7 +9,9 @@ async function getSfOrgsByProjectId(projectId) {
 }
 
 async function createSfOrg(sfOrgData) {
-    return await SfOrg.create(sfOrgData);
+    const sforg = await SfOrg.create(sfOrgData);
+    console.log('Salesforce Org created:', sforg);
+    return sforg;
 }
 
 async function getAllSfOrgs() {
@@ -29,7 +31,9 @@ async function updateSfOrg(id, sfOrgData) {
     if (!sfOrg) {
         throw new Error('Salesforce Org not found');
     }
-    return await sfOrg.update(sfOrgData);
+    const updatedOrg= await sfOrg.update(sfOrgData);
+    console.log('Salesforce Org updated:', updatedOrg);
+    return updatedOrg;
 }
 
 module.exports = {

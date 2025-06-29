@@ -1,8 +1,45 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import AppConfigurator from './AppConfigurator.vue';
+import axiosInstance from '@/api/axiosInstance';
+import { useRouter } from 'vue-router';
 
 const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
+
+const router = useRouter();
+
+const logout = async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    try {
+        axiosInstance.post('/auth/logout',
+        {
+            headers: {
+                action: 'logout'
+            },
+            withCredentials: true
+        })
+        .then( res => {
+            if (res.status === 200) {
+                console.log('Logout successful');
+            }
+            else {
+                console.error('Failed to logout from server:', res);
+            }
+        })
+        .catch(error => {
+            console.error('Error during logout:', error);
+        })
+        .finally( () => {
+            // Redirect to login page after logout
+            router.push({ name: 'login' });
+        });
+    }
+    catch (error) {
+        console.error('Error during logout:', error);
+    }
+}
+
 </script>
 
 <template>
@@ -40,13 +77,7 @@ const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
                     <i :class="['pi', { 'pi-moon': isDarkTheme, 'pi-sun': !isDarkTheme }]"></i>
                 </button>
                 <div class="relative">
-                    <button
-                        v-styleclass="{ selector: '@next', enterFromClass: 'hidden', enterActiveClass: 'animate-scalein', leaveToClass: 'hidden', leaveActiveClass: 'animate-fadeout', hideOnOutsideClick: true }"
-                        type="button"
-                        class="layout-topbar-action layout-topbar-action-highlight"
-                    >
-                        <i class="pi pi-palette"></i>
-                    </button>
+
                     <AppConfigurator />
                 </div>
             </div>
@@ -60,17 +91,9 @@ const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
 
             <div class="layout-topbar-menu hidden lg:block">
                 <div class="layout-topbar-menu-content">
-                    <button type="button" class="layout-topbar-action">
+                    <button type="button" class="layout-topbar-action" @click="logout">
                         <i class="pi pi-calendar"></i>
-                        <span>Calendar</span>
-                    </button>
-                    <button type="button" class="layout-topbar-action">
-                        <i class="pi pi-inbox"></i>
-                        <span>Messages</span>
-                    </button>
-                    <button type="button" class="layout-topbar-action">
-                        <i class="pi pi-user"></i>
-                        <span>Profile</span>
+                        <span>Logout</span>
                     </button>
                 </div>
             </div>

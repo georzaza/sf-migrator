@@ -34,7 +34,9 @@ const realOrgs = {
         password: '6u1nxqD6a!',
         securityToken: 'aoUzg5oH5F20AG50xiEdTfLg',
         email: 'gmail',
-        instanceUrl: 'https://deloittegrsuperbadgeape-12f-dev-ed.develop.my.salesforce.com'
+        instanceUrl: 'https://deloittegrsuperbadgeape-12f-dev-ed.develop.my.salesforce.com',
+        clientId: '3MVG9k02hQhyUgQBga6YbcOFNvDn3HZWheN7pB6kSIqh4K3Ux9BeFM233_2_SiOoWwgxLR9Ies.qj6CpKx9rA',
+        clientSecret: '671979C3F42573EC12789B96FC943AE9EC5F62ECF2310D096EA1E08778BAF66E'
     }
 };
 

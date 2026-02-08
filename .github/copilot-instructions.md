@@ -13,6 +13,25 @@
 - Always concatenate password + securityToken when logging in
 - Use correct loginUrl (https://login.salesforce.com, NOT instance URLs)
 
+## ⚠️ CRITICAL: Architecture Documentation
+
+**BEFORE any code operation:**
+1. **ALWAYS read `SERVER/docs/ARCHITECTURE.md` FIRST** to understand the current system architecture
+2. Understand what layers are affected (middleware, routes, services, repositories, models)
+3. Follow the established patterns (repository pattern, service layer, action-based routing)
+
+**AFTER any operation that changes architecture:**
+1. **ALWAYS update `SERVER/docs/ARCHITECTURE.md`** to reflect the changes
+2. Document new patterns, layers, or architectural decisions
+3. Update code examples if relevant patterns have changed
+4. Ensure consistency across all architectural documentation
+
+**Architecture changes include:**
+- Adding/removing/modifying services, repositories, middleware, or routes
+- Changing request/response patterns or error handling
+- Adding new layers or cross-cutting concerns
+- Modifying authentication, logging, or configuration approaches
+
 ## Architecture Overview
 This is a Salesforce data migration tool with a **Vue 3 frontend** (`src/`) and **Express backend** (`SERVER/src/`). PostgreSQL database with Sequelize ORM. The tool is under active development - see [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) for planned features (metadata retrieval, field mapping, migration engine).
 

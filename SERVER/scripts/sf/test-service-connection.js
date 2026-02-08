@@ -6,7 +6,12 @@
  * Usage: node scripts/sf/test-service-connection.js <orgId>
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '../../src/.env') });
+const path = require('path');
+
+const env = process.env.NODE_ENV || 'development';
+require('dotenv').config({
+    path: path.resolve(__dirname, `../../.env.${env}`),
+});
 
 const salesforceService = require('../../src/services/salesforceService');
 

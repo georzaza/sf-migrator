@@ -11,8 +11,6 @@ const parseCookies = require('../utils/parseCookies.js');
 const logger = require('../lib/logger');
 const log = logger.create('authRoutes');
 
-require('dotenv').config({ path: '../.env' });
-
 const SALT_ROUNDS = 10;
 
 // ============================= LOGIN =============================

@@ -19,7 +19,7 @@ const connectionPool = new Map();
  * @returns {Promise<jsforce.Connection>}
  */
 async function createConnection(sfOrg) {
-    log.info('Creating Salesforce connection', { orgName: sfOrg.name, loginURL: sfOrg.loginURL });
+    log.info('Creating Salesforce connection', { sfOrgId: sfOrg.id, orgName: sfOrg.name, loginURL: sfOrg.loginURL });
 
     if (!sfOrg.username || !sfOrg.password) {
         throw new Error('Username and password are required');
@@ -37,7 +37,7 @@ async function createConnection(sfOrg) {
                 clientSecret: sfOrg.clientSecret,
                 redirectUri: `${sfOrg.loginURL}/services/oauth2/success`,
             },
-            version: '60.0',
+            version: '65.0',
         });
 
         await conn.login(sfOrg.username, sfOrg.password + (sfOrg.securityToken || ''));
@@ -50,7 +50,7 @@ async function createConnection(sfOrg) {
 
         return conn;
     } catch (error) {
-        log.error('Salesforce connection failed', error, { orgName: sfOrg.name });
+        log.error('Salesforce connection failed', error, { sfOrgId: sfOrg.id, orgName: sfOrg.name });
 
         if (error.message.includes('invalid_grant') || error.message.includes('authentication failure')) {
             throw new Error(

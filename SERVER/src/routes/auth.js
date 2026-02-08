@@ -3,11 +3,13 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
 
-const userService = require('../services/userService');
+const userRepo = require('../repositories/userRepository');
 const validator = require('./validator.js');
 
 const sendResponse = require('../utils/sendResponse.js');
 const parseCookies = require('../utils/parseCookies.js');
+const logger = require('../lib/logger');
+const log = logger.create('authRoutes');
 
 require('dotenv').config({ path: '../.env' });
 
@@ -25,8 +27,8 @@ router.post('/login', async (req, res) => {
     const { userIdentifier, password } = req.body;
 
     try {
-        const userByEmail = await userService.getUserByEmail(userIdentifier);
-        const userByUsername = await userService.getUserByUsername(userIdentifier);
+        const userByEmail = await userRepo.findByEmail(userIdentifier);
+        const userByUsername = await userRepo.findByUsername(userIdentifier);
 
         if (!userByEmail && !userByUsername) {
             return sendResponse(res, 404, false, 'User not found. Did you forget your credentials?');
@@ -38,7 +40,7 @@ router.post('/login', async (req, res) => {
 
             if (isPasswordValid) {
 
-                userService.setUserLastLogin(user.id); // asynchronous
+                userRepo.updateLastLogin(user.id); // asynchronous
 
                 const token = jwt.sign(
                     {
@@ -67,7 +69,7 @@ router.post('/login', async (req, res) => {
         }
     }
     catch (error) {
-        console.error(`Login | Error while fetching user ${userIdentifier} | Is the DB up and running? `, error);
+        log.error('Login failed', error, { userIdentifier });
         return sendResponse(res, 500, false, 'Internal server error');
     }
 });
@@ -77,8 +79,8 @@ router.post('/login', async (req, res) => {
 router.post('/register', async (req, res) => {
     try {
         const { email, password, firstname, lastname, username } = req.body;
-        const existingUserEmail = await userService.getUserByEmail(email);
-        const existingUsername = await userService.getUserByUsername(username);
+        const existingUserEmail = await userRepo.findByEmail(email);
+        const existingUsername = await userRepo.findByUsername(username);
         const validateEmail = validator.validateEmail(email);
         const validateUsername = validator.validateUsername(username);
         const validatePassword = validator.validatePassword(password);
@@ -113,19 +115,19 @@ router.post('/register', async (req, res) => {
             return sendResponse(res, 400, false, validatePassword);
 
         try {
-            const createdUser = await userService.createUser(newUser);
+            const createdUser = await userRepo.create(newUser);
             return sendResponse(res, 201, true, 'Registration was successful.', {
                 email: createdUser.email,
                 username: createdUser.username,
             });
         }
         catch (error) {
-            console.error('Register | Error while creating user:', error);
+            log.error('Failed to create user during registration', error, { email });
             return sendResponse(res, 500, false, 'Internal server error');
         }
     }
     catch (error) {
-        console.error('Register | Error while processing registration request:', error);
+        log.error('Registration request processing failed', error);
         return sendResponse(res, 500, false, 'Internal server error');
     }
 });
@@ -139,15 +141,15 @@ router.get('/whoami', async (req, res) => {
     const token = cookies.auth_token;
 
     if (!token) {
-        console.error('Whoami | No token provided in cookies.');
+        log.warn('Whoami called without token');
         sendResponse(res, 401, false, 'Unauthorized.');
     }
 
     try {
         const userData = jwt.verify(token, process.env.JWT_SECRET);
-        const fullUser = await userService.getUserById(userData.id);
+        const fullUser = await userRepo.findById(userData.id);
         if (!fullUser) {
-            console.error(`Whoami | User with ID ${userData.id} not found.`);
+            log.warn('User not found during whoami', { userId: userData.id });
             return sendResponse(res, 404, false, 'User not found. Token validation failed.');
         }
         return sendResponse(res, 200, true, 'User is authenticated.', {
@@ -157,10 +159,10 @@ router.get('/whoami', async (req, res) => {
     }
     catch (error) {
         if (error.name === 'TokenExpiredError') {
-            console.error('Whoami | Token has expired.');
+            log.warn('Whoami token expired');
             return sendResponse(res, 401, false, 'Unauthorized. Token has expired.');
         }
-        console.error('Whoami | Error while verifying token:', error);
+        log.error('Whoami token verification failed', error);
         return sendResponse(res, 403, false, 'Unauthorized. Invalid token.');
     }
 });

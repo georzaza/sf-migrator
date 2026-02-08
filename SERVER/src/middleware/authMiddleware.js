@@ -1,38 +1,38 @@
 const jwt = require('jsonwebtoken');
-const userService = require('../services/userService');
+const userRepo = require('../repositories/userRepository');
 const sendResponse = require('../utils/sendResponse');
 const parseCookies = require('../utils/parseCookies');
+const logger = require('../lib/logger');
+const log = logger.create('authMiddleware');
 
-// Auth middleware for JWT validation (similar to "whoami" endpoint under /src/routes/auth.js)
 async function authMiddleware(req, res, next) {
-    if (!req.headers || !req.headers.action || !req.headers.action.toLowerCase() === 'whoami')
-        return sendResponse(res, 400, false, 'Bad request.');
+    if (!req.headers || !req.headers.action) {
+        return sendResponse(res, 400, false, 'Bad request: Missing required headers.');
+    }
     const cookies = parseCookies(req.headers.cookie);
     const token = cookies.auth_token;
 
     if (!token) {
-        console.error('SERVER | Auth Middleware | No token provided in cookies.');
-        sendResponse(res, 401, false, 'Unauthorized.');
+        log.warn('No token provided in cookies');
+        return sendResponse(res, 401, false, 'Unauthorized.');
     }
 
     try {
         const userData = jwt.verify(token, process.env.JWT_SECRET);
-        const fullUser = await userService.getUserById(userData.id);
+        const fullUser = await userRepo.findById(userData.id);
         if (!fullUser) {
-            console.error(`SERVER | Auth Middleware | User with ID ${userData.id} not found.`);
+            log.warn('User not found during token validation', { userId: userData.id });
             return sendResponse(res, 404, false, 'User not found. Token validation failed.');
         }
 
-        // appends the user to the request
         req.user = fullUser;
         return next();
-    }
-    catch (error) {
+    } catch (error) {
         if (error.name === 'TokenExpiredError') {
-            console.error('SERVER | Auth Middleware | Token has expired.');
+            log.warn('Token has expired');
             return sendResponse(res, 401, false, 'Unauthorized. Token has expired.');
         }
-        console.error('SERVER | Auth Middleware | Error while verifying token:', error);
+        log.error('Token verification failed', error);
         return sendResponse(res, 403, false, 'Unauthorized. Invalid token.');
     }
 }

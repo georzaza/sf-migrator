@@ -1,0 +1,258 @@
+/**
+ * API Routes
+ *
+ * All application endpoints dispatched via the `action` header.
+ * Extracted from the monolithic server.js for clarity.
+ */
+
+const express = require('express');
+const router = express.Router();
+
+const authMiddleware = require('../middleware/authMiddleware');
+const projectRepo = require('../repositories/projectRepository');
+const orgRepo = require('../repositories/orgRepository');
+const metadataRepo = require('../repositories/metadataRepository');
+const mappingRepo = require('../repositories/mappingRepository');
+const metadataService = require('../services/metadataService');
+const salesforceService = require('../services/salesforceService');
+const sendResponse = require('../utils/sendResponse');
+const logger = require('../lib/logger');
+const log = logger.create('api');
+
+
+// ===================== GET Requests =====================
+
+router.get('/', authMiddleware, async (req, res) => {
+    const action = req.headers.action?.toLowerCase();
+
+    if (action === 'get-projects') {
+        try {
+            const projects = await projectRepo.findByUserId(req.user.id);
+            sendResponse(res, 200, true, 'Projects retrieved successfully', projects);
+        } catch (error) {
+            log.error('Failed to retrieve projects', error, { userId: req.user.id });
+            sendResponse(res, 500, false, 'Failed to retrieve projects');
+        }
+    }
+
+    else if (action === 'get-orgs') {
+        try {
+            const sfOrgs = await orgRepo.findByUserId(req.user.id);
+            sfOrgs.map(org => {
+                org.username = '*'.repeat(10);
+                org.password = '*'.repeat(10);
+                org.securityToken = '*'.repeat(10);
+                org.clientId = '*'.repeat(10);
+                org.clientSecret = '*'.repeat(10);
+                return org;
+            });
+            sendResponse(res, 200, true, 'Salesforce Orgs retrieved successfully', sfOrgs);
+        } catch (error) {
+            log.error('Failed to retrieve Salesforce Orgs', error, { userId: req.user.id });
+            sendResponse(res, 500, false, 'Failed to retrieve Salesforce Orgs');
+        }
+    }
+
+    else if (action === 'get-objects') {
+        const orgId = req.headers.orgid;
+        if (!orgId) {
+            return sendResponse(res, 400, false, 'Org ID is required');
+        }
+        try {
+            const includeFields = req.query.includeFields === 'true';
+            const objects = await metadataRepo.findObjectsByOrgId(orgId, { includeFields });
+            sendResponse(res, 200, true, 'Objects retrieved successfully', objects);
+        } catch (error) {
+            log.error('Failed to retrieve objects', error, { orgId });
+            sendResponse(res, 500, false, `Failed to retrieve objects: ${error.message}`);
+        }
+    }
+
+    else if (action === 'get-fields') {
+        const objectId = req.headers.objectid;
+        if (!objectId) {
+            return sendResponse(res, 400, false, 'Object ID is required');
+        }
+        try {
+            const fields = await metadataRepo.findFieldsByObjectId(objectId);
+            sendResponse(res, 200, true, 'Fields retrieved successfully', fields);
+        } catch (error) {
+            log.error('Failed to retrieve fields', error, { objectId });
+            sendResponse(res, 500, false, `Failed to retrieve fields: ${error.message}`);
+        }
+    }
+
+    else if (action === 'get-metadata-stats') {
+        const orgId = req.headers.orgid;
+        if (!orgId) {
+            return sendResponse(res, 400, false, 'Org ID is required');
+        }
+        try {
+            const stats = await metadataRepo.getStats(orgId);
+            sendResponse(res, 200, true, 'Metadata statistics retrieved successfully', stats);
+        } catch (error) {
+            log.error('Failed to retrieve metadata statistics', error, { orgId });
+            sendResponse(res, 500, false, `Failed to retrieve metadata statistics: ${error.message}`);
+        }
+    }
+
+    else {
+        sendResponse(res, 400, false, 'Unknown GET action');
+    }
+});
+
+
+// ===================== POST Requests =====================
+
+router.post('/', authMiddleware, async (req, res) => {
+    const action = req.headers.action?.toLowerCase();
+
+    if (action === 'get-orgs-for-project') {
+        const projectId = req.body.projectId;
+        if (!projectId) {
+            return sendResponse(res, 400, false, 'Project ID is required');
+        }
+        try {
+            const sfOrgs = await orgRepo.findByProjectId(projectId);
+            sendResponse(res, 200, true, 'Salesforce Orgs for project retrieved successfully', sfOrgs);
+        } catch (error) {
+            log.error('Failed to retrieve Salesforce Orgs for project', error, { projectId });
+            sendResponse(res, 500, false, 'Failed to retrieve Salesforce Orgs for project');
+        }
+    }
+
+    else if (action === 'analyze-org') {
+        const { orgId, includeCustomOnly, excludeManaged } = req.body;
+        if (!orgId) {
+            return sendResponse(res, 400, false, 'Org ID is required');
+        }
+        log.info('Starting org analysis', { orgId });
+        try {
+            const result = await metadataService.analyzeAndSaveOrg(orgId, {
+                includeCustomOnly,
+                excludeManaged,
+            });
+            log.info('Org analysis completed', { orgId, objectsAnalyzed: result.objectsAnalyzed });
+            sendResponse(res, 200, true, 'Org analysis completed successfully', result);
+        } catch (error) {
+            log.error('Org analysis failed', error, { orgId });
+            sendResponse(res, 500, false, error.message || 'Failed to analyze org');
+        }
+    }
+
+    else if (action === 'refresh-metadata') {
+        const { orgId } = req.body;
+        if (!orgId) {
+            return sendResponse(res, 400, false, 'Org ID is required');
+        }
+        try {
+            const result = await metadataService.refreshMetadata(orgId);
+            sendResponse(res, 200, true, 'Metadata refreshed successfully', result);
+        } catch (error) {
+            log.error('Failed to refresh metadata', error, { orgId });
+            sendResponse(res, 500, false, 'Failed to refresh metadata');
+        }
+    }
+
+    else if (action === 'test-sf-connection') {
+        const { orgId } = req.body;
+        if (!orgId) {
+            return sendResponse(res, 400, false, 'Org ID is required');
+        }
+        try {
+            const result = await salesforceService.testConnection(orgId);
+            sendResponse(res, 200, true, 'Connection test successful', result);
+        } catch (error) {
+            log.error('Connection test failed', error, { orgId });
+            sendResponse(res, 500, false, error.message || 'Connection test failed');
+        }
+    }
+
+    else if (action === 'get-object-mappings') {
+        const { projectId } = req.body;
+        if (!projectId) {
+            return sendResponse(res, 400, false, 'Project ID is required');
+        }
+        try {
+            const mappings = await mappingRepo.findObjectMappingsByProjectId(projectId);
+            sendResponse(res, 200, true, 'Object mappings retrieved successfully', mappings);
+        } catch (error) {
+            log.error('Failed to retrieve object mappings', error, { projectId });
+            sendResponse(res, 500, false, `Failed to retrieve object mappings: ${error.message}`);
+        }
+    }
+
+    else if (action === 'get-field-mappings') {
+        const { projectId } = req.body;
+        if (!projectId) {
+            return sendResponse(res, 400, false, 'Project ID is required');
+        }
+        try {
+            const mappings = await mappingRepo.findFieldMappingsByProjectId(projectId);
+            sendResponse(res, 200, true, 'Field mappings retrieved successfully', mappings);
+        } catch (error) {
+            log.error('Failed to retrieve field mappings', error, { projectId });
+            sendResponse(res, 500, false, `Failed to retrieve field mappings: ${error.message}`);
+        }
+    }
+
+    else {
+        sendResponse(res, 400, false, 'Unknown POST action');
+    }
+});
+
+
+// ===================== PUT Requests =====================
+
+router.put('/', authMiddleware, async (req, res) => {
+    const action = req.headers.action?.toLowerCase();
+
+    if (action === 'update-org') {
+        const orgId = req.headers.orgid;
+        try {
+            await orgRepo.update(orgId, req.body);
+            sendResponse(res, 200, true, 'Salesforce Org updated successfully');
+        } catch (error) {
+            log.error('Failed to update Salesforce Org', error, { orgId });
+            sendResponse(res, 500, false, 'Failed to update Salesforce Org');
+        }
+    }
+
+    else if (action === 'add-project') {
+        const projectData = {
+            name: req.body.name,
+            description: req.body.description,
+            userId: req.user.id,
+        };
+        try {
+            const project = await projectRepo.create(projectData);
+            sendResponse(res, 201, true, 'Project added successfully', project);
+        } catch (error) {
+            log.error('Failed to add project', error, { userId: req.user.id });
+            sendResponse(res, 500, false, 'Failed to add project');
+        }
+    }
+
+    else if (action === 'add-org') {
+        const projectId = req.body.projectId;
+        if (!projectId) {
+            return sendResponse(res, 400, false, 'Project ID is required');
+        }
+        try {
+            const org = await orgRepo.create(req.body);
+            sendResponse(res, 201, true, 'Salesforce Org added successfully', org);
+        } catch (error) {
+            if (error.name === 'SequelizeValidationError') {
+                return sendResponse(res, 400, false, error.message);
+            }
+            log.error('Failed to add Salesforce Org', error, { projectId });
+            sendResponse(res, 500, false, 'Failed to add Salesforce Org');
+        }
+    }
+
+    else {
+        sendResponse(res, 400, false, 'Unknown PUT action');
+    }
+});
+
+module.exports = router;

@@ -96,6 +96,17 @@ export const useOrgStore = defineStore('orgs', {
 
             const projectsAndOrgs = this.projects.map(project => {
 
+                const migrateButton = {
+                    key: project.id + '_migrate',
+                    label: 'Start Migration',
+                    icon: 'pi pi-arrow-right-arrow-left',
+                    styleClass: 'menu-action-highlight',
+                    to: `/migrate/${project.id}`,
+                    command: () => {
+                        this.selectedProject = project;
+                    },
+                };
+
                 const addOrgButton = {
                     key: project.id + '_add-org',
                     label: 'Add Org',
@@ -172,7 +183,7 @@ export const useOrgStore = defineStore('orgs', {
                     label: project.name,
                     icon: null, // todo maybe different icon to differentiate from orgs
                     to: null, // todo correct after route handling is done
-                    items: [addOrgButton, ...orgItems],
+                    items: [migrateButton, addOrgButton, ...orgItems],
                     command: () => {
                         // todo fill in accordingly
                         this.selectedOrg = null;

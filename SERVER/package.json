@@ -1,6 +1,8 @@
 {
     "scripts": {
-        "serve": "nodemon server.js",
+        "serve": "nodemon src/server.js",
+        "test": "mocha",
+        "test:watch": "mocha --watch",
         "migrate": "echo 'Migrations are only allowed in development.' && npx sequelize-cli db:migrate",
         "migrate-status": "echo 'Checking migration status in development.' && npx sequelize-cli db:migrate:status",
         "seed": "echo 'Seeding is only allowed in development.' && npx sequelize-cli db:seed:all",
@@ -27,6 +29,10 @@
         "ws": "^8.18.1"
     },
     "devDependencies": {
-        "sequelize-cli": "^6.6.3"
+        "chai": "^6.2.2",
+        "mocha": "^11.7.5",
+        "sequelize-cli": "^6.6.3",
+        "sinon": "^21.0.1",
+        "supertest": "^7.2.2"
     }
 }

@@ -118,7 +118,13 @@ async function onSave() {
                 <template v-if="form.connectionType === 'Credentials'">
                     <div class="field-row">
                         <label for="org-username">Username*</label>
-                        <InputText id="org-username" v-model="form.username" :class="{ 'input-error': credsError }" />
+                        <InputText
+                            id="org-username"
+                            v-model="form.username"
+                            :class="{ 'input-error': credsError }"
+                            placeholder="user@company.com"
+                        />
+                        <small class="field-help">Must be full email format (e.g., user@company-dev-ed.my.salesforce.com)</small>
                     </div>
                     <div class="field-row">
                         <label for="org-password">Password*</label>
@@ -127,6 +133,7 @@ async function onSave() {
                     <div class="field-row">
                         <label for="org-securityToken">Security Token*</label>
                         <InputText id="org-securityToken" v-model="form.securityToken" type="password" :class="{ 'input-error': credsError }" />
+                        <small class="field-help">From Salesforce: Setup → My Personal Information → Reset Security Token</small>
                     </div>
                 </template>
 
@@ -181,6 +188,11 @@ async function onSave() {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+}
+.field-help {
+    color: var(--text-color-secondary);
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
 }
 label {
     font-weight: 500;

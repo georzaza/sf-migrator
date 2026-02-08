@@ -11,11 +11,19 @@ const router = createRouter({
             path: '/',
             component: AppLayout,
             children: [
+                /*
                 {
                     path: '/',
                     name: 'dashboard',
                     component: () => import('@/views/Dashboard.vue')
                 },
+                */
+                {
+                    path: '/migrate/:projectId?',
+                    name: 'migrate',
+                    component: () => import('@/views/MigrationWorkspace.vue')
+                },
+                /*
                 {
                     path: '/uikit/formlayout',
                     name: 'formlayout',
@@ -107,14 +115,16 @@ const router = createRouter({
                     name: 'documentation',
                     component: () => import('@/views/pages/Documentation.vue')
                 }
+                */
             ]
         },
-        /* /landing */
+        /*
         {
             path: '/landing',
             name: 'landing',
             component: () => import('@/views/pages/Landing.vue')
         },
+        */
         /* /pages/notfound */
         {
             path: '/pages/notfound',
@@ -139,12 +149,13 @@ const router = createRouter({
             name: 'accessDenied',
             component: () => import('@/views/pages/auth/Access.vue')
         },
-        /* /auth/error */
+        /* /auth/error
         {
             path: '/auth/error',
             name: 'error',
             component: () => import('@/views/pages/auth/Error.vue')
         }
+        */
     ]
 });
 

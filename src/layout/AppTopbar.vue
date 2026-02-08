@@ -4,7 +4,7 @@ import AppConfigurator from './AppConfigurator.vue';
 import axiosInstance from '@/api/axiosInstance';
 import { useRouter } from 'vue-router';
 
-const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
+const { toggleDarkMode, isDarkTheme } = useLayout();
 
 const router = useRouter();
 
@@ -45,10 +45,7 @@ const logout = async () => {
 <template>
     <div class="layout-topbar">
         <div class="layout-topbar-logo-container">
-            <button class="layout-menu-button layout-topbar-action" @click="toggleMenu">
-                <i class="pi pi-bars"></i>
-            </button>
-            <router-link to="/" class="layout-topbar-logo">
+            <router-link to="/dashboard" class="layout-topbar-logo">
                 <svg viewBox="0 0 54 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
                         fill-rule="evenodd"

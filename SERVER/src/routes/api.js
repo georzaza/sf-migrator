@@ -250,8 +250,66 @@ router.put('/', authMiddleware, async (req, res) => {
         }
     }
 
+    else if (action === 'update-project') {
+        const projectId = req.headers.projectid;
+        if (!projectId) {
+            return sendResponse(res, 400, false, 'Project ID is required');
+        }
+        try {
+            const project = await projectRepo.update(projectId, req.body);
+            sendResponse(res, 200, true, 'Project updated successfully', project);
+        } catch (error) {
+            log.error('Failed to update project', error, { projectId });
+            sendResponse(res, 500, false, 'Failed to update project');
+        }
+    }
+
     else {
         sendResponse(res, 400, false, 'Unknown PUT action');
+    }
+});
+
+
+// ===================== DELETE Requests =====================
+
+router.delete('/', authMiddleware, async (req, res) => {
+    const action = req.headers.action?.toLowerCase();
+
+    if (action === 'delete-org') {
+        const orgId = req.headers.orgid;
+        if (!orgId) {
+            return sendResponse(res, 400, false, 'Org ID is required');
+        }
+        try {
+            await orgRepo.delete(orgId);
+            sendResponse(res, 200, true, 'Salesforce Org deleted successfully');
+        } catch (error) {
+            log.error('Failed to delete Salesforce Org', error, { orgId });
+            sendResponse(res, 500, false, 'Failed to delete Salesforce Org');
+        }
+    }
+
+    else if (action === 'delete-project') {
+        const projectId = req.headers.projectid;
+        if (!projectId) {
+            return sendResponse(res, 400, false, 'Project ID is required');
+        }
+        try {
+            // Delete all orgs belonging to this project first
+            const orgs = await orgRepo.findByProjectId(projectId);
+            for (const org of orgs) {
+                await orgRepo.delete(org.id);
+            }
+            await projectRepo.delete(projectId);
+            sendResponse(res, 200, true, 'Project and its orgs deleted successfully');
+        } catch (error) {
+            log.error('Failed to delete project', error, { projectId });
+            sendResponse(res, 500, false, 'Failed to delete project');
+        }
+    }
+
+    else {
+        sendResponse(res, 400, false, 'Unknown DELETE action');
     }
 });
 

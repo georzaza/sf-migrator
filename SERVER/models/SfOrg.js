@@ -22,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
         connectionType: {
             type: DataTypes.ENUM('OAuth', 'Credentials'),
             allowNull: false,
-            defaultValue: 'Credentials',
+            defaultValue: 'OAuth',
         },
         username: {
             type: DataTypes.STRING,
@@ -50,11 +50,20 @@ module.exports = (sequelize, DataTypes) => {
     }, {
         validate: {
             connectionTypeCheck() {
-                if (this.connectionType === 'OAuth' && (!this.clientId || !this.clientSecret)) {
-                    throw new Error('ClientId and ClientSecret are required for OAuth connection type.');
-                }
-                if (this.connectionType === 'Credentials' && (!this.username || !this.password || !this.securityToken)) {
-                    throw new Error('Username, Password and SecurityToken are required for Credentials connection type.');
+                // Only enforce full credential validation on creation
+                // Updates can be partial (frontend strips empty fields)
+                if (this.isNewRecord) {
+                    if (this.connectionType === 'OAuth') {
+                        // OAuth requires all 5 credential fields
+                        if (!this.username || !this.password || !this.securityToken || !this.clientId || !this.clientSecret) {
+                            throw new Error('Username, Password, Security Token, Client ID, and Client Secret are all required for OAuth connection type.');
+                        }
+                    }
+                    if (this.connectionType === 'Credentials') {
+                        if (!this.username || !this.password || !this.securityToken) {
+                            throw new Error('Username, Password and Security Token are required for Credentials connection type.');
+                        }
+                    }
                 }
             },
         }

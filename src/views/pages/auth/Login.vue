@@ -19,7 +19,7 @@ const handleLogin = async () => {
             router.push('/auth/access');
             return;
         }
-        setTimeout(() => { router.push('/'); }, 1000);
+        setTimeout(() => { router.push('/dashboard'); }, 1000);
     }
     catch (error) {
         if (error.response?.status === 401) {

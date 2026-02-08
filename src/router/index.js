@@ -10,14 +10,13 @@ const router = createRouter({
         {
             path: '/',
             component: AppLayout,
+            redirect: '/dashboard',
             children: [
-                /*
                 {
-                    path: '/',
+                    path: '/dashboard',
                     name: 'dashboard',
                     component: () => import('@/views/Dashboard.vue')
                 },
-                */
                 {
                     path: '/migrate/:projectId?',
                     name: 'migrate',
@@ -170,7 +169,7 @@ router.beforeEach( async (to, from, next) => {
     const loggedIn = await isLoggedIn(); // Check if the user is logged in
     console.log(`Navigating to: ${to.path}, Auth Required: ${authRequired}, Logged In? ${loggedIn}`);
     if (authRequired && !loggedIn) {
-        next('/auth/access'); // Redirect to login if not authenticated
+        next('/auth/login'); // Redirect to login if not authenticated
     } else {
         next(); // Allow navigation
     }

@@ -140,7 +140,7 @@ router.get('/whoami', async (req, res) => {
 
     if (!token) {
         log.warn('Whoami called without token');
-        sendResponse(res, 401, false, 'Unauthorized.');
+        return sendResponse(res, 401, false, 'Unauthorized.');
     }
 
     try {

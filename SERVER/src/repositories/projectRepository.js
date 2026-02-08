@@ -20,6 +20,25 @@ async function create(projectData) {
     return project;
 }
 
+async function update(id, projectData) {
+    const project = await Project.findByPk(id);
+    if (!project) {
+        throw new Error('Project not found');
+    }
+    const updatedProject = await project.update(projectData);
+    log.info('Project updated', { projectId: id, name: updatedProject.name });
+    return updatedProject;
+}
+
+async function remove(id) {
+    const project = await Project.findByPk(id);
+    if (!project) {
+        throw new Error('Project not found');
+    }
+    await project.destroy();
+    log.info('Project deleted', { projectId: id });
+}
+
 async function findAll() {
     return Project.findAll();
 }
@@ -28,5 +47,7 @@ module.exports = {
     findById,
     findByUserId,
     create,
+    update,
+    delete: remove,
     findAll,
 };

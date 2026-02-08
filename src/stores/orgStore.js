@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia';
 import axiosInstance from '@/api/axiosInstance';
-import salesforceLogo from '../../assets/logos/Salesforce.com_logo.svg.png';
 
 export const useOrgStore = defineStore('orgs', {
 
@@ -11,11 +10,20 @@ export const useOrgStore = defineStore('orgs', {
         orgs: [],
         selectedProject: null,
         selectedOrg: null,
-        menuItems: [],
         showEditOrgDialog: false,
         showAddProjectDialog: false,
         showAddOrgDialog: false,
     }),
+
+    getters: {
+        /**
+         * Get orgs filtered by the currently selected project
+         */
+        projectOrgs: (state) => {
+            if (!state.selectedProject) return [];
+            return state.orgs.filter(org => org.projectId === state.selectedProject.id);
+        },
+    },
 
     actions: {
         setProjects(projects) {
@@ -24,6 +32,7 @@ export const useOrgStore = defineStore('orgs', {
 
         setSelectedProject(project) {
             this.selectedProject = project;
+            this.selectedOrg = null; // Clear org selection when project changes
         },
 
         setSelectedOrg(org) {
@@ -32,7 +41,6 @@ export const useOrgStore = defineStore('orgs', {
 
         closeEditOrgDialog() {
             this.showEditOrgDialog = false;
-            this.selectedOrg = null;
         },
 
         closeAddProjectDialog() {
@@ -53,11 +61,7 @@ export const useOrgStore = defineStore('orgs', {
             );
             if (response.data.success) {
                 this.projects = response.data.data;
-                const loadedOrgs = await this.loadOrgs();
-                if (!loadedOrgs) {
-                    console.error('Failed to load Salesforce Orgs');
-                }
-                this.setMenuItems();
+                await this.loadOrgs();
             }
             else {
                 console.error('Failed to load projects:', response.data.message);
@@ -82,124 +86,59 @@ export const useOrgStore = defineStore('orgs', {
             }
         },
 
-        setMenuItems() {
-
-            const addProjectButton = {
-                key: 'add-project',
-                label: 'Add Project',
-                icon: 'pi pi-plus',
-                styleClass: 'menu-action-highlight', // use the custom highlight class
-                command: () => {
-                    this.showAddProjectDialog = true; // open Add Project dialog
+        async deleteOrg(orgId) {
+            const response = await axiosInstance.delete('/', {
+                headers: {
+                    action: 'delete-org',
+                    orgid: orgId,
                 },
-            };
-
-            const projectsAndOrgs = this.projects.map(project => {
-
-                const migrateButton = {
-                    key: project.id + '_migrate',
-                    label: 'Start Migration',
-                    icon: 'pi pi-arrow-right-arrow-left',
-                    styleClass: 'menu-action-highlight',
-                    to: `/migrate/${project.id}`,
-                    command: () => {
-                        this.selectedProject = project;
-                    },
-                };
-
-                const addOrgButton = {
-                    key: project.id + '_add-org',
-                    label: 'Add Org',
-                    icon: 'pi pi-plus',
-                    styleClass: 'menu-action-highlight', // use the custom highlight class
-                    command: () => {
-                        this.selectedProject = project;
-                        this.showAddOrgDialog = true; // open Add Org dialog
-                    },
-                };
-
-                const orgItems = this.orgs.filter(org => org.projectId === project.id).map(org => ({
-                    key: project.id + '_' + org.id,
-                    label: org.name,
-                    icon: null, // todo maybe if org is analyzed a green, if not a red icon
-                    //url: org.loginURL || null, // todo review if needed
-                    //target: org.loginURL ? '_blank' : null, //todo review
-                    to: null, // todo correct after route handling is done
-                    items: [
-                        {
-                            key: project.id + '_' + org.id + '_edit',
-                            label: 'Edit Org Info',
-                            icon: 'pi pi-pencil',
-                            to: null, // todo correct after route handling is done
-                            command: () => {
-                                this.selectedOrg = org;
-                                this.selectedProject = project;
-                                this.showEditOrgDialog = true;
-                            },
-                        },
-                        {
-                            key: project.id + '_' + org.id + '_delete',
-                            label: 'Delete Org',
-                            icon: 'pi pi-times',
-                            to: null, // todo correct after route handling is done
-                            command: () => {
-                                // todo fill in accordingly
-                                this.selectedOrg = org;
-                                this.selectedProject = project;
-                            },
-                        },
-                        {
-                            key: project.id + '_' + org.id + '_analyze',
-                            label: 'Start Analysis',
-                            icon: 'pi pi-cloud-download',
-                            to: null, // todo correct after route handling is done
-                            command: () => {
-                                // todo fill in accordingly
-                                this.selectedOrg = org;
-                                this.selectedProject = project;
-                            },
-                        },
-                        {
-                            key: project.id + '_' + org.id + '_openOrg',
-                            label: 'Open Org',
-                            imgIcon: salesforceLogo,
-                            url: org.loginURL || null,
-                            target: org.loginURL ? '_blank' : null,
-                            command: () => {
-                                this.selectedOrg = org;
-                                this.selectedProject = project;
-                            },
-                        },
-                    ],
-                    command: () => {
-                        // todo fill in accordingly
-                        this.selectedOrg = org;
-                        this.selectedProject = project;
-                    },
-                }));
-
-                return {
-                    key: project.id,
-                    label: project.name,
-                    icon: null, // todo maybe different icon to differentiate from orgs
-                    to: null, // todo correct after route handling is done
-                    items: [migrateButton, addOrgButton, ...orgItems],
-                    command: () => {
-                        // todo fill in accordingly
-                        this.selectedOrg = null;
-                        this.selectedProject = project;
-                    },
-                };
             });
+            if (response.data.success) {
+                this.orgs = this.orgs.filter(org => org.id !== orgId);
+                if (this.selectedOrg?.id === orgId) {
+                    this.selectedOrg = null;
+                }
+                return true;
+            }
+            return false;
+        },
 
-            this.menuItems = [
-                {
-                    key: 'projects-and-orgs',
-                    label: 'Your Projects and Orgs',
-                    items: [addProjectButton, ...projectsAndOrgs],
+        async updateProject(projectId, projectData) {
+            const response = await axiosInstance.put('/', projectData, {
+                headers: {
+                    action: 'update-project',
+                    projectid: projectId,
                 },
-            ];
-        }
+            });
+            if (response.data.success) {
+                await this.loadProjects();
+                // Re-select the updated project
+                const updated = this.projects.find(p => p.id === projectId);
+                if (updated) {
+                    this.selectedProject = updated;
+                }
+                return true;
+            }
+            return false;
+        },
+
+        async deleteProject(projectId) {
+            const response = await axiosInstance.delete('/', {
+                headers: {
+                    action: 'delete-project',
+                    projectid: projectId,
+                },
+            });
+            if (response.data.success) {
+                this.projects = this.projects.filter(p => p.id !== projectId);
+                this.orgs = this.orgs.filter(org => org.projectId !== projectId);
+                if (this.selectedProject?.id === projectId) {
+                    this.selectedProject = null;
+                    this.selectedOrg = null;
+                }
+                return true;
+            }
+            return false;
+        },
     },
 });
-

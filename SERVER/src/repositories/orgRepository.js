@@ -41,6 +41,15 @@ async function findAll() {
     return SfOrg.findAll();
 }
 
+async function remove(id) {
+    const sfOrg = await SfOrg.findByPk(id);
+    if (!sfOrg) {
+        throw new Error('Salesforce Org not found');
+    }
+    await sfOrg.destroy();
+    log.info('Salesforce Org deleted', { orgId: id });
+}
+
 module.exports = {
     findById,
     findByProjectId,
@@ -48,4 +57,5 @@ module.exports = {
     create,
     update,
     findAll,
+    delete: remove,
 };

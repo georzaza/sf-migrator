@@ -15,8 +15,32 @@ config.global.stubs = {
     Select: true,
     DataTable: true,
     Column: true,
-    Textarea: true
+    Textarea: true,
+    Tag: true,
+    Checkbox: true,
+    Password: true,
+    ProgressSpinner: true,
+    Message: true,
+    Divider: true,
+    Toast: true,
+    Card: true,
+    Badge: true,
 };
+
+// Stub directives used by PrimeVue
+config.global.directives = {
+    tooltip: {},
+    styleclass: {},
+};
+
+// Mock PrimeVue useToast composable
+vi.mock('primevue/usetoast', () => ({
+    useToast: () => ({
+        add: vi.fn(),
+        removeGroup: vi.fn(),
+        removeAllGroups: vi.fn(),
+    }),
+}));
 
 // Mock axios
 vi.mock('@/api/axiosInstance', () => ({
@@ -24,7 +48,8 @@ vi.mock('@/api/axiosInstance', () => ({
         get: vi.fn(),
         post: vi.fn(),
         put: vi.fn(),
-        delete: vi.fn()
+        delete: vi.fn(),
+        request: vi.fn(),
     }
 }));
 

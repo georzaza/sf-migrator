@@ -6,32 +6,23 @@ const saltRounds = 10;
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
     up: async (queryInterface, Sequelize) => {
+        const env = process.env.NODE_ENV || 'development';
 
-         // Sequelize.literal('uuid_generate_v4()')  for normal UUID, here we hardcode for simplicity
+        // Environment-specific user data
+        const envSuffix = env === 'development' ? 'Dev' : env === 'test' ? 'Test' : 'Prod';
+        const envLower = env === 'development' ? 'dev' : env === 'test' ? 'test' : 'prod';
+
+        // Common password for both dev and test
+        const hashedPassword = await bcrypt.hash('6u1nxqD6a!', saltRounds);
+
         const users = [
             {
                 id: '00000000-0000-4000-8000-000000000000',
-                email: 'demo@demo.com',
-                password: await bcrypt.hash('demoPassword', saltRounds),
-                firstname: 'Demo',
-                lastname: 'User',
-                username: 'demo',
-                role: 'user',
-                isActive: true,
-                emailVerified: false,
-                lastLogin: null,
-                resetPasswordToken: null,
-                resetPasswordExpires: null,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            },
-            {
-                id: '00000000-0000-4000-8000-000000000001',
-                email: 'test@test.com',
-                password: await bcrypt.hash('testPassword', saltRounds),
-                firstname: 'Test',
-                lastname: 'User',
-                username: 'test',
+                email: 'georzaza@gmail.com',
+                password: hashedPassword,
+                firstname: `Geo_${envSuffix}`,
+                lastname: `Zaza_${envSuffix}`,
+                username: `georzaza_${envLower}`,
                 role: 'user',
                 isActive: true,
                 emailVerified: false,
@@ -43,6 +34,7 @@ module.exports = {
             }
         ];
 
+        console.log(`Seeding user for ${env} environment: ${users[0].username}`);
         return queryInterface.bulkInsert('Users', users);
     },
 

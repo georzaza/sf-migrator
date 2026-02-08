@@ -20,7 +20,9 @@ const realOrgs = {
         password: '6u1nxqD6a@',
         securityToken: 'zKDXzphgZaWxeSdivLEmkxB53',
         email: 'gmail',
-        instanceUrl: 'https://deloittegrsuperbadgeformula-dev-ed.develop.my.salesforce.com'
+        instanceUrl: 'https://deloittegrsuperbadgeformula-dev-ed.develop.my.salesforce.com',
+        clientId: '3MVG9YFqzc_KnL.yKgyiri.fuca75.r.8qiAz8d_FIEy09rnsWIXi3b.KlZfHrqRQzY6MaUBcGmrlC3MSO969',
+        clientSecret: '37B38F0ECA9761FCD1802354D6BBA8E784F9E656C84818025A0151FB7A395D08'
     },
     superbadgeApexWebServices: {
         name: 'Superbadge: Apex Web Services',

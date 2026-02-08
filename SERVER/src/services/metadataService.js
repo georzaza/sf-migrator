@@ -56,7 +56,7 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
             objects: savedObjects,
         };
     } catch (error) {
-        log.error('Failed to analyze and save org', error, { sfOrgId });
+        // Error already logged at source (salesforceService), just re-throw
         throw error;
     }
 }
@@ -74,7 +74,7 @@ async function saveObjectMetadata(sfOrgId, metadata) {
 
         return await metadataRepo.findObjectById(objectMetadata.id, { includeFields: true });
     } catch (error) {
-        log.error('Failed to save object metadata', error, { sfOrgId, objectName: metadata.objectName });
+        // Error already logged at source or will be logged at top level, just re-throw
         throw error;
     }
 }
@@ -93,7 +93,7 @@ async function saveFieldMetadata(objectMetadataId, fields) {
 
         return savedFields;
     } catch (error) {
-        log.error('Failed to save field metadata', error, { objectMetadataId });
+        // Error already logged at source or will be logged at top level, just re-throw
         throw error;
     }
 }

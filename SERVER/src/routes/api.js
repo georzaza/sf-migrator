@@ -135,7 +135,7 @@ router.post('/', authMiddleware, async (req, res) => {
             log.info('Org analysis completed', { orgId, objectsAnalyzed: result.objectsAnalyzed });
             sendResponse(res, 200, true, 'Org analysis completed successfully', result);
         } catch (error) {
-            log.error('Org analysis failed', error, { orgId });
+            // Error already logged at source, just send response
             sendResponse(res, 500, false, error.message || 'Failed to analyze org');
         }
     }
@@ -149,7 +149,7 @@ router.post('/', authMiddleware, async (req, res) => {
             const result = await metadataService.refreshMetadata(orgId);
             sendResponse(res, 200, true, 'Metadata refreshed successfully', result);
         } catch (error) {
-            log.error('Failed to refresh metadata', error, { orgId });
+            // Error already logged at source, just send response
             sendResponse(res, 500, false, 'Failed to refresh metadata');
         }
     }
@@ -163,7 +163,7 @@ router.post('/', authMiddleware, async (req, res) => {
             const result = await salesforceService.testConnection(orgId);
             sendResponse(res, 200, true, 'Connection test successful', result);
         } catch (error) {
-            log.error('Connection test failed', error, { orgId });
+            // Error already logged at source, just send response
             sendResponse(res, 500, false, error.message || 'Connection test failed');
         }
     }

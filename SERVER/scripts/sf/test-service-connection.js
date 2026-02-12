@@ -32,7 +32,7 @@ async function testServiceConnection(orgId) {
         console.log(`   Display Name: ${result.displayName}\n`);
 
         console.log('Testing org analysis...');
-        const objects = await salesforceService.analyzeOrg(orgId);
+        const objects = await salesforceService.describeGlobal(orgId);
         console.log(`[OK] Found ${objects.length} objects`);
         console.log(`   Sample: ${objects.slice(0, 5).map(o => o.objectName).join(', ')}\n`);
 

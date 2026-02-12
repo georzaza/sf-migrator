@@ -64,7 +64,7 @@ router.get('/', authMiddleware, async (req, res) => {
             sendResponse(res, 200, true, 'Objects retrieved successfully', objects);
         } catch (error) {
             log.error('Failed to retrieve objects', error, { orgId });
-            sendResponse(res, 500, false, `Failed to retrieve objects: ${error.message}`);
+            sendResponse(res, 500, false, `Failed to retrieve objects.`);
         }
     }
 
@@ -78,7 +78,7 @@ router.get('/', authMiddleware, async (req, res) => {
             sendResponse(res, 200, true, 'Fields retrieved successfully', fields);
         } catch (error) {
             log.error('Failed to retrieve fields', error, { objectId });
-            sendResponse(res, 500, false, `Failed to retrieve fields: ${error.message}`);
+            sendResponse(res, 500, false, `Failed to retrieve fields.`);
         }
     }
 
@@ -92,7 +92,7 @@ router.get('/', authMiddleware, async (req, res) => {
             sendResponse(res, 200, true, 'Metadata statistics retrieved successfully', stats);
         } catch (error) {
             log.error('Failed to retrieve metadata statistics', error, { orgId });
-            sendResponse(res, 500, false, `Failed to retrieve metadata statistics: ${error.message}`);
+            sendResponse(res, 500, false, `Failed to retrieve metadata statistics.`);
         }
     }
 
@@ -110,46 +110,43 @@ router.post('/', authMiddleware, async (req, res) => {
     if (action === 'get-orgs-for-project') {
         const projectId = req.body.projectId;
         if (!projectId) {
-            return sendResponse(res, 400, false, 'Project ID is required');
+            return sendResponse(res, 400, false, 'No project provided');
         }
         try {
             const sfOrgs = await orgRepo.findByProjectId(projectId);
             sendResponse(res, 200, true, 'Salesforce Orgs for project retrieved successfully', sfOrgs);
         } catch (error) {
-            log.error('Failed to retrieve Salesforce Orgs for project', error, { projectId });
+            log.error('Failed to retrieve Salesforce Orgs for project. ', error, { projectId });
             sendResponse(res, 500, false, 'Failed to retrieve Salesforce Orgs for project');
         }
     }
 
     else if (action === 'analyze-org') {
-        const { orgId, includeCustomOnly, excludeManaged } = req.body;
+        const { orgId, options } = req.body;
         if (!orgId) {
-            return sendResponse(res, 400, false, 'Org ID is required');
+            return sendResponse(res, 400, false, 'No org provided.');
         }
         log.info('Starting org analysis', { orgId });
         try {
-            const result = await metadataService.analyzeAndSaveOrg(orgId, {
-                includeCustomOnly,
-                excludeManaged,
-            });
+            const result = await metadataService.analyzeAndSaveOrg(orgId, options);
             log.info('Org analysis completed', { orgId, objectsAnalyzed: result.objectsAnalyzed });
             sendResponse(res, 200, true, 'Org analysis completed successfully', result);
         } catch (error) {
-            // Error already logged at source, just send response
-            sendResponse(res, 500, false, error.message || 'Failed to analyze org');
+            log.error('Error during analysis', error, {orgId: orgId, options: options});
+            sendResponse(res, 500, false, 'Failed to analyze org');
         }
     }
 
     else if (action === 'refresh-metadata') {
         const { orgId } = req.body;
         if (!orgId) {
-            return sendResponse(res, 400, false, 'Org ID is required');
+            return sendResponse(res, 400, false, 'No org provided.');
         }
         try {
             const result = await metadataService.refreshMetadata(orgId);
             sendResponse(res, 200, true, 'Metadata refreshed successfully', result);
         } catch (error) {
-            // Error already logged at source, just send response
+            log.error('Error while refreshing mdt.', error, {orgId: orgId} )
             sendResponse(res, 500, false, 'Failed to refresh metadata');
         }
     }
@@ -157,17 +154,18 @@ router.post('/', authMiddleware, async (req, res) => {
     else if (action === 'test-sf-connection') {
         const { orgId } = req.body;
         if (!orgId) {
-            return sendResponse(res, 400, false, 'Org ID is required');
+            return sendResponse(res, 400, false, 'No org provided.');
         }
         try {
             const result = await salesforceService.testConnection(orgId);
             sendResponse(res, 200, true, 'Connection test successful', result);
         } catch (error) {
-            // Error already logged at source, just send response
+            log.error('Error while testing connection', error, {orgId: orgId})
             sendResponse(res, 500, false, error.message || 'Connection test failed');
         }
     }
 
+    /*
     else if (action === 'get-object-mappings') {
         const { projectId } = req.body;
         if (!projectId) {
@@ -195,6 +193,7 @@ router.post('/', authMiddleware, async (req, res) => {
             sendResponse(res, 500, false, `Failed to retrieve field mappings: ${error.message}`);
         }
     }
+    */
 
     else {
         sendResponse(res, 400, false, 'Unknown POST action');
@@ -236,7 +235,7 @@ router.put('/', authMiddleware, async (req, res) => {
     else if (action === 'add-org') {
         const projectId = req.body.projectId;
         if (!projectId) {
-            return sendResponse(res, 400, false, 'Project ID is required');
+            return sendResponse(res, 400, false, 'No project provided.');
         }
         try {
             const org = await orgRepo.create(req.body);
@@ -253,7 +252,7 @@ router.put('/', authMiddleware, async (req, res) => {
     else if (action === 'update-project') {
         const projectId = req.headers.projectid;
         if (!projectId) {
-            return sendResponse(res, 400, false, 'Project ID is required');
+            return sendResponse(res, 400, false, 'No project provided.');
         }
         try {
             const project = await projectRepo.update(projectId, req.body);
@@ -278,7 +277,7 @@ router.delete('/', authMiddleware, async (req, res) => {
     if (action === 'delete-org') {
         const orgId = req.headers.orgid;
         if (!orgId) {
-            return sendResponse(res, 400, false, 'Org ID is required');
+            return sendResponse(res, 400, false, 'No org provided.');
         }
         try {
             await orgRepo.delete(orgId);
@@ -292,7 +291,7 @@ router.delete('/', authMiddleware, async (req, res) => {
     else if (action === 'delete-project') {
         const projectId = req.headers.projectid;
         if (!projectId) {
-            return sendResponse(res, 400, false, 'Project ID is required');
+            return sendResponse(res, 400, false, 'No project provided.');
         }
         try {
             // Delete all orgs belonging to this project first

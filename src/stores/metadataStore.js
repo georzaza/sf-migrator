@@ -177,8 +177,8 @@ export const useMetadataStore = defineStore('metadata', {
                 const response = await axiosInstance.post('/',
                     {
                         orgId: this.sourceOrg.id,
-                        includeCustomOnly: options.includeCustomOnly || false,
-                        excludeManaged: options.excludeManaged !== false, // Default true
+                        includeCustomOnly: typeof options.includeCustomOnly === 'boolean' && options.includeCustomOnly,
+                        excludeManaged: typeof options.excludeManaged === 'boolean' && options.excludeManaged,
                     },
                     {
                         headers: { action: 'analyze-org' }
@@ -216,8 +216,8 @@ export const useMetadataStore = defineStore('metadata', {
                 const response = await axiosInstance.post('/',
                     {
                         orgId: this.targetOrg.id,
-                        includeCustomOnly: options.includeCustomOnly || false,
-                        excludeManaged: options.excludeManaged !== false, // Default true
+                        includeCustomOnly: typeof options.includeCustomOnly === 'boolean' && options.includeCustomOnly,
+                        excludeManaged: typeof options.excludeManaged === 'boolean' && options.excludeManaged,
                     },
                     {
                         headers: { action: 'analyze-org' }

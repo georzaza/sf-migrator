@@ -15,8 +15,17 @@
  */
 
 const { AsyncLocalStorage } = require('async_hooks');
+const fs = require('fs');
+const path = require('path');
 
 const asyncLocalStorage = new AsyncLocalStorage();
+
+const LOG_LEVEL_DEBUG = 'DEBUG';
+const LOG_LEVEL_ERROR = 'ERROR';
+const LOG_LEVEL_INFO  = 'INFO';
+const LOG_LEVEL_TODISK= 'TODISK';
+const LOG_LEVEL_WARN  = 'WARN';
+
 
 function getTimestamp() {
     return new Date().toISOString();
@@ -31,6 +40,7 @@ function getRequestContext() {
     return {
         requestId: store?.requestId || '-',
         action: store?.action || '-',
+        orgId: store?.orgId || '-'
     };
 }
 
@@ -82,7 +92,12 @@ function formatLine(level, caller, message, meta) {
     const ctx = getRequestContext();
 
     // Build header line with timestamp, level, caller, and context
-    const header = `[${ts}] [${level}] [${caller}] [req:${ctx.requestId}]${ctx.action !== '-' ? ` [action:${ctx.action}]` : ''}`;
+    let header = `$[${ts}]`
+    header += `[${level}]`;
+    header += `[${caller}]`;
+    header += `[req:${ctx.requestId}]`
+    header += `${ctx.action !== '-' ? ` [action:${ctx.action}]` : ''}`;
+    header += `${ctx.orgId !== '-' ? ` [org:${ctx.orgId}]` : ''}`;
 
     // Start with header and message
     let output = `${header}\n  ${message}`;
@@ -135,23 +150,23 @@ function formatLine(level, caller, message, meta) {
 /**
  * Create a logger instance for a specific module/caller.
  * @param {string} callerName - Identifies the module (e.g. 'salesforceService')
- * @returns {{ debug, info, warn, error }}
+ * @returns {{ debug, info, warn, error, toFile }}
  */
 function create(callerName) {
     return {
         debug(message, meta = undefined) {
-            console.debug(formatLine('DEBUG', callerName, message, meta));
-            console.debug(''); // Empty line for separation
+            console.debug(formatLine(LOG_LEVEL_DEBUG, callerName, message, meta));
+            console.debug('');
         },
 
         info(message, meta = undefined) {
-            console.info(formatLine('INFO', callerName, message, meta));
-            console.info(''); // Empty line for separation
+            console.info(formatLine(LOG_LEVEL_INFO, callerName, message, meta));
+            console.info();
         },
 
         warn(message, meta = undefined) {
-            console.warn(formatLine('WARN', callerName, message, meta));
-            console.warn(''); // Empty line for separation
+            console.warn(formatLine(LOG_LEVEL_WARN, callerName, message, meta));
+            console.warn('');
         },
 
         /**
@@ -161,8 +176,29 @@ function create(callerName) {
          */
         error(message, error, meta = undefined) {
             const enriched = { ...(meta || {}), error: serializeError(error) };
-            console.error(formatLine('ERROR', callerName, message, enriched));
-            console.error(''); // Empty line for separation
+            console.error(formatLine(LOG_LEVEL_ERROR, callerName, message, enriched));
+            console.error('');
+        },
+
+        // writes log to ../../logs/YYYYMMDD, will be handy for debugging sf svc.
+        toFile(message, meta = undefined) {
+            const ts = getTimestamp();
+            const ctx = getRequestContext();
+            const sanitizedTs = ts.replace(/:/g, '-');
+            const dateStr = ts.substring(0, 10).replace(/-/g, '');
+            const filename = `${sanitizedTs}_${callerName}_${ctx.action}_${ctx.orgId}_${ctx.requestId}.log`;
+            const logDir = path.join(__dirname, '../../logs', dateStr);
+            const logPath = path.join(logDir, filename);
+
+            // Ensure logs directory exists
+            if (!fs.existsSync(logDir)) {
+                fs.mkdirSync(logDir, { recursive: true });
+            }
+
+            const formatted = formatLine(LOG_LEVEL_TODISK, callerName, meta);
+            fs.appendFileSync(logPath, formatted);
+            // Log that the file was written
+            this.info(`Log created: ${filename}`, { logPath, dateFolder: dateStr });
         },
     };
 }

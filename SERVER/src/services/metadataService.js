@@ -9,36 +9,51 @@ const metadataRepo = require('../repositories/metadataRepository');
 const salesforceService = require('./salesforceService');
 const logger = require('../lib/logger');
 const log = logger.create('metadataService');
+const standardObjectFilters = require('./config/objectsToExclude');
 
 /**
  * Analyze org and save metadata to database
  */
 async function analyzeAndSaveOrg(sfOrgId, options = {}) {
-    const { includeRecordCounts = false, objectsToAnalyze = null } = options;
+    const {
+        objectsToAnalyze = null,
+        includeCustomOnly = false,
+    } = options;
 
     try {
-        const objects = await salesforceService.analyzeOrg(sfOrgId);
+        const objects = await salesforceService.describeGlobal(sfOrgId, filters = {});
+        log.info('Retrieved global objects from Salesforce', { count: objects.length });
 
-        const objectsToProcess = objectsToAnalyze
+        // user filters
+        const objectsFilteredByUserPrefs = objectsToAnalyze
             ? objects.filter(obj => objectsToAnalyze.includes(obj.objectName))
             : objects;
+        log.info('Object filters applied (user preferences). New count is ', { count: objectsFilteredByUserPrefs.length });
+
+        // hardcoded filters applied on top of the user preferences
+        let objectsToProcess = objectsFilteredByUserPrefs
+            .filter(obj => !standardObjectFilters.hardcodedList.includes(obj.objectName));
+        log.info('Object filters applied (hardcoded list). New count is ', { count: objectsToProcess.length });
+
+        objectsToProcess = objectsToProcess
+            .filter(obj => !standardObjectFilters.patternList.some(pattern => pattern.test(obj.objectName)));
+        log.info('Object filters applied (pattern list). New count is ', { count: objectsToProcess.length });
 
         const savedObjects = [];
         let totalFields = 0;
 
+        let i=0;
         for (const objMetadata of objectsToProcess) {
-            const detailedMetadata = await salesforceService.getObjectMetadata(
+
+            const recordCount = await salesforceService.getRecordCount(
                 sfOrgId,
                 objMetadata.objectName
             );
 
-            let recordCount = null;
-            if (includeRecordCounts) {
-                recordCount = await salesforceService.getRecordCount(
-                    sfOrgId,
-                    objMetadata.objectName
-                );
-            }
+            const detailedMetadata = await salesforceService.describeObject(
+                sfOrgId,
+                objMetadata.objectName
+            );
 
             const savedObject = await saveObjectMetadata(sfOrgId, {
                 ...detailedMetadata,
@@ -47,7 +62,11 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
 
             savedObjects.push(savedObject);
             totalFields += detailedMetadata.fields.length;
+            if (++i>20) {
+                break;
+            }
         }
+        log.toFile('describeObject', {fetched: savedObjects});
 
         return {
             success: true,
@@ -56,7 +75,7 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
             objects: savedObjects,
         };
     } catch (error) {
-        // Error already logged at source (salesforceService), just re-throw
+        log.error('Error while issuing describe calls.', error, { sfOrgId: sfOrgId });
         throw error;
     }
 }

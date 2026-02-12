@@ -54,12 +54,7 @@ async function createConnection(sfOrg) {
 
         if (error.message.includes('invalid_grant') || error.message.includes('authentication failure')) {
             throw new Error(
-                'OAuth2 authentication failed. Please verify:\n' +
-                '1. "Allow OAuth Username-Password Flows" is enabled (Setup → Identity → OAuth and OpenID Connect Settings)\n' +
-                '2. Connected App → Permitted Users = "All users may self-authorize"\n' +
-                '3. Connected App → IP Relaxation = "Relax IP restrictions"\n' +
-                '4. Username, password, and security token are correct\n' +
-                'Original error: ' + error.message
+                'OAuth2 authentication failed.' + error.message
             );
         }
 
@@ -85,7 +80,7 @@ async function connectToOrg(sfOrgId) {
 
     const sfOrg = await orgRepo.findById(sfOrgId);
     if (!sfOrg) {
-        throw new Error(`Salesforce org not found: ${sfOrgId}`);
+        throw new Error(`Connection to org failed - org was not found: ${sfOrgId}`);
     }
 
     const conn = await createConnection(sfOrg);
@@ -104,11 +99,12 @@ function clearConnection(sfOrgId) {
 /**
  * Retrieve all objects from a Salesforce org via describeGlobal
  */
-async function analyzeOrg(sfOrgId) {
+async function describeGlobal(sfOrgId) {
     const conn = await connectToOrg(sfOrgId);
 
     try {
         const describeResult = await conn.describeGlobal();
+        log.info('Issuing describe global', {orgId: sfOrgId})
 
         const objects = describeResult.sobjects
             .filter(() => true)
@@ -118,6 +114,7 @@ async function analyzeOrg(sfOrgId) {
                 isCustom: obj.custom,
             }));
 
+        log.toFile('', objects)
         return objects;
     } catch (error) {
         log.error('Failed to analyze org', error, { sfOrgId });
@@ -128,7 +125,7 @@ async function analyzeOrg(sfOrgId) {
 /**
  * Get detailed metadata for a specific object
  */
-async function getObjectMetadata(sfOrgId, objectName) {
+async function describeObject(sfOrgId, objectName) {
     const conn = await connectToOrg(sfOrgId);
 
     try {
@@ -234,8 +231,8 @@ async function testConnection(sfOrgId) {
 module.exports = {
     connectToOrg,
     clearConnection,
-    analyzeOrg,
-    getObjectMetadata,
+    describeGlobal,
+    describeObject,
     getRecordCount,
     queryRecords,
     insertRecords,

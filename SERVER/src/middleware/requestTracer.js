@@ -14,11 +14,12 @@ const { asyncLocalStorage } = require('../lib/logger');
 function requestTracer(req, res, next) {
     const requestId = req.headers['x-request-id'] || crypto.randomUUID().slice(0, 8);
     const action = req.headers.action || '-';
+    const orgId = req.body.orgId || '-';
 
     req.requestId = requestId;
     res.setHeader('X-Request-ID', requestId);
 
-    asyncLocalStorage.run({ requestId, action }, () => {
+    asyncLocalStorage.run({ requestId, action, orgId }, () => {
         next();
     });
 }

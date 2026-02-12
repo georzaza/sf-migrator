@@ -46,6 +46,7 @@ const standardObjectFilters = {
         'ApprovalSubmissionDetail',
         'ApprovalSubmissionShare',
         'ApprovalWorkItem',
+        'AppTabMember', // requires filtering on durableId, entitydef or other.
         'AsgnRsrcApptSchdEvent',
         'AssetTokenEvent',
         'AsyncApexJob',

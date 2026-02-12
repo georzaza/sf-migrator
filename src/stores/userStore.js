@@ -22,6 +22,5 @@ export const useUserStore = defineStore('user', {
         setIsAuthenticated(isAuthenticated) {
             this.isAuthenticated = isAuthenticated;
         }
-
     },
 });

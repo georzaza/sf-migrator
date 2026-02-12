@@ -52,7 +52,7 @@ export const useOrgStore = defineStore('orgs', {
         },
 
         async loadProjects() {
-            const response = await axiosInstance.get('/',
+            const response = await axiosInstance.get('/api',
                 {
                     headers: {
                         'action': 'get-projects',
@@ -69,7 +69,7 @@ export const useOrgStore = defineStore('orgs', {
         },
 
         async loadOrgs() {
-            const response = await axiosInstance.get('/',
+            const response = await axiosInstance.get('/api',
                 {
                     headers: {
                         'action': 'get-orgs',
@@ -87,7 +87,7 @@ export const useOrgStore = defineStore('orgs', {
         },
 
         async deleteOrg(orgId) {
-            const response = await axiosInstance.delete('/', {
+            const response = await axiosInstance.delete('/api', {
                 headers: {
                     action: 'delete-org',
                     orgid: orgId,
@@ -104,7 +104,7 @@ export const useOrgStore = defineStore('orgs', {
         },
 
         async updateProject(projectId, projectData) {
-            const response = await axiosInstance.put('/', projectData, {
+            const response = await axiosInstance.put('/api', projectData, {
                 headers: {
                     action: 'update-project',
                     projectid: projectId,
@@ -123,7 +123,7 @@ export const useOrgStore = defineStore('orgs', {
         },
 
         async deleteProject(projectId) {
-            const response = await axiosInstance.delete('/', {
+            const response = await axiosInstance.delete('/api', {
                 headers: {
                     action: 'delete-project',
                     projectid: projectId,

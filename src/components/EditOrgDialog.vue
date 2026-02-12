@@ -65,7 +65,7 @@ async function onSave() {
             }
         });
 
-        await axiosInstance.put('/',
+        await axiosInstance.put('/api',
             payload,
             {
                 headers: {

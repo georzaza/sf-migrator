@@ -20,7 +20,7 @@ onMounted(async () => {
         try {
             for (const org of orgStore.orgs || []) {
                 try {
-                    const resp = await axiosInstance.get('/analysis', {
+                    const resp = await axiosInstance.get('/api/analysis', {
                         headers: { action: 'get-latest-analysis', orgid: org.id }
                     });
                     if (resp.data.success && resp.data.data) {
@@ -51,6 +51,7 @@ onBeforeUnmount(() => {
 
 
 <template>
+    <Toast />
     <router-view />
 </template>
 

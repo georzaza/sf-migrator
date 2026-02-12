@@ -26,7 +26,7 @@ async function onSave() {
     console.log('Saving project...');
 
     try {
-        const response = await axiosInstance.put('/',
+        const response = await axiosInstance.put('/api',
             {
                 name: form.value.name,
                 description: form.value.description

@@ -27,31 +27,31 @@ const router = createRouter({
         {
             path: '/pages/notfound',
             name: 'notfound',
-            component: () => import('@/views/pages/NotFound.vue')
+            component: () => import('@/views/NotFound.vue')
         },
         /* /auth/login */
         {
             path: '/auth/login',
             name: 'login',
-            component: () => import('@/views/pages/auth/Login.vue')
+            component: () => import('@/views/auth/Login.vue')
         },
         /* /auth/register */
         {
             path: '/auth/register',
             name: 'register',
-            component: () => import('@/views/pages/auth/Register.vue')
+            component: () => import('@/views/auth/Register.vue')
         },
         /* /auth/access */
         {
             path: '/auth/access',
             name: 'accessDenied',
-            component: () => import('@/views/pages/auth/Access.vue')
+            component: () => import('@/views/auth/Access.vue')
         },
         /* /auth/error
         {
             path: '/auth/error',
             name: 'error',
-            component: () => import('@/views/pages/auth/Error.vue')
+            component: () => import('@/views/auth/Error.vue')
         }
         */
     ]

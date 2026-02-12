@@ -51,7 +51,7 @@ async function onSave() {
     };
 
     try {
-        const response = await axiosInstance.put('/',
+        const response = await axiosInstance.put('/api',
             payload,
             {
                 headers: {

@@ -12,8 +12,8 @@ const crypto = require('crypto');
 const { asyncLocalStorage } = require('../lib/logger');
 
 function requestTracer(req, res, next) {
-    const requestId = req.headers['x-request-id'] || crypto.randomUUID().slice(0, 8);
-    const action = req.headers.action || '-';
+    const requestId = req.get('x-request-id') || crypto.randomUUID().slice(0, 8);
+    const action = req.get('action') || '-';
     const orgId = req.body.orgId || '-';
 
     req.requestId = requestId;

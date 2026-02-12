@@ -91,7 +91,7 @@ async function onSave() {
                     if (!payload[key]) delete payload[key];
                 });
 
-            const response = await axiosInstance.put('/', payload, {
+            const response = await axiosInstance.put('/api', payload, {
                 headers: {
                     action: 'update-org',
                     orgid: props.org.id,
@@ -110,7 +110,7 @@ async function onSave() {
                 projectId: props.projectId,
             };
 
-            const response = await axiosInstance.put('/', payload, {
+            const response = await axiosInstance.put('/api', payload, {
                 headers: { action: 'add-org' },
             });
             if (response.status === 201) {

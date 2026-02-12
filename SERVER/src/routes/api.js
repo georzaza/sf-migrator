@@ -27,8 +27,8 @@ const log = logger.create('api');
 // ===================== GET Requests =====================
 
 router.get('/', authMiddleware, async (req, res) => {
-    const action = req.headers.action?.toLowerCase();
-
+    const action = req.get('action')?.toLowerCase();
+    log.info(`Received GET request with action: ${action}`);
     if (action === 'get-projects') {
         try {
             const projects = await projectRepo.findByUserId(req.user.id);
@@ -107,7 +107,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
 /* todo
 // Add endpoint to get latest analysis for an org
-router.get('/analysis', authMiddleware, async (req, res) => {
+router.get('/api/analysis', authMiddleware, async (req, res) => {
     const action = req.headers.action?.toLowerCase();
 
     if (action === 'get-latest-analysis') {

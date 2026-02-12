@@ -116,7 +116,7 @@ export const useMappingStore = defineStore('mapping', {
 
             try {
                 // Load object mappings
-                const objResponse = await axiosInstance.post('/',
+                const objResponse = await axiosInstance.post('/api',
                     { projectId },
                     { headers: { action: 'get-object-mappings' } }
                 );
@@ -128,7 +128,7 @@ export const useMappingStore = defineStore('mapping', {
                 }
 
                 // Load field mappings
-                const fieldResponse = await axiosInstance.post('/',
+                const fieldResponse = await axiosInstance.post('/api',
                     { projectId },
                     { headers: { action: 'get-field-mappings' } }
                 );
@@ -166,7 +166,7 @@ export const useMappingStore = defineStore('mapping', {
             this.error = null;
 
             try {
-                const response = await axiosInstance.put('/',
+                const response = await axiosInstance.put('/api',
                     {
                         projectId,
                         sourceObjectId,
@@ -201,7 +201,7 @@ export const useMappingStore = defineStore('mapping', {
             this.error = null;
 
             try {
-                const response = await axiosInstance.post('/',
+                const response = await axiosInstance.post('/api',
                     { id, ...data },
                     { headers: { action: 'update-object-mapping' } }
                 );
@@ -234,7 +234,7 @@ export const useMappingStore = defineStore('mapping', {
             try {
                 const response = await axiosInstance.request({
                     method: 'DELETE',
-                    url: '/',
+                    url: '/api',
                     headers: { action: 'delete-object-mapping' },
                     data: { id }
                 });
@@ -288,7 +288,7 @@ export const useMappingStore = defineStore('mapping', {
             this.error = null;
 
             try {
-                const response = await axiosInstance.put('/',
+                const response = await axiosInstance.put('/api',
                     data,
                     { headers: { action: 'create-field-mapping' } }
                 );
@@ -317,7 +317,7 @@ export const useMappingStore = defineStore('mapping', {
             this.error = null;
 
             try {
-                const response = await axiosInstance.post('/',
+                const response = await axiosInstance.post('/api',
                     { id, ...data },
                     { headers: { action: 'update-field-mapping' } }
                 );
@@ -350,7 +350,7 @@ export const useMappingStore = defineStore('mapping', {
             try {
                 const response = await axiosInstance.request({
                     method: 'DELETE',
-                    url: '/',
+                    url: '/api',
                     headers: { action: 'delete-field-mapping' },
                     data: { id }
                 });

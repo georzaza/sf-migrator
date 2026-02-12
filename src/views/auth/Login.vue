@@ -3,9 +3,11 @@ import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/composables/auth/useAuth';
+import { useToast } from 'primevue/usetoast';
 
 const router = useRouter();
 const { login } = useAuth();
+const toast = useToast();
 
 const userIdentifier = ref('');
 const password = ref('');
@@ -29,7 +31,7 @@ const handleLogin = async () => {
         }
 
         console.error('Login failed:', error.response?.data || error.message);
-        alert('An error occurred during login. Please try again.');
+        toast.add({ severity: 'error', summary: 'Login Error', detail: 'Error occurred during login. Is the server up and running?', life: 6000 });
     }
 };
 

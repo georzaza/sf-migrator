@@ -38,6 +38,7 @@ const selectedOrg = computed(() => orgStore.selectedOrg);
 
 // ─── Lifecycle ──────────────────────────────────────────
 onMounted(async () => {
+    console.log('Dashboard mounted');
     await orgStore.loadProjects();
     // If there's already a selected org (e.g., after page refresh), check its analysis
     if (orgStore.selectedOrg) {
@@ -150,7 +151,7 @@ async function onOrgFormSaved() {
 async function checkOrgAnalysis(orgId) {
     checkingAnalysis.value = true;
     try {
-        const response = await axiosInstance.get('/', {
+        const response = await axiosInstance.get('/api', {
             headers: {
                 action: 'get-objects',
                 orgid: orgId,
@@ -177,7 +178,7 @@ function onAnalyzeOrg() {
         /* todo
         try {
             // start analysis asynchronously on server
-            const response = await axiosInstance.post('/', {
+            const response = await axiosInstance.post('/api', {
                 orgId: selectedOrg.value.id,
                 options: { includeCustomOnly: false },
             }, {
@@ -188,7 +189,7 @@ function onAnalyzeOrg() {
                 // Poll for latest analysis and refresh objects when complete
                 const analysisPolling = setInterval(async () => {
                     try {
-                        const latest = await axiosInstance.get('/analysis', {
+                        const latest = await axiosInstance.get('/api/analysis', {
                             headers: { action: 'get-latest-analysis', orgid: selectedOrg.value.id }
                         });
                         if (latest.data.success && latest.data.data) {
@@ -224,7 +225,7 @@ function onAnalyzeOrg() {
         }
         */
         try {
-            const response = await axiosInstance.post('/', {
+            const response = await axiosInstance.post('/api', {
                 orgId: selectedOrg.value.id,
                 includeCustomOnly: false,
             }, {
@@ -266,7 +267,7 @@ function onSelectObject(obj) {
 async function onLoadFields(obj) {
     loadingFields.value = true;
     try {
-        const response = await axiosInstance.get('/', {
+        const response = await axiosInstance.get('/api', {
             headers: {
                 action: 'get-fields',
                 objectid: obj.id,

@@ -61,7 +61,7 @@ describe('OrgFormDialog', () => {
         it('should initialize with empty form in add mode', () => {
             const wrapper = mountComponent({ org: null });
             expect(wrapper.vm.form.name).toBe('');
-            expect(wrapper.vm.form.connectionType).toBe('Credentials');
+            expect(wrapper.vm.form.connectionType).toBe('OAuth');
         });
 
         it('should populate form from org in edit mode', async () => {

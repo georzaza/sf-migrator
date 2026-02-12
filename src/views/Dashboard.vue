@@ -173,8 +173,7 @@ function onAnalyzeOrg() {
         try {
             const response = await axiosInstance.post('/', {
                 orgId: selectedOrg.value.id,
-                includeCustomOnly: true,
-                excludeManaged: true,
+                includeCustomOnly: false,
             }, {
                 headers: { action: 'analyze-org' },
             });

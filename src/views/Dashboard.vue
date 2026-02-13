@@ -192,7 +192,7 @@ function onAnalyzeOrg() {
 
     if (hasAnalysis.value) {
         confirm.require({
-            message: 'An existing analysis was found. Starting a new analysis will replace it. Continue?',
+            message: 'Starting a new analysis will take a while to complete and all metadata previously retrieved from Salesforce for this org will be lost. Continue?',
             header: 'Confirm Re-Analysis',
             icon: 'pi pi-exclamation-triangle',
             acceptLabel: 'Continue',
@@ -207,6 +207,7 @@ function onAnalyzeOrg() {
 function onSelectObject(obj) {
     selectedObject.value = obj;
     fields.value = [];
+    onLoadFields(obj);
 }
 
 async function onLoadFields(obj) {
@@ -349,24 +350,29 @@ async function onLoadFields(obj) {
                     </div>
 
                     <div class="analysis-content">
-                        <!-- Object List -->
-                        <div class="analysis-panel">
-                            <ObjectList
-                                :objects="objects"
-                                :selectedObject="selectedObject"
-                                :loading="loadingObjects"
-                                @select-object="onSelectObject"
-                            />
+                        <!-- Left Column: Object List + Object Detail Header -->
+                        <div class="left-column">
+                            <!-- Object List -->
+                            <div class="analysis-panel">
+                                <ObjectList
+                                    :objects="objects"
+                                    :selectedObject="selectedObject"
+                                    :loading="loadingObjects"
+                                    @select-object="onSelectObject"
+                                />
+                            </div>
+
+                            <!-- Object Detail Header -->
+                            <div v-if="selectedObject" class="analysis-panel">
+                                <ObjectDetail
+                                    :object="selectedObject"
+                                />
+                            </div>
                         </div>
 
-                        <!-- Object Detail + Fields -->
+                        <!-- Right: Field List -->
                         <div v-if="selectedObject" class="analysis-panel">
-                            <ObjectDetail
-                                :object="selectedObject"
-                                :fields="fields"
-                                :loadingFields="loadingFields"
-                                @load-fields="onLoadFields"
-                            />
+                            <FieldList :fields="fields" :loading="loadingFields" />
                         </div>
                     </div>
                 </template>
@@ -557,6 +563,12 @@ async function onLoadFields(obj) {
     grid-template-columns: 1fr 1fr;
     gap: 1.5rem;
     align-items: start;
+}
+
+.left-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
 .analysis-panel {

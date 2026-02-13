@@ -10,9 +10,9 @@
  *   title - Optional title override
  *
  * Emits:
- *   select-object - When an object row is clicked
+ *   select-object - When an object is selected from dropdown
  */
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 const props = defineProps({
     objects: {
@@ -35,8 +35,13 @@ const props = defineProps({
 
 const emit = defineEmits(['select-object']);
 
-const searchQuery = ref('');
 const showCustomOnly = ref(false);
+const selected = ref(props.selectedObject);
+
+// Watch for prop changes
+watch(() => props.selectedObject, (newVal) => {
+    selected.value = newVal;
+});
 
 const filteredObjects = computed(() => {
     let result = props.objects;
@@ -45,15 +50,15 @@ const filteredObjects = computed(() => {
         result = result.filter(obj => obj.isCustom);
     }
 
-    if (searchQuery.value.trim()) {
-        const query = searchQuery.value.toLowerCase();
-        result = result.filter(obj =>
-            obj.objectName?.toLowerCase().includes(query) ||
-            obj.objectLabel?.toLowerCase().includes(query)
-        );
-    }
-
     return result;
+});
+
+const dropdownOptions = computed(() => {
+    const filtered = filteredObjects.value;
+    if (selected.value && !filtered.find(obj => obj.id === selected.value.id)) {
+        return [selected.value, ...filtered];
+    }
+    return filtered;
 });
 
 const objectCount = computed(() => {
@@ -63,8 +68,8 @@ const objectCount = computed(() => {
     return `${filtered} of ${total} objects`;
 });
 
-function isSelected(obj) {
-    return props.selectedObject?.id === obj.id;
+function onObjectSelect(event) {
+    emit('select-object', event.value);
 }
 </script>
 
@@ -82,40 +87,32 @@ function isSelected(obj) {
 
         <template v-else>
             <div class="object-list-filters">
-                <InputText
-                    v-model="searchQuery"
-                    placeholder="Search objects..."
-                    size="small"
-                    class="object-search"
-                />
+                <Dropdown
+                    v-model="selected"
+                    :options="dropdownOptions"
+                    optionLabel="objectLabel"
+                    :filter="true"
+                    :filterFields="['objectName', 'objectLabel']"
+                    placeholder="Select an object..."
+                    class="object-dropdown"
+                    @change="onObjectSelect"
+                >
+                    <template #item="slotProps">
+                        <div class="object-dropdown-item">
+                            <span class="object-item-label">{{ slotProps.item.objectLabel }}</span>
+                            <span class="object-item-api">({{ slotProps.item.objectName }})</span>
+                            <Tag
+                                v-if="slotProps.item.isCustom"
+                                value="Custom"
+                                severity="info"
+                                class="object-tag"
+                            />
+                        </div>
+                    </template>
+                </Dropdown>
                 <div class="flex items-center gap-2">
                     <Checkbox v-model="showCustomOnly" :binary="true" inputId="customOnly" />
                     <label for="customOnly" class="text-sm">Custom only</label>
-                </div>
-            </div>
-
-            <div v-if="filteredObjects.length === 0" class="object-list-empty">
-                <p>No objects found.</p>
-            </div>
-
-            <div v-else class="object-items">
-                <div
-                    v-for="obj in filteredObjects"
-                    :key="obj.id"
-                    class="object-item"
-                    :class="{ 'object-item-selected': isSelected(obj) }"
-                    @click="emit('select-object', obj)"
-                >
-                    <div class="object-item-info">
-                        <span class="object-item-label">{{ obj.objectLabel }}</span>
-                        <span class="object-item-api">({{ obj.objectName }})</span>
-                    </div>
-                    <Tag
-                        v-if="obj.isCustom"
-                        value="Custom"
-                        severity="info"
-                        class="object-tag"
-                    />
                 </div>
             </div>
         </template>
@@ -161,50 +158,15 @@ function isSelected(obj) {
     align-items: center;
 }
 
-.object-search {
+.object-dropdown {
     flex: 1;
 }
 
-.object-list-empty {
-    text-align: center;
-    padding: 1.5rem;
-    color: var(--text-color-secondary);
-}
-
-.object-items {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    max-height: 400px;
-    overflow-y: auto;
-}
-
-.object-item {
+.object-dropdown-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 0.75rem;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background-color 0.15s;
-}
-
-.object-item:hover {
-    background-color: var(--surface-hover);
-}
-
-.object-item-selected {
-    background-color: var(--primary-50);
-}
-
-:root.app-dark .object-item-selected {
-    background-color: color-mix(in srgb, var(--primary-color) 15%, transparent);
-}
-
-.object-item-info {
-    display: flex;
-    gap: 0.35rem;
-    align-items: baseline;
+    width: 100%;
 }
 
 .object-item-label {
@@ -215,6 +177,7 @@ function isSelected(obj) {
 .object-item-api {
     font-size: 0.8rem;
     color: var(--text-color-secondary);
+    margin-left: 0.5rem;
 }
 
 .object-tag {

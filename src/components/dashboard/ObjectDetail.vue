@@ -1,49 +1,18 @@
 <script setup>
 /**
  * ObjectDetail - Shows basic info about a selected Salesforce object
- * and embeds a FieldList to display its fields.
  *
  * Props:
  *   object - Selected object metadata
- *   fields - Array of field metadata for the object
- *   loadingFields - Whether fields are being loaded
- *
- * Emits:
- *   load-fields - When user clicks to load/view fields
  */
-import { ref, watch } from 'vue';
-import FieldList from './FieldList.vue';
+import { ref } from 'vue';
 
 const props = defineProps({
     object: {
         type: Object,
         default: null,
     },
-    fields: {
-        type: Array,
-        default: () => [],
-    },
-    loadingFields: {
-        type: Boolean,
-        default: false,
-    },
 });
-
-const emit = defineEmits(['load-fields']);
-
-const showFields = ref(false);
-
-// Reset showFields when object changes
-watch(() => props.object, () => {
-    showFields.value = false;
-});
-
-function onToggleFields() {
-    showFields.value = !showFields.value;
-    if (showFields.value && props.fields.length === 0) {
-        emit('load-fields', props.object);
-    }
-}
 </script>
 
 <template>
@@ -63,21 +32,6 @@ function onToggleFields() {
                 <span class="info-label">Record Count:</span>
                 <span class="info-value">{{ object.recordCount?.toLocaleString() ?? 'N/A' }}</span>
             </div>
-        </div>
-
-        <Divider />
-
-        <Button
-            :label="showFields ? 'Hide Fields' : 'View Fields'"
-            :icon="showFields ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
-            size="small"
-            severity="secondary"
-            outlined
-            @click="onToggleFields"
-        />
-
-        <div v-if="showFields" class="object-detail-fields">
-            <FieldList :fields="fields" :loading="loadingFields" />
         </div>
     </div>
 </template>

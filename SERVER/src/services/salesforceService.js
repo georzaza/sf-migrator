@@ -70,7 +70,7 @@ async function connectToOrg(sfOrgId) {
         const conn = connectionPool.get(sfOrgId);
         try {
             await conn.identity();
-            log.info('Reusing cached connection', { sfOrgId });
+            //log.info('Reusing cached connection', { sfOrgId });
             return conn;
         } catch (error) {
             log.warn('Cached connection invalid, creating new one', { sfOrgId });
@@ -114,7 +114,7 @@ async function describeGlobal(sfOrgId) {
                 isCustom: obj.custom,
             }));
 
-        log.toFile('', objects)
+        log.toFile('', JSON.stringify(objects, null, 2));
         return objects;
     } catch (error) {
         log.error('Failed to analyze org', error, { sfOrgId });

@@ -47,11 +47,11 @@ filesToProcess = filterOutProcessedFiles(filepaths)
 
 for file in filesToProcess:
     filename = file[0:file.rindex(os.path.sep)] + file[file.rindex(os.path.sep):-4] + '.csv'
+    newFilename = file[0:file.find('_with_sep')+9] + DELIMITER + '.csv'
     if len(sys.argv) == 2  and  sys.argv[1] == '-f':
         createCsvCopyWithSep(file, DELIMITER)
-    else: 
-        if not os.path.exists(filename):
-            print('Checking: ', file[0:file.find('_with_sep')+9] + DELIMITER + '.csv')
+    else:
+        if not os.path.exists(newFilename):
             createCsvCopyWithSep(file, DELIMITER)
         else:
-            print('File exists. Delete first using the bash script: ', filename)
+            print('File exists. Either run with -f option or delete run the bash script to delete the file: ', filename)

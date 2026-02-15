@@ -19,8 +19,8 @@ const props = defineProps({
     <div v-if="object" class="object-detail">
         <div class="object-detail-header">
             <h3>{{ object.objectLabel }}</h3>
-            <Tag v-if="object.isCustom" value="Custom" severity="info" />
-            <Tag v-else value="Standard" severity="secondary" />
+            <Tag v-if="object.isCustom" value="Custom Object" severity="info" />
+            <Tag v-else value="Standard Object" severity="secondary" />
         </div>
 
         <div class="object-info">
@@ -29,7 +29,7 @@ const props = defineProps({
                 <span class="info-value">{{ object.objectName }}</span>
             </div>
             <div v-if="object.recordCount != null" class="info-row">
-                <span class="info-label">Record Count:</span>
+                <span class="info-label">Total Records:</span>
                 <span class="info-value">{{ object.recordCount?.toLocaleString() ?? 'N/A' }}</span>
             </div>
         </div>
@@ -41,6 +41,7 @@ const props = defineProps({
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    justify-content: space-between;
 }
 
 .object-detail-header {

@@ -14,6 +14,7 @@ const standardObjectFilters = require('./config/objectsToExclude');
 /**
  * Analyze org and save metadata to database
  */
+// todo async function analyzeAndSaveOrg(sfOrgId, options = {}, progressCallback = null) {
 async function analyzeAndSaveOrg(sfOrgId, options = {}) {
     const {
         objectsToAnalyze = null,
@@ -62,11 +63,22 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
 
             savedObjects.push(savedObject);
             totalFields += detailedMetadata.fields.length;
-            if (++i>20) {
-                break;
-            }
+            /* todo
+            // report progress if a callback was provided
+            if (typeof progressCallback === 'function') {
+                try {
+                    await progressCallback({
+                        objectsAnalyzed: savedObjects.length,
+                        totalObjects: objectsToProcess.length,
+                        currentObject: objMetadata.objectName,
+                        totalFields,
+                    });
+                } catch (err) {
+                    log.error('Progress callback failed', err);
+                }
+            }*/
         }
-        log.toFile('describeObject', {fetched: savedObjects});
+        log.toFile('describeObject', JSON.stringify(savedObjects, null, 2));
 
         return {
             success: true,

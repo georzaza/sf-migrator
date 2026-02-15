@@ -174,6 +174,26 @@ async function checkOrgAnalysis(orgId) {
 function onAnalyzeOrg() {
     const doAnalysis = async () => {
         analyzingOrgId.value = selectedOrg.value.id;
+        /* todo
+        try {
+            const response = await axiosInstance.post('/', {
+                orgId: selectedOrg.value.id,
+                includeCustomOnly: false,
+            }, {
+                headers: { action: 'analyze-org' },
+            });
+            if (response.data.success) {
+                toast.add({ severity: 'success', summary: 'Analysis Complete', detail: `Analyzed ${response.data.data.objectsAnalyzed} objects.`, life: 4000 });
+                await checkOrgAnalysis(selectedOrg.value.id);
+            } else {
+                toast.add({ severity: 'error', summary: 'Error', detail: response.data.message || 'Analysis failed.', life: 4000 });
+            }
+        } catch (error) {
+            toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message || error.message || 'Failed to analyze org.', life: 4000 });
+        } finally {
+            analyzingOrgId.value = null;
+        }
+        */
         try {
             // start analysis asynchronously on server
             const response = await axiosInstance.post('/', {

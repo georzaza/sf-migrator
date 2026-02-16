@@ -224,50 +224,21 @@ function onAnalyzeOrg() {
         }
         */
         try {
-            // start analysis asynchronously on server
             const response = await axiosInstance.post('/', {
                 orgId: selectedOrg.value.id,
-                options: { includeCustomOnly: false },
+                includeCustomOnly: false,
             }, {
-                headers: { action: 'start-analysis' },
+                headers: { action: 'analyze-org' },
             });
-
             if (response.data.success) {
-                // Poll for latest analysis and refresh objects when complete
-                const analysisPolling = setInterval(async () => {
-                    try {
-                        const latest = await axiosInstance.get('/analysis', {
-                            headers: { action: 'get-latest-analysis', orgid: selectedOrg.value.id }
-                        });
-                        if (latest.data.success && latest.data.data) {
-                            const status = latest.data.data.status;
-                            if (status === 'in_progress' || status === 'pending') {
-                                loadingObjects.value = true;
-                            }
-                            if (status === 'completed') {
-                                clearInterval(analysisPolling);
-                                loadingObjects.value = false;
-                                analyzingOrgId.value = null;
-                                toast.add({ severity: 'success', summary: 'Analysis Complete', detail: `Analysis for ${selectedOrg.value.name} is complete.`, life: 4000 });
-                                await checkOrgAnalysis(selectedOrg.value.id);
-                            }
-                            if (status === 'failed') {
-                                clearInterval(analysisPolling);
-                                loadingObjects.value = false;
-                                analyzingOrgId.value = null;
-                                toast.add({ severity: 'error', summary: 'Analysis Failed', detail: `Analysis for ${selectedOrg.value.name} failed.`, life: 6000 });
-                            }
-                        }
-                    } catch (err) {
-                        console.error(err);
-                    }
-                }, 3000);
+                toast.add({ severity: 'success', summary: 'Analysis Complete', detail: `Analyzed ${response.data.data.objectsAnalyzed} objects.`, life: 4000 });
+                await checkOrgAnalysis(selectedOrg.value.id);
             } else {
-                toast.add({ severity: 'error', summary: 'Error', detail: response.data.message || 'Failed to start analysis.', life: 4000 });
-                analyzingOrgId.value = null;
+                toast.add({ severity: 'error', summary: 'Error', detail: response.data.message || 'Analysis failed.', life: 4000 });
             }
         } catch (error) {
-            toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message || error.message || 'Failed to start analysis.', life: 4000 });
+            toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message || error.message || 'Failed to analyze org.', life: 4000 });
+        } finally {
             analyzingOrgId.value = null;
         }
     };

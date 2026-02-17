@@ -195,7 +195,7 @@ function create(callerName) {
                 fs.mkdirSync(logDir, { recursive: true });
             }
 
-            const formatted = formatLine(LOG_LEVEL_TODISK, callerName, meta);
+            const formatted = formatLine(LOG_LEVEL_TODISK, callerName, message, meta);
             fs.appendFileSync(logPath, formatted);
             // Log that the file was written
             this.info(`Log created: ${filename}`, { logPath, dateFolder: dateStr });

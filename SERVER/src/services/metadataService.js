@@ -6,14 +6,12 @@
  */
 
 const metadataRepo = require('../repositories/metadataRepository');
-const salesforceService = require('./salesforceService');
+const sfService = require('./salesforceService');
 const logger = require('../lib/logger');
 const log = logger.create('metadataService');
 const standardObjectFilters = require('./config/objectsToExclude');
 
-/**
- * Analyze org and save metadata to database
- */
+
 // todo async function analyzeAndSaveOrg(sfOrgId, options = {}, progressCallback = null) {
 async function analyzeAndSaveOrg(sfOrgId, options = {}) {
     const {
@@ -22,7 +20,7 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
     } = options;
 
     try {
-        const objects = await salesforceService.describeGlobal(sfOrgId, filters = {});
+        const objects = await sfService.describeGlobal(sfOrgId, filters = {});
         log.info('Retrieved global objects from Salesforce', { count: objects.length });
 
         // user filters
@@ -31,52 +29,31 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
             : objects;
         log.info('Object filters applied (user preferences). New count is ', { count: objectsFilteredByUserPrefs.length });
 
-        // hardcoded filters applied on top of the user preferences
+        // hardcoded filters applied on top of user preferences - hardcoded list
         let objectsToProcess = objectsFilteredByUserPrefs
             .filter(obj => !standardObjectFilters.hardcodedList.includes(obj.objectName));
         log.info('Object filters applied (hardcoded list). New count is ', { count: objectsToProcess.length });
 
+        // hardcoded filters applied on top of user preferences - patterns
         objectsToProcess = objectsToProcess
             .filter(obj => !standardObjectFilters.patternList.some(pattern => pattern.test(obj.objectName)));
         log.info('Object filters applied (pattern list). New count is ', { count: objectsToProcess.length });
 
+        // for logging only
         const savedObjects = [];
         let totalFields = 0;
 
-        let i=0;
-        for (const objMetadata of objectsToProcess) {
+        // need to delegate to salesforce service, where Composite API will speed up requests.
+        const sobjectDescribes = await sfSvc.describeObjectMultiple(
+            sfOrgId,
+            conn.version,
+            objectsToProcess.map(obj => obj.objectName)
+        );
 
-            const recordCount = await salesforceService.getRecordCount(
-                sfOrgId,
-                objMetadata.objectName
-            );
-
-            const detailedMetadata = await salesforceService.describeObject(
-                sfOrgId,
-                objMetadata.objectName
-            );
-
-            const savedObject = await saveObjectMetadata(sfOrgId, {
-                ...detailedMetadata,
-                recordCount,
-            });
-
-            savedObjects.push(savedObject);
-            totalFields += detailedMetadata.fields.length;
-            /* todo
-            // report progress if a callback was provided
-            if (typeof progressCallback === 'function') {
-                try {
-                    await progressCallback({
-                        objectsAnalyzed: savedObjects.length,
-                        totalObjects: objectsToProcess.length,
-                        currentObject: objMetadata.objectName,
-                        totalFields,
-                    });
-                } catch (err) {
-                    log.error('Progress callback failed', err);
-                }
-            }*/
+        for (const sobjDescribe of sobjectDescribes) {
+            const savedObj = await saveObjectMetadata(sfOrgId, sobjDescribe);
+            savedObjects.push(savedObj);
+            totalFields += sobjDescribe?.fields?.length ?? 0;
         }
         log.toFile('describeObject', JSON.stringify(savedObjects, null, 2));
 
@@ -92,9 +69,8 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
     }
 }
 
-/**
- * Save object metadata to database (with fields)
- */
+
+
 async function saveObjectMetadata(sfOrgId, metadata) {
     try {
         const objectMetadata = await metadataRepo.findOrCreateObject(sfOrgId, metadata);
@@ -110,9 +86,7 @@ async function saveObjectMetadata(sfOrgId, metadata) {
     }
 }
 
-/**
- * Save field metadata for an object
- */
+
 async function saveFieldMetadata(objectMetadataId, fields) {
     try {
         const savedFields = [];
@@ -129,9 +103,7 @@ async function saveFieldMetadata(objectMetadataId, fields) {
     }
 }
 
-/**
- * Get all objects for an org from database
- */
+
 async function getObjectsForOrg(sfOrgId, options = {}) {
     const { includeFields = false } = options;
 
@@ -143,9 +115,7 @@ async function getObjectsForOrg(sfOrgId, options = {}) {
     }
 }
 
-/**
- * Get fields for a specific object
- */
+
 async function getFieldsForObject(objectMetadataId) {
     try {
         return await metadataRepo.findFieldsByObjectId(objectMetadataId);
@@ -155,16 +125,7 @@ async function getFieldsForObject(objectMetadataId) {
     }
 }
 
-/**
- * Refresh metadata for an org (re-analyze)
- */
-async function refreshMetadata(sfOrgId, options = {}) {
-    return analyzeAndSaveOrg(sfOrgId, options);
-}
 
-/**
- * Delete all metadata for an org
- */
 async function deleteOrgMetadata(sfOrgId) {
     try {
         const deletedCount = await metadataRepo.deleteObjectsByOrgId(sfOrgId);
@@ -175,9 +136,7 @@ async function deleteOrgMetadata(sfOrgId) {
     }
 }
 
-/**
- * Get metadata statistics for an org
- */
+
 async function getMetadataStats(sfOrgId) {
     try {
         return await metadataRepo.getStats(sfOrgId);
@@ -193,7 +152,6 @@ module.exports = {
     saveFieldMetadata,
     getObjectsForOrg,
     getFieldsForObject,
-    refreshMetadata,
     deleteOrgMetadata,
     getMetadataStats,
 };

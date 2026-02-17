@@ -13,8 +13,8 @@ const projectRepo = require('../repositories/projectRepository');
 const orgRepo = require('../repositories/orgRepository');
 const metadataRepo = require('../repositories/metadataRepository');
 const mappingRepo = require('../repositories/mappingRepository');
-const metadataService = require('../services/metadataService');
-const salesforceService = require('../services/salesforceService');
+const mdtService = require('../services/metadataService');
+const sfService = require('../services/salesforceService');
 /* todo
 const analysisService = require('../services/analysisService');
 const analysisRepo = require('../repositories/analysisRepository');
@@ -152,7 +152,7 @@ router.post('/', authMiddleware, async (req, res) => {
         }
         log.info('Starting org analysis', { orgId });
         try {
-            const result = await metadataService.analyzeAndSaveOrg(orgId, options);
+            const result = await mdtService.analyzeAndSaveOrg(orgId, options);
             log.info('Org analysis completed', { orgId, objectsAnalyzed: result.objectsAnalyzed });
             sendResponse(res, 200, true, 'Org analysis completed successfully', result);
         } catch (error) {
@@ -175,19 +175,6 @@ router.post('/', authMiddleware, async (req, res) => {
         }
     }
 */
-    else if (action === 'refresh-metadata') {
-        const { orgId } = req.body;
-        if (!orgId) {
-            return sendResponse(res, 400, false, 'No org provided.');
-        }
-        try {
-            const result = await metadataService.refreshMetadata(orgId);
-            sendResponse(res, 200, true, 'Metadata refreshed successfully', result);
-        } catch (error) {
-            log.error('Error while refreshing mdt.', error, {orgId: orgId} )
-            sendResponse(res, 500, false, 'Failed to refresh metadata');
-        }
-    }
 
     else if (action === 'test-sf-connection') {
         const { orgId } = req.body;
@@ -195,7 +182,7 @@ router.post('/', authMiddleware, async (req, res) => {
             return sendResponse(res, 400, false, 'No org provided.');
         }
         try {
-            const result = await salesforceService.testConnection(orgId);
+            const result = await sfService.testConnection(orgId);
             sendResponse(res, 200, true, 'Connection test successful', result);
         } catch (error) {
             log.error('Error while testing connection', error, {orgId: orgId})

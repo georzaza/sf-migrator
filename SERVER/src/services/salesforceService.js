@@ -6,18 +6,18 @@
  */
 
 const jsforce = require('jsforce');
+const sfVersion = require('./utils/version.js');
+const fetch = require('node-fetch');
 const orgRepo = require('../repositories/orgRepository');
 const logger = require('../lib/logger');
 const log = logger.create('salesforceService');
 
-// Connection pool - reuse connections to leverage jsforce internal cache
+
+
 const connectionPool = new Map();
 
-/**
- * Create jsforce connection from SfOrg credentials
- * @param {Object} sfOrg - SfOrg model instance
- * @returns {Promise<jsforce.Connection>}
- */
+const VERSION = '65.0';
+
 async function createConnection(sfOrg) {
     log.info('Creating Salesforce connection', { sfOrgId: sfOrg.id, orgName: sfOrg.name, loginURL: sfOrg.loginURL });
 
@@ -37,11 +37,10 @@ async function createConnection(sfOrg) {
                 clientSecret: sfOrg.clientSecret,
                 redirectUri: `${sfOrg.loginURL}/services/oauth2/success`,
             },
-            version: '65.0',
+            version: VERSION,
         });
 
         await conn.login(sfOrg.username, sfOrg.password + (sfOrg.securityToken || ''));
-
         log.info('Connection successful', {
             instanceUrl: conn.instanceUrl,
             hasAccessToken: !!conn.accessToken,
@@ -62,9 +61,7 @@ async function createConnection(sfOrg) {
     }
 }
 
-/**
- * Connect to Salesforce org by ID (with connection pooling)
- */
+
 async function connectToOrg(sfOrgId) {
     if (connectionPool.has(sfOrgId)) {
         const conn = connectionPool.get(sfOrgId);
@@ -88,17 +85,7 @@ async function connectToOrg(sfOrgId) {
     return conn;
 }
 
-/**
- * Clear cached connection for an org (useful after credential changes)
- */
-function clearConnection(sfOrgId) {
-    connectionPool.delete(sfOrgId);
-    log.info('Cleared cached connection', { sfOrgId });
-}
 
-/**
- * Retrieve all objects from a Salesforce org via describeGlobal
- */
 async function describeGlobal(sfOrgId) {
     const conn = await connectToOrg(sfOrgId);
 
@@ -122,14 +109,30 @@ async function describeGlobal(sfOrgId) {
     }
 }
 
-/**
- * Get detailed metadata for a specific object
- */
+// Uses Composite API
+// https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/requests_composite.htm
+async function describeObjectMultiple(sfOrgId, version, objectNames) {
+    allOrNone: false,
+    collateSubrequests: true,
+    const response = await fetch('https://jsonplaceholder.typicode.com/posts', {
+        method: 'POST',
+        headers: {
+        'User-Agent': 'undici-stream-example',
+        'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    console.log(data);
+
+}
+
+// Callers should consider API limits before invoking in loops, use describeObjectMultiple instead if applicable.
 async function describeObject(sfOrgId, objectName) {
     const conn = await connectToOrg(sfOrgId);
 
     try {
-        const describeResult = await conn.describe(objectName);
+        const describeResult = await conn.sobject(objectName).describe();
 
         return {
             objectName: describeResult.name,
@@ -153,9 +156,7 @@ async function describeObject(sfOrgId, objectName) {
     }
 }
 
-/**
- * Get approximate record count for an object
- */
+
 async function getRecordCount(sfOrgId, objectName) {
     const conn = await connectToOrg(sfOrgId);
 
@@ -168,9 +169,7 @@ async function getRecordCount(sfOrgId, objectName) {
     }
 }
 
-/**
- * Query records from Salesforce
- */
+
 async function queryRecords(sfOrgId, soql) {
     const conn = await connectToOrg(sfOrgId);
 
@@ -208,9 +207,13 @@ async function insertRecords(sfOrgId, objectName, records) {
     }
 }
 
-/**
- * Test connection to verify credentials
- */
+
+function clearConnection(sfOrgId) {
+    connectionPool.delete(sfOrgId);
+    log.info('Cleared cached connection', { sfOrgId });
+}
+
+
 async function testConnection(sfOrgId) {
     const conn = await connectToOrg(sfOrgId);
 

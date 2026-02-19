@@ -16,9 +16,6 @@ export const useOrgStore = defineStore('orgs', {
     }),
 
     getters: {
-        /**
-         * Get orgs filtered by the currently selected project
-         */
         projectOrgs: (state) => {
             if (!state.selectedProject) return [];
             return state.orgs.filter(org => org.projectId === state.selectedProject.id);
@@ -37,6 +34,13 @@ export const useOrgStore = defineStore('orgs', {
 
         setSelectedOrg(org) {
             this.selectedOrg = org;
+        },
+
+        findAndSetOrgAndProject(org) {
+            const o = this.orgs.find(o => o.id === org);
+            const p = this.projects.find(p => p.id === o.projectId);
+            this.setSelectedProject(project);
+            this.setSelectedOrg(org);
         },
 
         closeEditOrgDialog() {

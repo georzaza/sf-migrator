@@ -43,12 +43,12 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
         const savedObjects = [];
         let totalFields = 0;
 
-        // need to delegate to salesforce service, where Composite API will speed up requests.
-        const sobjectDescribes = await sfSvc.describeObjectMultiple(
+        // delegate to salesforce service, where Composite API will speed up requests.
+        const sobjectDescribes = await sfService.describeObjectMultiple(
             sfOrgId,
-            conn.version,
             objectsToProcess.map(obj => obj.objectName)
         );
+        log.toFile('describeObjects', sobjectDescribes);
 
         for (const sobjDescribe of sobjectDescribes) {
             const savedObj = await saveObjectMetadata(sfOrgId, sobjDescribe);

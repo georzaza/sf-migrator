@@ -1,24 +1,24 @@
 
-const getStorage = async (conn) =>  {
-  const recordCounts = await _(conn.request('/limits/recordCount'))
-    .flatMap(x => x.sObjects)
-    .map(x => ({ name: x.name, count: x.count }))
-    .sortBy((a, b) => a.count > b.count ? -1 : 1)
-    .values();
-
-    return recordCounts;
+const getStorage = async (conn) => {
+    const res = await conn.request('/limits/recordCount') || {};
+    const sObjects = Array.isArray(res.sObjects) ? res.sObjects : [];
+    return sObjects
+        .map(x => ({ name: x.name, count: Number(x.count) || 0 }))
+        .sort((a, b) => b.count - a.count);
 }
 
-const getLimits = async (conn) =>  {
-  return await _(conn.request('/limits'))
-  .flatMap(Object.entries)
-  .map(([k, v]) => ({
-    Name: k,
-    Max: v.Max,
-    Remaining: v.Remaining,
-    PercentUsed: v.Max === 0 ? 0 : ((v.Max - v.Remaining) / v.Max * 100)
-  }))
-  .values();
+const getLimits = async (conn) => {
+    const res = await conn.request('/limits') || {};
+    return Object.entries(res).map(([key, val]) => {
+        const max = Number(val?.Max || 0);
+        const remaining = Number(val?.Remaining || 0);
+        return {
+            Name: key,
+            Max: max,
+            Remaining: remaining,
+            PercentUsed: max === 0 ? 0 : ((max - remaining) / max) * 100
+        };
+    });
 }
 
 const getDangerousProfiles = async (conn) =>  {

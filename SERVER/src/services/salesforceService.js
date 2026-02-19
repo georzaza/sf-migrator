@@ -6,60 +6,96 @@
  */
 
 const jsforce = require('jsforce');
-const sfVersion = require('./utils/version.js');
 const fetch = require('node-fetch');
 const orgRepo = require('../repositories/orgRepository');
 const logger = require('../lib/logger');
 const log = logger.create('salesforceService');
-
-
+const plimit = require('p-limit');
+const express = require('express');
+const router = express.Router();
 
 const connectionPool = new Map();
+const oauth2Map = new Map();
 
 const VERSION = '65.0';
+const BATCH_COMPOSITE_API_REQUESTS_SIZE = 25;
 
-async function createConnection(sfOrg) {
-    log.info('Creating Salesforce connection', { sfOrgId: sfOrg.id, orgName: sfOrg.name, loginURL: sfOrg.loginURL });
-
-    if (!sfOrg.username || !sfOrg.password) {
-        throw new Error('Username and password are required');
-    }
-
-    if (!sfOrg.clientId || !sfOrg.clientSecret) {
-        throw new Error('ClientId and ClientSecret are required for OAuth2 connection');
-    }
-
-    try {
-        const conn = new jsforce.Connection({
-            oauth2: {
-                loginUrl: sfOrg.loginURL,
-                clientId: sfOrg.clientId,
-                clientSecret: sfOrg.clientSecret,
-                redirectUri: `${sfOrg.loginURL}/services/oauth2/success`,
-            },
-            version: VERSION,
-        });
-
-        await conn.login(sfOrg.username, sfOrg.password + (sfOrg.securityToken || ''));
-        log.info('Connection successful', {
-            instanceUrl: conn.instanceUrl,
-            hasAccessToken: !!conn.accessToken,
-            hasRefreshToken: !!conn.refreshToken,
-        });
-
-        return conn;
-    } catch (error) {
-        log.error('Salesforce connection failed', error, { sfOrgId: sfOrg.id, orgName: sfOrg.name });
-
-        if (error.message.includes('invalid_grant') || error.message.includes('authentication failure')) {
-            throw new Error(
-                'OAuth2 authentication failed.' + error.message
-            );
-        }
-
-        throw new Error(`Failed to connect to Salesforce: ${error.message}`);
+/**
+ * Thrown by connectToOrg when the org has not been authorized yet.
+ * API routes catch this and return 401 { authUrl } so the frontend
+ * can redirect the browser to start the OAuth2 flow.
+ */
+class OAuthRequiredError extends Error {
+    constructor(sfOrgId) {
+        super('Org is not authenticated');
+        this.name = 'OAuthRequiredError';
+        this.sfOrgId = sfOrgId;
+        this.authUrl = `/oauth2/auth?sfOrgId=${sfOrgId}`;
     }
 }
+
+/**
+ * Step 1 – redirect the browser to the Salesforce authorization page.
+ * Query params:
+ *   sfOrgId  – which org to authenticate
+ *   returnTo – (optional) frontend URL to return to after auth completes
+ */
+router.get('/oauth2/auth', async (req, res) => {
+    const { sfOrgId, returnTo } = req.query;
+    if (!sfOrgId) return res.status(400).json({ error: 'sfOrgId is required' });
+
+    const sfOrg = await orgRepo.findById(sfOrgId);
+    if (!sfOrg) return res.status(404).json({ error: 'Org not found' });
+
+    const oauth2 = new jsforce.OAuth2({
+        loginUrl: sfOrg.loginURL,
+        clientId: sfOrg.clientId,
+        clientSecret: sfOrg.clientSecret,
+        redirectUri: process.env.SF_REDIRECT_URI,
+    });
+    oauth2Map.set(sfOrgId, oauth2);
+
+    const state = JSON.stringify({ sfOrgId, returnTo: returnTo || '' });
+    res.redirect(oauth2.getAuthorizationUrl({ scope: 'full', state }));
+});
+
+/**
+ * Step 2 – Salesforce calls back here with an authorization code.
+ * Exchange it for tokens and store the connection in the pool.
+ */
+router.get('/oauth2/callback', async (req, res) => {
+    const { code, state } = req.query;
+    if (!code || !state)
+        return res.status(400).json({ error: 'Missing code or state' });
+
+    let sfOrgId, returnTo;
+    try {
+        ({ sfOrgId, returnTo } = JSON.parse(state));
+    } catch {
+        return res.status(400).json({ error: 'Invalid state parameter' });
+    }
+
+    const oauth2 = oauth2Map.get(sfOrgId);
+    if (!oauth2)
+        return res.status(400).json({ error: 'No pending auth session for this org' });
+
+    try {
+        const conn = new jsforce.Connection({ oauth2, version: VERSION });
+        const userInfo = await conn.authorize(code);
+
+        connectionPool.set(sfOrgId, conn);
+        oauth2Map.delete(sfOrgId);
+
+        log.info('OAuth2 authorized', { sfOrgId, userId: userInfo.id, orgId: userInfo.organizationId });
+
+        const redirectTo = returnTo || (process.env.FRONTEND_URL || 'http://localhost:5173');
+        res.redirect(redirectTo);
+    } catch (error) {
+        log.error('OAuth2 callback failed', error, { sfOrgId });
+        oauth2Map.delete(sfOrgId);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 
 async function connectToOrg(sfOrgId) {
@@ -67,22 +103,15 @@ async function connectToOrg(sfOrgId) {
         const conn = connectionPool.get(sfOrgId);
         try {
             await conn.identity();
-            //log.info('Reusing cached connection', { sfOrgId });
             return conn;
-        } catch (error) {
-            log.warn('Cached connection invalid, creating new one', { sfOrgId });
+        } catch {
+            log.warn('Cached connection invalid, removing', { sfOrgId });
             connectionPool.delete(sfOrgId);
         }
     }
 
-    const sfOrg = await orgRepo.findById(sfOrgId);
-    if (!sfOrg) {
-        throw new Error(`Connection to org failed - org was not found: ${sfOrgId}`);
-    }
-
-    const conn = await createConnection(sfOrg);
-    connectionPool.set(sfOrgId, conn);
-    return conn;
+    // No valid connection – the frontend must redirect the browser to /oauth2/auth first
+    throw new OAuthRequiredError(sfOrgId);
 }
 
 
@@ -101,7 +130,7 @@ async function describeGlobal(sfOrgId) {
                 isCustom: obj.custom,
             }));
 
-        log.toFile('', JSON.stringify(objects, null, 2));
+        log.toFile('describeGlobal', objects);
         return objects;
     } catch (error) {
         log.error('Failed to analyze org', error, { sfOrgId });
@@ -109,25 +138,54 @@ async function describeGlobal(sfOrgId) {
     }
 }
 
-// Uses Composite API
-// https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/requests_composite.htm
-async function describeObjectMultiple(sfOrgId, version, objectNames) {
-    allOrNone: false,
-    collateSubrequests: true,
-    const response = await fetch('https://jsonplaceholder.typicode.com/posts', {
-        method: 'POST',
-        headers: {
-        'User-Agent': 'undici-stream-example',
-        'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-    });
-    const data = await response.json();
-    console.log(data);
+/**
+ * Uses Composite API
+ * https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/requests_composite.htm
+ *
+ * Salesforce Developer Edition & Trial orgs have a limit of 5 concurrent requests.
+ * (For Production orgs and Sandboxes the limit is 25).
+ *
+ * Each composite API request counts as 1 request.
+ * In each request, we can group up to 25 separate requests.
+ *
+ * That will be a 125% increase in performance against a serial request approach.
+ */
 
+async function describeObjectMultiple(sfOrgId, objectNames) {
+    const conn = await connectToOrg(sfOrgId);
+
+    const compositeRequests = [];
+
+    // Build the requests
+    for (let i = 0; i < objectNames.length; i += BATCH_COMPOSITE_API_REQUESTS_SIZE) {
+        const chunk = objectNames.slice(i, i + BATCH_COMPOSITE_API_REQUESTS_SIZE);
+        const subrequests = chunk.map(name => ({
+            method: 'GET',
+            url: `/services/data/v${conn.version}/sobjects/${name}/describe`,
+            referenceId: `ref${name}Describe`,
+        }));
+        const body = {
+            allOrNone: true,
+            collateSubrequests: true,
+            compositeRequest: subrequests,
+        };
+        console.log(body);
+        compositeRequests.push(JSON.stringify(body));
+    }
+
+    // TODO p-limit & get describes for all objects.
+    const response = await conn.request({
+        method: 'POST',
+        url: `/services/data/v${conn.version}/composite`,
+        headers: {
+            //'Authorization': `Bearer ${conn.accessToken}`, // jsforce should handle this, if not we can add explicitly
+            'Content-Type': 'application/json; charset=utf-8',
+        },
+        body: compositeRequests[0],
+    });
 }
 
-// Callers should consider API limits before invoking in loops, use describeObjectMultiple instead if applicable.
+// Callers should consider sf API limits before invoking in loops, use describeObjectMultiple instead if applicable.
 async function describeObject(sfOrgId, objectName) {
     const conn = await connectToOrg(sfOrgId);
 
@@ -232,6 +290,8 @@ async function testConnection(sfOrgId) {
 }
 
 module.exports = {
+    router,
+    OAuthRequiredError,
     connectToOrg,
     clearConnection,
     describeGlobal,
@@ -240,4 +300,5 @@ module.exports = {
     queryRecords,
     insertRecords,
     testConnection,
+    describeObjectMultiple,
 };

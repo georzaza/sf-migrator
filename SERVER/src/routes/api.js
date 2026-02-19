@@ -156,6 +156,10 @@ router.post('/', authMiddleware, async (req, res) => {
             log.info('Org analysis completed', { orgId, objectsAnalyzed: result.objectsAnalyzed });
             sendResponse(res, 200, true, 'Org analysis completed successfully', result);
         } catch (error) {
+            if (error.name === 'OAuthRequiredError') {
+                // Tell the frontend to initiate the OAuth2 browser flow for this org
+                return res.status(401).json({ authUrl: error.authUrl });
+            }
             log.error('Error during analysis', error, {orgId: orgId, options: options});
             sendResponse(res, 500, false, 'Failed to analyze org');
         }

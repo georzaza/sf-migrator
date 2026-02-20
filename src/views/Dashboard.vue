@@ -50,14 +50,16 @@ onMounted(async () => {
         cleanUrl.searchParams.delete('autoAnalyzeOrgId');
         window.history.replaceState({}, '', cleanUrl);
 
-        orgStore.findAndSetOrgAndProject(autoAnalyzeOrgId);
-        await checkOrgAnalysis(org.id);
-
-        toast.add({ severity: 'info', summary: 'Analysis Starting', detail: `Starting analysis for ${org.name}…`, life: 4000 });
-        doAnalysis();
-    }
-    // If there's already a selected org (e.g., after page refresh), check its analysis
-    else if (orgStore.selectedOrg) {
+        const org = orgStore.orgs.find(o => o.id === autoAnalyzeOrgId);
+        if (org) {
+            const project = orgStore.projects.find(p => p.id === org.projectId);
+            if (project) orgStore.setSelectedProject(project);
+            orgStore.setSelectedOrg(org);
+            await checkOrgAnalysis(org.id);
+            toast.add({ severity: 'info', summary: 'Analysis Starting', detail: `Starting analysis for ${org.name}…`, life: 4000 });
+            doAnalysis();
+        }
+    } else if (orgStore.selectedOrg) {
         await checkOrgAnalysis(orgStore.selectedOrg.id);
     }
 });
@@ -190,6 +192,24 @@ async function checkOrgAnalysis(orgId) {
 
 async function doAnalysis() {
     analyzingOrgId.value = selectedOrg.value.id;
+    try {
+        const response = await axiosInstance.post('/api', {
+            orgId: selectedOrg.value.id,
+            includeCustomOnly: false,
+        }, {
+            headers: { action: 'analyze-org' },
+        });
+        if (response.data.success) {
+            toast.add({ severity: 'success', summary: 'Analysis Completed', life: 4000 });
+            await checkOrgAnalysis(selectedOrg.value.id);
+        } else {
+            toast.add({ severity: 'error', summary: 'Error', detail: response.data.message || 'Analysis failed.', life: 4000 });
+        }
+    } catch (error) {
+        toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message || error.message || 'Failed to analyze org.', life: 4000 });
+    } finally {
+        analyzingOrgId.value = null;
+    }
     /* todo
     try {
         // start analysis asynchronously on server
@@ -239,98 +259,9 @@ async function doAnalysis() {
         analyzingOrgId.value = null;
     }
     */
-    try {
-        const response = await axiosInstance.post('/api', {
-            orgId: selectedOrg.value.id,
-            includeCustomOnly: false,
-        }, {
-            headers: { action: 'analyze-org' },
-        });
-        if (response.data.success) {
-            toast.add({ severity: 'success', summary: 'Analysis Complete', detail: `Analyzed ${response.data.data.objectsAnalyzed} objects.`, life: 4000 });
-            await checkOrgAnalysis(selectedOrg.value.id);
-        } else {
-            toast.add({ severity: 'error', summary: 'Error', detail: response.data.message || 'Analysis failed.', life: 4000 });
-        }
-    } catch (error) {
-        toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message || error.message || 'Failed to analyze org.', life: 4000 });
-    } finally {
-        analyzingOrgId.value = null;
-    }
 }
 
 function onAnalyzeOrg() {
-    const _doAnalysis = async () => {
-        analyzingOrgId.value = selectedOrg.value.id;
-        /* todo
-        try {
-            // start analysis asynchronously on server
-            const response = await axiosInstance.post('/api', {
-                orgId: selectedOrg.value.id,
-                options: { includeCustomOnly: false },
-            }, {
-                headers: { action: 'start-analysis' },
-            });
-
-            if (response.data.success) {
-                // Poll for latest analysis and refresh objects when complete
-                const analysisPolling = setInterval(async () => {
-                    try {
-                        const latest = await axiosInstance.get('/api/analysis', {
-                            headers: { action: 'get-latest-analysis', orgid: selectedOrg.value.id }
-                        });
-                        if (latest.data.success && latest.data.data) {
-                            const status = latest.data.data.status;
-                            if (status === 'in_progress' || status === 'pending') {
-                                loadingObjects.value = true;
-                            }
-                            if (status === 'completed') {
-                                clearInterval(analysisPolling);
-                                loadingObjects.value = false;
-                                analyzingOrgId.value = null;
-                                toast.add({ severity: 'success', summary: 'Analysis Complete', detail: `Analysis for ${selectedOrg.value.name} is complete.`, life: 4000 });
-                                await checkOrgAnalysis(selectedOrg.value.id);
-                            }
-                            if (status === 'failed') {
-                                clearInterval(analysisPolling);
-                                loadingObjects.value = false;
-                                analyzingOrgId.value = null;
-                                toast.add({ severity: 'error', summary: 'Analysis Failed', detail: `Analysis for ${selectedOrg.value.name} failed.`, life: 6000 });
-                            }
-                        }
-                    } catch (err) {
-                        console.error(err);
-                    }
-                }, 3000);
-            } else {
-                toast.add({ severity: 'error', summary: 'Error', detail: response.data.message || 'Failed to start analysis.', life: 4000 });
-                analyzingOrgId.value = null;
-            }
-        } catch (error) {
-            toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message || error.message || 'Failed to start analysis.', life: 4000 });
-            analyzingOrgId.value = null;
-        }
-        */
-        try {
-            const response = await axiosInstance.post('/api', {
-                orgId: selectedOrg.value.id,
-                includeCustomOnly: false,
-            }, {
-                headers: { action: 'analyze-org' },
-            });
-            if (response.data.success) {
-                toast.add({ severity: 'success', summary: 'Analysis Complete', detail: `Analyzed ${response.data.data.objectsAnalyzed} objects.`, life: 4000 });
-                await checkOrgAnalysis(selectedOrg.value.id);
-            } else {
-                toast.add({ severity: 'error', summary: 'Error', detail: response.data.message || 'Analysis failed.', life: 4000 });
-            }
-        } catch (error) {
-            toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message || error.message || 'Failed to analyze org.', life: 4000 });
-        } finally {
-            analyzingOrgId.value = null;
-        }
-    };
-
     if (hasAnalysis.value) {
         confirm.require({
             message: 'Starting a new analysis will take a while to complete and all metadata previously retrieved from Salesforce for this org will be lost. Continue?',
@@ -338,11 +269,11 @@ function onAnalyzeOrg() {
             icon: 'pi pi-exclamation-triangle',
             acceptLabel: 'Continue',
             rejectLabel: 'Cancel',
-            accept: _doAnalysis,
+            accept: doAnalysis,
         });
         return;
     }
-    _doAnalysis();
+    doAnalysis();
 }
 
 function onSelectObject(obj) {

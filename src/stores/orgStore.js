@@ -36,13 +36,6 @@ export const useOrgStore = defineStore('orgs', {
             this.selectedOrg = org;
         },
 
-        findAndSetOrgAndProject(org) {
-            const o = this.orgs.find(o => o.id === org);
-            const p = this.projects.find(p => p.id === o.projectId);
-            this.setSelectedProject(project);
-            this.setSelectedOrg(org);
-        },
-
         closeEditOrgDialog() {
             this.showEditOrgDialog = false;
         },

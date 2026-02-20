@@ -21,50 +21,52 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
 
     try {
         const objects = await sfService.describeGlobal(sfOrgId, filters = {});
-        log.info('Retrieved global objects from Salesforce', { count: objects.length });
+        log.debug('Retrieved global object describes', { orgId: sfOrgId, "objects count": objects.length });
 
         // user filters
-        const objectsFilteredByUserPrefs = objectsToAnalyze
+        let objectsToProcess = objectsToAnalyze
             ? objects.filter(obj => objectsToAnalyze.includes(obj.objectName))
             : objects;
-        log.info('Object filters applied (user preferences). New count is ', { count: objectsFilteredByUserPrefs.length });
+        log.debug('Object filters applied.', { type: 'user filter', "new objects count": objectsToProcess.length });
 
-        // hardcoded filters applied on top of user preferences - hardcoded list
-        let objectsToProcess = objectsFilteredByUserPrefs
+        // hardcoded filters
+        objectsToProcess = objectsToProcess
             .filter(obj => !standardObjectFilters.hardcodedList.includes(obj.objectName));
-        log.info('Object filters applied (hardcoded list). New count is ', { count: objectsToProcess.length });
+        log.debug('Object filters applied.', { type: 'hardcoded', "new objects count": objectsToProcess.length });
 
-        // hardcoded filters applied on top of user preferences - patterns
+        // pattern filters
         objectsToProcess = objectsToProcess
             .filter(obj => !standardObjectFilters.patternList.some(pattern => pattern.test(obj.objectName)));
-        log.info('Object filters applied (pattern list). New count is ', { count: objectsToProcess.length });
-
-        // for logging only
-        const savedObjects = [];
-        let totalFields = 0;
+        log.debug('Object filters applied.', { type: 'patterns', "new objects count": objectsToProcess.length });
 
         // delegate to salesforce service, where Composite API will speed up requests.
         const sobjectDescribes = await sfService.describeObjectMultiple(
             sfOrgId,
             objectsToProcess.map(obj => obj.objectName)
         );
-        log.toFile('describeObjects', sobjectDescribes);
+        log.toFile('sobjectDescribes', sobjectDescribes);
 
-        for (const sobjDescribe of sobjectDescribes) {
-            const savedObj = await saveObjectMetadata(sfOrgId, sobjDescribe);
-            savedObjects.push(savedObj);
-            totalFields += sobjDescribe?.fields?.length ?? 0;
-        }
-        log.toFile('describeObject', JSON.stringify(savedObjects, null, 2));
-
+        // write both objects & fields to db
+        const savedObjects = await metadataRepo.bulkUpsertObjects(sfOrgId, sobjectDescribes);
+        const objectIdMap = new Map(savedObjects.map(obj => [obj.objectName, obj.id]));
+        const fields = sobjectDescribes.flatMap(describe =>
+            describe.fields.map(field => ({
+                ...field,
+                objectMetadataId: objectIdMap.get(describe.objectName),
+            }))
+        );
+        await metadataRepo.bulkUpsertFields(fields);
+        log.debug('Describes completed. Results written to database', {
+            sfOrgId,
+            describedObjects: sobjectDescribes.length,
+            describedFields: fields.length,
+        });
+        log.toFile('sobjectDescribes_savedObjects', savedObjects);
         return {
-            success: true,
-            objectsAnalyzed: savedObjects.length,
-            totalFields,
-            objects: savedObjects,
-        };
+            objectsAnalyzed: sobjectDescribes.length
+        }
     } catch (error) {
-        log.error('Error while issuing describe calls.', error, { sfOrgId: sfOrgId });
+        error.sfOrgId = sfOrgId;
         throw error;
     }
 }

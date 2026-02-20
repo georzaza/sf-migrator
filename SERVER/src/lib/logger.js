@@ -104,7 +104,6 @@ function formatLine(level, caller, message, meta) {
 
     // Add metadata if present, formatted with indentation for readability
     if (meta && Object.keys(meta).length > 0) {
-        output += '\n  Metadata:';
 
         // Handle error separately for better formatting
         if (meta.error) {
@@ -181,12 +180,12 @@ function create(callerName) {
         },
 
         // writes log to ../../logs/YYYYMMDD, will be handy for debugging sf svc.
-        toFile(message, meta = undefined) {
+        toFile(name, data = undefined) {
             const ts = getTimestamp();
             const ctx = getRequestContext();
             const sanitizedTs = ts.replace(/:/g, '-');
             const dateStr = ts.substring(0, 10).replace(/-/g, '');
-            const filename = `${sanitizedTs}_${callerName}_${ctx.action}_${ctx.orgId}_${ctx.requestId}.log`;
+            const filename = `${sanitizedTs}_${callerName}_${ctx.action}_${ctx.orgId}_${ctx.requestId}_${name}.log`;
             const logDir = path.join(__dirname, '../../logs', dateStr);
             const logPath = path.join(logDir, filename);
 
@@ -195,10 +194,15 @@ function create(callerName) {
                 fs.mkdirSync(logDir, { recursive: true });
             }
 
-            const formatted = formatLine(LOG_LEVEL_TODISK, callerName, message, meta);
-            fs.appendFileSync(logPath, formatted);
-            // Log that the file was written
-            this.info(`Log created: ${filename}`, { logPath, dateFolder: dateStr });
+            let content;
+            if (data !== undefined && data !== null && (Array.isArray(data) || typeof data === 'object')) {
+                content = JSON.stringify(data, null, 2);
+            } else {
+                content = data;
+            }
+
+            fs.appendFileSync(logPath, content);
+            this.info(`Log created: ${filename}`);
         },
     };
 }

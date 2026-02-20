@@ -1,6 +1,6 @@
 'use strict';
 
-const realOrgs = require('../tests/fixtures/realOrgs');
+const realOrgs = require('./realOrgs')
 
 /** @type {import('sequelize-cli').Migration} */
 /** Creates real Salesforce orgs for testing - same orgs in all environments */

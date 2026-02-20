@@ -101,6 +101,41 @@ async function deleteObjectsByOrgId(sfOrgId) {
     return deletedCount;
 }
 
+async function bulkUpsertObjects(sfOrgId, objectDataArray) {
+    if (!objectDataArray.length) return [];
+    const now = new Date();
+    const rows = objectDataArray.map(obj => ({
+        sfOrgId,
+        objectName: obj.objectName,
+        objectLabel: obj.objectLabel,
+        isCustom: obj.isCustom,
+        recordCount: obj.recordCount,
+        lastAnalyzed: now,
+    }));
+    return SfObjectMetadata.bulkCreate(rows, {
+        updateOnDuplicate: ['objectLabel', 'isCustom', 'recordCount', 'lastAnalyzed', 'updatedAt'],
+        conflictAttributes: ['sfOrgId', 'objectName'],
+    });
+}
+
+async function bulkUpsertFields(fieldsArray) {
+    if (!fieldsArray.length) return [];
+    const rows = fieldsArray.map(f => ({
+        objectMetadataId: f.objectMetadataId,
+        fieldName: f.fieldName,
+        fieldLabel: f.fieldLabel,
+        dataType: f.dataType,
+        length: f.length ?? null,
+        isRequired: f.isRequired,
+        isCustom: f.isCustom,
+        picklistValues: f.picklistValues ?? null,
+    }));
+    return SfFieldMetadata.bulkCreate(rows, {
+        updateOnDuplicate: ['fieldLabel', 'dataType', 'length', 'isRequired', 'isCustom', 'picklistValues', 'updatedAt'],
+        conflictAttributes: ['objectMetadataId', 'fieldName'],
+    });
+}
+
 async function getStats(sfOrgId) {
     const objects = await SfObjectMetadata.findAll({
         where: { sfOrgId },
@@ -132,5 +167,7 @@ module.exports = {
     findObjectsByOrgId,
     findFieldsByObjectId,
     deleteObjectsByOrgId,
+    bulkUpsertObjects,
+    bulkUpsertFields,
     getStats,
 };

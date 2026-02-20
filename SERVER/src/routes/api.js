@@ -28,7 +28,7 @@ const log = logger.create('api');
 
 router.get('/', authMiddleware, async (req, res) => {
     const action = req.get('action')?.toLowerCase();
-    log.info(`Received GET request with action: ${action}`);
+    log.info(`Received /api GET request with action: ${action}`);
     if (action === 'get-projects') {
         try {
             const projects = await projectRepo.findByUserId(req.user.id);
@@ -153,7 +153,6 @@ router.post('/', authMiddleware, async (req, res) => {
         log.info('Starting org analysis', { orgId });
         try {
             const result = await mdtService.analyzeAndSaveOrg(orgId, options);
-            log.info('Org analysis completed', { orgId, objectsAnalyzed: result.objectsAnalyzed });
             sendResponse(res, 200, true, 'Org analysis completed successfully', result);
         } catch (error) {
             if (error.name === 'OAuthRequiredError') {

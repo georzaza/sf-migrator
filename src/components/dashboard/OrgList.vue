@@ -12,6 +12,7 @@
  *   add-org - When "Add Org" button is clicked
  *   edit-org - When edit button is clicked for an org
  *   delete-org - When delete button is clicked for an org
+ *   open-org - When SF icon is clicked for an org
  */
 
 const props = defineProps({
@@ -25,7 +26,7 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['select-org', 'add-org', 'edit-org', 'delete-org']);
+const emit = defineEmits(['select-org', 'add-org', 'edit-org', 'delete-org', 'open-org']);
 
 function isSelected(org) {
     return props.selectedOrg?.id === org.id;
@@ -81,6 +82,14 @@ function isSelected(org) {
                         rounded
                         @click.stop="emit('delete-org', org)"
                         v-tooltip.top="'Delete Org'"
+                    />
+                    <Button
+                        icon = "pi pi-arrow-up-right"
+                        size="small"
+                        text
+                        rounded
+                        @click.stop="emit('open-org', org)"
+                        v-tooltip.top="'Open Org'"
                     />
                 </div>
             </div>

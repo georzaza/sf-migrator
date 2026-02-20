@@ -47,7 +47,7 @@ const filteredObjects = computed(() => {
     let result = props.objects;
 
     if (showCustomOnly.value) {
-        result = result.filter(obj => obj.isCustom);
+        result = result.filter(obj => obj.custom);
     }
 
     return result;
@@ -90,19 +90,19 @@ function onObjectSelect(event) {
                 <Dropdown
                     v-model="selected"
                     :options="dropdownOptions"
-                    optionLabel="objectLabel"
+                    optionLabel="label"
                     :filter="true"
-                    :filterFields="['objectName', 'objectLabel']"
+                    :filterFields="['name', 'label']"
                     placeholder="Select an object..."
                     class="object-dropdown"
                     @change="onObjectSelect"
                 >
                     <template #item="slotProps">
                         <div class="object-dropdown-item">
-                            <span class="object-item-label">{{ slotProps.item.objectLabel }}</span>
-                            <span class="object-item-api">({{ slotProps.item.objectName }})</span>
+                            <span class="object-item-label">{{ slotProps.item.label }}</span>
+                            <span class="object-item-api">({{ slotProps.item.name }})</span>
                             <Tag
-                                v-if="slotProps.item.isCustom"
+                                v-if="slotProps.item.custom"
                                 value="Custom"
                                 severity="info"
                                 class="object-tag"

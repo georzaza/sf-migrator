@@ -2,6 +2,18 @@
 
 module.exports = {
     up: async (queryInterface, Sequelize) => {
+        await queryInterface.sequelize.query(`
+            DO $$ BEGIN
+                CREATE TYPE "enum_SfOrgs_connectionType" AS ENUM ('OAuth');
+            EXCEPTION WHEN duplicate_object THEN null;
+            END $$;
+        `);
+        await queryInterface.sequelize.query(`
+            DO $$ BEGIN
+                CREATE TYPE "enum_SfOrgs_analysisStatus" AS ENUM ('idle', 'running', 'complete', 'failed', 'auth_required');
+            EXCEPTION WHEN duplicate_object THEN null;
+            END $$;
+        `);
         await queryInterface.createTable('SfOrgs', {
             id: {
                 allowNull: false,
@@ -22,21 +34,9 @@ module.exports = {
                 allowNull: false
             },
             connectionType: {
-                type: Sequelize.ENUM('OAuth', 'Credentials'),
+                type: Sequelize.ENUM('OAuth'),
                 allowNull: false,
-                defaultValue: 'Credentials'
-            },
-            username: {
-                type: Sequelize.STRING,
-                allowNull: true
-            },
-            password: {
-                type: Sequelize.STRING,
-                allowNull: true
-            },
-            securityToken: {
-                type: Sequelize.STRING,
-                allowNull: true
+                defaultValue: 'OAuth'
             },
             clientId: {
                 type: Sequelize.STRING,
@@ -56,6 +56,15 @@ module.exports = {
                 onUpdate: 'CASCADE',
                 onDelete: 'CASCADE'
             },
+            analysisStatus: {
+                type: Sequelize.ENUM('idle', 'running', 'complete', 'failed', 'auth_required'),
+                allowNull: false,
+                defaultValue: 'idle'
+            },
+            analysisStartedAt: {
+                type: Sequelize.DATE,
+                allowNull: true
+            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE
@@ -69,5 +78,7 @@ module.exports = {
 
     down: async (queryInterface, Sequelize) => {
         await queryInterface.dropTable('SfOrgs');
+        await queryInterface.sequelize.query(`DROP TYPE IF EXISTS "enum_SfOrgs_connectionType";`);
+        await queryInterface.sequelize.query(`DROP TYPE IF EXISTS "enum_SfOrgs_analysisStatus";`);
     }
 };

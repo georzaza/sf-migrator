@@ -3,6 +3,12 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
     async up(queryInterface, Sequelize) {
+        await queryInterface.sequelize.query(`
+            DO $$ BEGIN
+                CREATE TYPE "enum_MigrationJobs_status" AS ENUM ('pending', 'running', 'completed', 'failed', 'cancelled');
+            EXCEPTION WHEN duplicate_object THEN null;
+            END $$;
+        `);
         await queryInterface.createTable('MigrationJobs', {
             id: {
                 type: Sequelize.UUID,

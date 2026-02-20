@@ -1,6 +1,6 @@
 'use strict';
 
-const realOrgs = require('../tests/fixtures/realOrgs');
+const realOrgs = require('./realOrgs/realOrgs')
 
 /** @type {import('sequelize-cli').Migration} */
 /** Creates real Salesforce orgs for testing - same orgs in all environments */
@@ -31,10 +31,7 @@ module.exports = {
                 name: formulasOrg.name,
                 description: formulasOrg.description,
                 loginURL: formulasOrg.loginURL,
-                connectionType: formulasOrg.connectionType,
-                username: formulasOrg.username,
-                password: formulasOrg.password,
-                securityToken: formulasOrg.securityToken,
+                connectionType: 'OAuth',
                 clientId: formulasOrg.clientId || null,
                 clientSecret: formulasOrg.clientSecret || null,
                 projectId: project.id,
@@ -51,10 +48,7 @@ module.exports = {
                 name: apexOrg.name,
                 description: apexOrg.description,
                 loginURL: apexOrg.loginURL,
-                connectionType: apexOrg.connectionType,
-                username: apexOrg.username,
-                password: apexOrg.password,
-                securityToken: apexOrg.securityToken,
+                connectionType: 'OAuth',
                 clientId: apexOrg.clientId || null,
                 clientSecret: apexOrg.clientSecret || null,
                 projectId: project.id,

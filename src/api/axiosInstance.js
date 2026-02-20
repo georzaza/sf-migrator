@@ -35,7 +35,7 @@ axiosInstance.interceptors.request.use(
     }
 );
 
-// Response interceptor - log with request ID correlation
+// Response interceptor
 axiosInstance.interceptors.response.use(
     (response) => {
         const requestId = response.config.headers?.['X-Request-ID'] || response.data?.requestId;
@@ -45,6 +45,19 @@ axiosInstance.interceptors.response.use(
                 success: response.data?.success,
             });
         }
+
+        // Server signals that a Salesforce OAuth2 browser flow is required.
+        // Extract sfOrgId from authUrl and add it to returnTo so the
+        // frontend can auto-trigger the analysis after OAuth completes
+        if (response.status === 401 && response.data?.authUrl) {
+            const sfOrgId = new URLSearchParams(response.data.authUrl.split('?')[1]).get('sfOrgId');
+            const returnTo = new URL(window.location.href);
+            if (sfOrgId)
+                returnTo.searchParams.set('autoAnalyzeOrgId', sfOrgId);
+            window.location.href = `${import.meta.env.VITE_API_URL}${response.data.authUrl}&returnTo=${encodeURIComponent(returnTo.toString())}`;
+            return new Promise(() => {}); // suspend — browser is navigating away
+        }
+
         return response;
     },
     (error) => {

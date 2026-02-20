@@ -3,6 +3,12 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
     async up(queryInterface, Sequelize) {
+        await queryInterface.sequelize.query(`
+            DO $$ BEGIN
+                CREATE TYPE "enum_FieldMappings_transformType" AS ENUM ('as-is', 'expression', 'constant');
+            EXCEPTION WHEN duplicate_object THEN null;
+            END $$;
+        `);
         await queryInterface.createTable('FieldMappings', {
             id: {
                 type: Sequelize.UUID,

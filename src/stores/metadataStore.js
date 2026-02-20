@@ -86,22 +86,22 @@ export const useMetadataStore = defineStore('metadata', {
          * Get source objects filtered by type
          */
         sourceCustomObjects: (state) => {
-            return state.sourceObjects.filter(obj => obj.isCustom);
+            return state.sourceObjects.filter(obj => obj.custom);
         },
 
         sourceStandardObjects: (state) => {
-            return state.sourceObjects.filter(obj => !obj.isCustom);
+            return state.sourceObjects.filter(obj => !obj.custom);
         },
 
         /**
          * Get target objects filtered by type
          */
         targetCustomObjects: (state) => {
-            return state.targetObjects.filter(obj => obj.isCustom);
+            return state.targetObjects.filter(obj => obj.custom);
         },
 
         targetStandardObjects: (state) => {
-            return state.targetObjects.filter(obj => !obj.isCustom);
+            return state.targetObjects.filter(obj => !obj.custom);
         },
     },
 
@@ -174,7 +174,7 @@ export const useMetadataStore = defineStore('metadata', {
             this.sourceError = null;
 
             try {
-                const response = await axiosInstance.post('/',
+                const response = await axiosInstance.post('/api',
                     {
                         orgId: this.sourceOrg.id,
                         includeCustomOnly: typeof options.includeCustomOnly === 'boolean' && options.includeCustomOnly,
@@ -213,7 +213,7 @@ export const useMetadataStore = defineStore('metadata', {
             this.targetError = null;
 
             try {
-                const response = await axiosInstance.post('/',
+                const response = await axiosInstance.post('/api',
                     {
                         orgId: this.targetOrg.id,
                         includeCustomOnly: typeof options.includeCustomOnly === 'boolean' && options.includeCustomOnly,
@@ -257,7 +257,7 @@ export const useMetadataStore = defineStore('metadata', {
             this.sourceError = null;
 
             try {
-                const response = await axiosInstance.get('/', {
+                const response = await axiosInstance.get('/api', {
                     headers: {
                         action: 'get-objects',
                         orgid: this.sourceOrg.id
@@ -292,7 +292,7 @@ export const useMetadataStore = defineStore('metadata', {
             this.targetError = null;
 
             try {
-                const response = await axiosInstance.get('/', {
+                const response = await axiosInstance.get('/api', {
                     headers: {
                         action: 'get-objects',
                         orgid: this.targetOrg.id
@@ -322,7 +322,7 @@ export const useMetadataStore = defineStore('metadata', {
             this.loadingSourceFields = true;
 
             try {
-                const response = await axiosInstance.get('/', {
+                const response = await axiosInstance.get('/api', {
                     headers: {
                         action: 'get-fields',
                         objectid: objectId
@@ -350,7 +350,7 @@ export const useMetadataStore = defineStore('metadata', {
             this.loadingTargetFields = true;
 
             try {
-                const response = await axiosInstance.get('/', {
+                const response = await axiosInstance.get('/api', {
                     headers: {
                         action: 'get-fields',
                         objectid: objectId
@@ -380,7 +380,7 @@ export const useMetadataStore = defineStore('metadata', {
             }
 
             try {
-                const response = await axiosInstance.get('/', {
+                const response = await axiosInstance.get('/api', {
                     headers: {
                         action: 'get-metadata-stats',
                         orgid: this.sourceOrg.id
@@ -408,7 +408,7 @@ export const useMetadataStore = defineStore('metadata', {
             }
 
             try {
-                const response = await axiosInstance.get('/', {
+                const response = await axiosInstance.get('/api', {
                     headers: {
                         action: 'get-metadata-stats',
                         orgid: this.targetOrg.id
@@ -436,7 +436,7 @@ export const useMetadataStore = defineStore('metadata', {
             }
 
             try {
-                const response = await axiosInstance.post('/',
+                const response = await axiosInstance.post('/api',
                     { orgId: this.sourceOrg.id },
                     { headers: { action: 'test-sf-connection' } }
                 );
@@ -461,7 +461,7 @@ export const useMetadataStore = defineStore('metadata', {
             }
 
             try {
-                const response = await axiosInstance.post('/',
+                const response = await axiosInstance.post('/api',
                     { orgId: this.targetOrg.id },
                     { headers: { action: 'test-sf-connection' } }
                 );

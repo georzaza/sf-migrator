@@ -12,18 +12,33 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.UUID,
             allowNull: false
         },
-        objectName: {
-            type: DataTypes.STRING,
+        name: {
+            type: DataTypes.STRING(255),
             allowNull: false
         },
-        objectLabel: {
-            type: DataTypes.STRING,
+        label: {
+            type: DataTypes.STRING(63),
             allowNull: false
         },
-        isCustom: {
+        labelPlural: {
+            type: DataTypes.STRING(63),
+            allowNull: true
+        },
+        custom: {
             type: DataTypes.BOOLEAN,
-            allowNull: false,
-            defaultValue: false
+            allowNull: true
+        },
+        customSetting: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        keyPrefix: {
+            type: DataTypes.STRING(3),
+            allowNull: true
+        },
+        recordTypeInfos: {
+            type: DataTypes.JSON,
+            allowNull: true
         },
         recordCount: {
             type: DataTypes.INTEGER,

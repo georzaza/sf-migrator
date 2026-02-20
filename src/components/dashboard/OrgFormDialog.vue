@@ -39,10 +39,6 @@ const defaultForm = () => ({
     name: '',
     description: '',
     loginURL: '',
-    connectionType: 'OAuth',
-    username: '',
-    password: '',
-    securityToken: '',
     clientId: '',
     clientSecret: '',
 });
@@ -60,10 +56,6 @@ watch(() => props.visible, (val) => {
                 name: props.org.name || '',
                 description: props.org.description || '',
                 loginURL: props.org.loginURL || '',
-                connectionType: 'OAuth',
-                username: '',
-                password: '',
-                securityToken: '',
                 clientId: '',
                 clientSecret: '',
             };
@@ -86,7 +78,7 @@ async function onSave() {
             // Update existing org
             const payload = { ...form.value };
             // Strip empty credential fields so we don't overwrite with blanks
-            ['clientId', 'clientSecret', 'password', 'username', 'securityToken']
+            ['clientId', 'clientSecret']
                 .forEach(key => {
                     if (!payload[key]) delete payload[key];
                 });
@@ -156,49 +148,6 @@ async function onSave() {
                 <div class="field-row">
                     <label for="org-loginURL">Instance URL *</label>
                     <InputText id="org-loginURL" v-model="form.loginURL" required placeholder="https://your-org.my.salesforce.com" />
-                </div>
-
-                <div class="field-row">
-                    <label for="org-connectionType">Connection Type</label>
-                    <InputText id="org-connectionType" v-model="form.connectionType" disabled />
-                </div>
-
-                <div class="field-row">
-                    <label for="org-username">Username {{ isEditMode ? '' : '*' }}</label>
-                    <InputText
-                        id="org-username"
-                        v-model="form.username"
-                        :placeholder="isEditMode ? 'Leave blank to keep current' : 'user@company.com'"
-                        :required="!isEditMode"
-                    />
-                    <small class="field-help">Full email format (e.g., user@company-dev-ed.my.salesforce.com)</small>
-                </div>
-
-                <div class="field-row">
-                    <label for="org-password">Password {{ isEditMode ? '' : '*' }}</label>
-                    <Password
-                        id="org-password"
-                        v-model="form.password"
-                        :placeholder="isEditMode ? 'Leave blank to keep current' : 'Password'"
-                        :toggleMask="true"
-                        :required="!isEditMode"
-                        fluid
-                        :feedback="false"
-                    />
-                </div>
-
-                <div class="field-row">
-                    <label for="org-securityToken">Security Token {{ isEditMode ? '' : '*' }}</label>
-                    <Password
-                        id="org-securityToken"
-                        v-model="form.securityToken"
-                        :placeholder="isEditMode ? 'Leave blank to keep current' : 'Security Token'"
-                        :toggleMask="true"
-                        :required="!isEditMode"
-                        fluid
-                        :feedback="false"
-                    />
-                    <small class="field-help">Setup → My Personal Information → Reset Security Token</small>
                 </div>
 
                 <div class="field-row">

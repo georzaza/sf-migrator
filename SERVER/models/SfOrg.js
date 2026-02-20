@@ -20,18 +20,9 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
         },
         connectionType: {
-            type: DataTypes.ENUM('OAuth', 'Credentials'),
+            type: DataTypes.ENUM('OAuth'),
             allowNull: false,
             defaultValue: 'OAuth',
-        },
-        username: {
-            type: DataTypes.STRING,
-        },
-        password: {
-            type: DataTypes.STRING,
-        },
-        securityToken: {
-            type: DataTypes.STRING,
         },
         clientId: {
             type: DataTypes.STRING,
@@ -47,26 +38,15 @@ module.exports = (sequelize, DataTypes) => {
                 key: 'id',
             }
         },
-    }, {
-        validate: {
-            connectionTypeCheck() {
-                // Only enforce full credential validation on creation
-                // Updates can be partial (frontend strips empty fields)
-                if (this.isNewRecord) {
-                    if (this.connectionType === 'OAuth') {
-                        // OAuth requires all 5 credential fields
-                        if (!this.username || !this.password || !this.securityToken || !this.clientId || !this.clientSecret) {
-                            throw new Error('Username, Password, Security Token, Client ID, and Client Secret are all required for OAuth connection type.');
-                        }
-                    }
-                    if (this.connectionType === 'Credentials') {
-                        if (!this.username || !this.password || !this.securityToken) {
-                            throw new Error('Username, Password and Security Token are required for Credentials connection type.');
-                        }
-                    }
-                }
-            },
-        }
+        analysisStatus: {
+            type: DataTypes.ENUM('idle', 'running', 'complete', 'failed', 'auth_required'),
+            allowNull: false,
+            defaultValue: 'idle',
+        },
+        analysisStartedAt: {
+            type: DataTypes.DATE,
+            allowNull: true,
+        },
     });
 
     SfOrg.associate = function(models) {

@@ -98,6 +98,9 @@ router.get('/oauth2/callback', async (req, res) => {
         connectionPool.set(sfOrgId, conn);
         oauth2Map.delete(sfOrgId);
 
+        // Reset analysis status so the org doesn't stay in 'auth_required' after successful OAuth
+        await orgRepo.updateAnalysisStatus(sfOrgId, 'idle').catch(() => {});
+
         log.info('OAuth2 authorized', { sfOrgId, userId: userInfo.id, organizationId: userInfo.organizationId });
 
         const redirectTo = returnTo || (process.env.FRONTEND_URL || 'http://localhost:5173');

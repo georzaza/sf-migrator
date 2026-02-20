@@ -50,6 +50,16 @@ async function remove(id) {
     log.info('Salesforce Org deleted', { orgId: id });
 }
 
+async function updateAnalysisStatus(id, status) {
+    const sfOrg = await SfOrg.findByPk(id);
+    if (!sfOrg) throw new Error('Salesforce Org not found');
+    const fields = { analysisStatus: status };
+    if (status === 'running') fields.analysisStartedAt = new Date();
+    await sfOrg.update(fields);
+    log.info('Analysis status updated', { orgId: id, status });
+    return sfOrg;
+}
+
 module.exports = {
     findById,
     findByProjectId,
@@ -58,4 +68,5 @@ module.exports = {
     update,
     findAll,
     delete: remove,
+    updateAnalysisStatus,
 };

@@ -42,13 +42,9 @@ router.get('/', authMiddleware, async (req, res) => {
     else if (action === 'get-orgs') {
         try {
             const sfOrgs = await orgRepo.findByUserId(req.user.id);
-            sfOrgs.map(org => {
-                org.username = '*'.repeat(10);
-                org.password = '*'.repeat(10);
-                org.securityToken = '*'.repeat(10);
-                org.clientId = '*'.repeat(10);
-                org.clientSecret = '*'.repeat(10);
-                return org;
+            sfOrgs.forEach(org => {
+                org.clientId = org.clientId ? '*'.repeat(10) : null;
+                org.clientSecret = org.clientSecret ? '*'.repeat(10) : null;
             });
             sendResponse(res, 200, true, 'Salesforce Orgs retrieved successfully', sfOrgs);
         } catch (error) {
@@ -69,6 +65,28 @@ router.get('/', authMiddleware, async (req, res) => {
         } catch (error) {
             log.error('Failed to retrieve objects', error, { orgId });
             sendResponse(res, 500, false, `Failed to retrieve objects.`);
+        }
+    }
+
+    else if (action === 'get-org-status') {
+        const orgId = req.headers.orgid;
+        if (!orgId) {
+            return sendResponse(res, 400, false, 'Org ID is required');
+        }
+        try {
+            const sfOrg = await orgRepo.findById(orgId);
+            if (!sfOrg) return sendResponse(res, 404, false, 'Org not found');
+            const data = {
+                analysisStatus: sfOrg.analysisStatus,
+                analysisStartedAt: sfOrg.analysisStartedAt,
+            };
+            if (sfOrg.analysisStatus === 'auth_required') {
+                data.authUrl = `/oauth2/auth?sfOrgId=${orgId}`;
+            }
+            sendResponse(res, 200, true, 'Org status retrieved', data);
+        } catch (error) {
+            log.error('Failed to retrieve org status', error, { orgId });
+            sendResponse(res, 500, false, 'Failed to retrieve org status');
         }
     }
 
@@ -150,17 +168,35 @@ router.post('/', authMiddleware, async (req, res) => {
         if (!orgId) {
             return sendResponse(res, 400, false, 'No org provided.');
         }
-        log.info('Starting org analysis', { orgId });
+        log.info('Queueing org analysis', { orgId });
         try {
-            const result = await mdtService.analyzeAndSaveOrg(orgId, options);
-            sendResponse(res, 200, true, 'Org analysis completed successfully', result);
+            // Verify OAuth connection exists BEFORE going async — so we can return 401 synchronously
+            await sfService.connectToOrg(orgId);
+
+            await orgRepo.updateAnalysisStatus(orgId, 'running');
+            sendResponse(res, 202, true, 'Analysis started', { analysisStatus: 'running' });
+
+            mdtService.analyzeAndSaveOrg(orgId, options)
+                .then(async () => {
+                    await orgRepo.updateAnalysisStatus(orgId, 'complete');
+                    log.info('Org analysis completed', { orgId });
+                })
+                .catch(async (error) => {
+                    if (error.name === 'OAuthRequiredError') {
+                        // Connection expired mid-analysis
+                        log.warn('OAuth connection expired during analysis', { orgId });
+                        await orgRepo.updateAnalysisStatus(orgId, 'auth_required').catch(() => {});
+                    } else {
+                        log.error('Org analysis failed (background)', error, { orgId });
+                        await orgRepo.updateAnalysisStatus(orgId, 'failed').catch(() => {});
+                    }
+                });
         } catch (error) {
             if (error.name === 'OAuthRequiredError') {
-                // Tell the frontend to initiate the OAuth2 browser flow for this org
                 return res.status(401).json({ authUrl: error.authUrl });
             }
-            log.error('Error during analysis', error, {orgId: orgId, options: options});
-            sendResponse(res, 500, false, 'Failed to analyze org');
+            log.error('Failed to queue org analysis', error, { orgId });
+            sendResponse(res, 500, false, 'Failed to queue analysis');
         }
     }
 /* todo

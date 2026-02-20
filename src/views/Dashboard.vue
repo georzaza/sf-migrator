@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed, onMounted } from 'vue';
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue';
 import { useOrgStore } from '@/stores/orgStore';
 import { useToast } from 'primevue/usetoast';
 import { useConfirm } from 'primevue/useconfirm';
@@ -55,8 +55,9 @@ onMounted(async () => {
             const project = orgStore.projects.find(p => p.id === org.projectId);
             if (project) orgStore.setSelectedProject(project);
             orgStore.setSelectedOrg(org);
-            await checkOrgAnalysis(org.id);
-            toast.add({ severity: 'info', summary: 'Analysis Starting', detail: `Starting analysis for ${org.name}…`, life: 4000 });
+            // Skip checkOrgAnalysis here — status may still be 'auth_required' from before OAuth,
+            // which would re-redirect in a loop. Just call doAnalysis directly; it will
+            // re-check auth synchronously and start the analysis fresh.
             doAnalysis();
         }
     } else if (orgStore.selectedOrg) {
@@ -64,14 +65,20 @@ onMounted(async () => {
     }
 });
 
+onUnmounted(() => {
+    stopPolling();
+});
+
 // ─── Watchers ───────────────────────────────────────────
 
 // When org selection changes, check for existing analysis
 watch(selectedOrg, async (org) => {
+    stopPolling();
     objects.value = [];
     selectedObject.value = null;
     fields.value = [];
     hasAnalysis.value = false;
+    analyzingOrgId.value = null;
 
     if (org) {
         await checkOrgAnalysis(org.id);
@@ -166,21 +173,81 @@ async function onOrgFormSaved() {
 }
 
 // ─── Analysis & Metadata ────────────────────────────────
+let statusPollTimer = null;
+
+// authUrl from backend is a relative path like /oauth2/auth?sfOrgId=...
+// We must prefix with the backend base URL, not the frontend origin.
+// We also pass returnTo so Salesforce redirects back here with autoAnalyzeOrgId set.
+function oauthRedirect(authUrl, orgId) {
+    const base = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? '';
+    const returnTo = `${window.location.origin}${window.location.pathname}?autoAnalyzeOrgId=${orgId}`;
+    window.location.href = `${base}${authUrl}&returnTo=${encodeURIComponent(returnTo)}`;
+}
+
+function stopPolling() {
+    if (statusPollTimer !== null) {
+        clearInterval(statusPollTimer);
+        statusPollTimer = null;
+    }
+}
+
+function startPolling(orgId) {
+    stopPolling();
+    statusPollTimer = setInterval(async () => {
+        // Stop polling if org has changed
+        if (selectedOrg.value?.id !== orgId) {
+            stopPolling();
+            return;
+        }
+        try {
+            const res = await axiosInstance.get('/api', {
+                headers: { action: 'get-org-status', orgid: orgId },
+            });
+            const status = res.data.data?.analysisStatus;
+            if (status === 'complete') {
+                stopPolling();
+                analyzingOrgId.value = null;
+                await checkOrgAnalysis(orgId);
+            } else if (status === 'failed') {
+                stopPolling();
+                analyzingOrgId.value = null;
+                toast.add({ severity: 'error', summary: 'Analysis Failed', detail: 'Org analysis failed. Please try again.', life: 5000 });
+            } else if (status === 'auth_required') {
+                stopPolling();
+                analyzingOrgId.value = null;
+                oauthRedirect(res.data.data.authUrl, orgId);
+            }
+        } catch (e) {
+            console.error('Status poll error:', e);
+        }
+    }, 3000);
+}
+
 async function checkOrgAnalysis(orgId) {
     checkingAnalysis.value = true;
     try {
-        const response = await axiosInstance.get('/api', {
-            headers: {
-                action: 'get-objects',
-                orgid: orgId,
-            },
+        // Fetch objects
+        const objRes = await axiosInstance.get('/api', {
+            headers: { action: 'get-objects', orgid: orgId },
         });
-        if (response.data.success && response.data.data.length > 0) {
+        if (objRes.data.success && objRes.data.data.length > 0) {
             hasAnalysis.value = true;
-            objects.value = response.data.data;
+            objects.value = objRes.data.data;
         } else {
             hasAnalysis.value = false;
             objects.value = [];
+        }
+
+        // Also check running status
+        const statusRes = await axiosInstance.get('/api', {
+            headers: { action: 'get-org-status', orgid: orgId },
+        });
+        const analysisStatus = statusRes.data.data?.analysisStatus;
+        if (analysisStatus === 'running') {
+            analyzingOrgId.value = orgId;
+            startPolling(orgId);
+        } else if (analysisStatus === 'auth_required') {
+            oauthRedirect(statusRes.data.data.authUrl, orgId);
         }
     } catch {
         hasAnalysis.value = false;
@@ -191,88 +258,32 @@ async function checkOrgAnalysis(orgId) {
 }
 
 async function doAnalysis() {
-    analyzingOrgId.value = selectedOrg.value.id;
+    const orgId = selectedOrg.value.id;
     try {
         const response = await axiosInstance.post('/api', {
-            orgId: selectedOrg.value.id,
+            orgId,
             includeCustomOnly: false,
         }, {
             headers: { action: 'analyze-org' },
         });
-        if (response.data.success) {
-            toast.add({ severity: 'success', summary: 'Analysis Completed', life: 4000 });
-            await checkOrgAnalysis(selectedOrg.value.id);
-        } else {
-            toast.add({ severity: 'error', summary: 'Error', detail: response.data.message || 'Analysis failed.', life: 4000 });
-        }
-    } catch (error) {
-        toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message || error.message || 'Failed to analyze org.', life: 4000 });
-    } finally {
-        analyzingOrgId.value = null;
-    }
-    /* todo
-    try {
-        // start analysis asynchronously on server
-        const response = await axiosInstance.post('/api', {
-            orgId: selectedOrg.value.id,
-            options: { includeCustomOnly: false },
-        }, {
-            headers: { action: 'start-analysis' },
-        });
-
-        if (response.data.success) {
-            // Poll for latest analysis and refresh objects when complete
-            const analysisPolling = setInterval(async () => {
-                try {
-                    const latest = await axiosInstance.get('/api/analysis', {
-                        headers: { action: 'get-latest-analysis', orgid: selectedOrg.value.id }
-                    });
-                    if (latest.data.success && latest.data.data) {
-                        const status = latest.data.data.status;
-                        if (status === 'in_progress' || status === 'pending') {
-                            loadingObjects.value = true;
-                        }
-                        if (status === 'completed') {
-                            clearInterval(analysisPolling);
-                            loadingObjects.value = false;
-                            analyzingOrgId.value = null;
-                            toast.add({ severity: 'success', summary: 'Analysis Complete', detail: `Analysis for ${selectedOrg.value.name} is complete.`, life: 4000 });
-                            await checkOrgAnalysis(selectedOrg.value.id);
-                        }
-                        if (status === 'failed') {
-                            clearInterval(analysisPolling);
-                            loadingObjects.value = false;
-                            analyzingOrgId.value = null;
-                            toast.add({ severity: 'error', summary: 'Analysis Failed', detail: `Analysis for ${selectedOrg.value.name} failed.`, life: 6000 });
-                        }
-                    }
-                } catch (err) {
-                    console.error(err);
-                }
-            }, 3000);
+        if (response.status === 202 && response.data.success) {
+            analyzingOrgId.value = orgId;
+            startPolling(orgId);
+        } else if (response.status === 401 && response.data.authUrl) {
+            oauthRedirect(response.data.authUrl, orgId);
         } else {
             toast.add({ severity: 'error', summary: 'Error', detail: response.data.message || 'Failed to start analysis.', life: 4000 });
-            analyzingOrgId.value = null;
         }
     } catch (error) {
-        toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message || error.message || 'Failed to start analysis.', life: 4000 });
-        analyzingOrgId.value = null;
+        if (error.response?.status === 401 && error.response?.data?.authUrl) {
+            oauthRedirect(error.response.data.authUrl, orgId);
+        } else {
+            toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message || error.message || 'Failed to analyze org.', life: 4000 });
+        }
     }
-    */
 }
 
 function onAnalyzeOrg() {
-    if (hasAnalysis.value) {
-        confirm.require({
-            message: 'Starting a new analysis will take a while to complete and all metadata previously retrieved from Salesforce for this org will be lost. Continue?',
-            header: 'Confirm Re-Analysis',
-            icon: 'pi pi-exclamation-triangle',
-            acceptLabel: 'Continue',
-            rejectLabel: 'Cancel',
-            accept: doAnalysis,
-        });
-        return;
-    }
     doAnalysis();
 }
 
@@ -388,41 +399,49 @@ async function onLoadFields(obj) {
                     <span v-if="selectedOrg.description" class="detail-desc">{{ selectedOrg.description }}</span>
                 </div>
 
-                <!-- Loading state -->
-                <div v-if="checkingAnalysis" class="detail-loading">
-                    <ProgressSpinner style="width: 2rem; height: 2rem;" />
-                    <span>Checking for existing analysis...</span>
-                </div>
+                <!-- Shared content area — overlay covers both first-analyze and re-analyze -->
+                <div class="detail-body">
 
-                <!-- No analysis -->
-                <template v-else-if="!hasAnalysis">
-                    <div class="no-analysis">
-                        <i class="pi pi-search" style="font-size: 2rem; color: var(--text-color-secondary);"></i>
-                        <p>No analysis found for this org.</p>
-                        <Button
-                            label="Analyze Org"
-                            icon="pi pi-cloud-download"
-                            :loading="analyzingOrgId === selectedOrg?.id"
-                            @click="onAnalyzeOrg"
-                        />
-                    </div>
-                </template>
-
-                <!-- Has analysis -->
-                <template v-else>
-                    <div class="analysis-actions">
-                        <Button
-                            label="Re-Analyze Org"
-                            icon="pi pi-refresh"
-                            size="small"
-                            severity="warning"
-                            outlined
-                            :loading="analyzingOrgId === selectedOrg?.id"
-                            @click="onAnalyzeOrg"
-                        />
+                    <!-- Analysis overlay spinner (shown during any analysis) -->
+                    <div v-if="analyzingOrgId" class="analysis-overlay">
+                        <ProgressSpinner style="width: 3rem; height: 3rem;" />
+                        <span>Analyzing org&hellip;</span>
                     </div>
 
-                    <div class="analysis-content">
+                    <!-- Loading state -->
+                    <div v-if="checkingAnalysis" class="detail-loading">
+                        <ProgressSpinner style="width: 2rem; height: 2rem;" />
+                        <span>Checking for existing analysis...</span>
+                    </div>
+
+                    <!-- No analysis -->
+                    <template v-else-if="!hasAnalysis">
+                        <div class="no-analysis">
+                            <i class="pi pi-search" style="font-size: 2rem; color: var(--text-color-secondary);"></i>
+                            <p>No analysis found for this org.</p>
+                            <Button
+                                label="Analyze Org"
+                                icon="pi pi-cloud-download"
+                                @click="onAnalyzeOrg"
+                            />
+                        </div>
+                    </template>
+
+                    <!-- Has analysis -->
+                    <template v-else>
+                        <div class="analysis-actions">
+                            <Button
+                                label="Re-Analyze Org"
+                                icon="pi pi-refresh"
+                                size="small"
+                                severity="warning"
+                                outlined
+                                @click="onAnalyzeOrg"
+                            />
+                        </div>
+
+                        <div class="analysis-content">
+
                         <!-- Left Column: Object List + Object Detail Header -->
                         <div class="left-column">
                             <!-- Object List -->
@@ -449,6 +468,8 @@ async function onLoadFields(obj) {
                         </div>
                     </div>
                 </template>
+
+                </div><!-- /detail-body -->
             </div>
 
             <!-- No org selected placeholder -->
@@ -594,6 +615,10 @@ async function onLoadFields(obj) {
     min-height: 300px;
 }
 
+.detail-body {
+    position: relative;
+}
+
 .detail-header {
     margin-bottom: 1rem;
 }
@@ -636,6 +661,21 @@ async function onLoadFields(obj) {
     grid-template-columns: 1fr 1fr;
     gap: 1.5rem;
     align-items: start;
+}
+
+.analysis-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.75);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    color: var(--text-color-secondary);
 }
 
 .left-column {

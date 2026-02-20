@@ -453,13 +453,13 @@ export const useMappingStore = defineStore('mapping', {
 
             for (const sourceField of sourceFields) {
                 const sourceName = caseSensitive ?
-                    sourceField.fieldName :
-                    sourceField.fieldName.toLowerCase();
+                    sourceField.name :
+                    sourceField.name.toLowerCase();
 
                 const targetField = targetFields.find(tf => {
                     const targetName = caseSensitive ?
-                        tf.fieldName :
-                        tf.fieldName.toLowerCase();
+                        tf.name :
+                        tf.name.toLowerCase();
 
                     return exactMatch ?
                         sourceName === targetName :

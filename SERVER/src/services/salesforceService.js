@@ -11,6 +11,8 @@ const logger = require('../lib/logger');
 const log = logger.create('salesforceService');
 const express = require('express');
 const router = express.Router();
+const { mapSfField } = require('../utils/sfFieldMapper');
+const { mapSfObject } = require('../utils/sfObjectMapper');
 
 // Inline concurrency limiter instead of p-limit which is ESM-only in v5+)
 const pLimit = (concurrency) => {
@@ -134,11 +136,7 @@ async function describeGlobal(sfOrgId) {
 
         const objects = describeResult.sobjects
             .filter(() => true)
-            .map(obj => ({
-                objectName: obj.name,
-                objectLabel: obj.label,
-                isCustom: obj.custom,
-            }));
+            .map(mapSfObject);
 
         log.toFile('describeGlobal', objects);
         return objects;
@@ -214,29 +212,13 @@ async function describeObjectMultiple(sfOrgId, objectNames) {
     log.toFile('describeObjectMultiple_fullResponses', allResponses);
 
     // Each response has a compositeResponse array; extract and normalize each successful subrequest
-    // to the same shape that describeObject() returns (objectName, objectLabel, isCustom, fields[])
     const sobjectDescribes = allResponses.flatMap(response =>
         (response.compositeResponse ?? [])
             .filter(sub => sub.httpStatusCode === 200)
-            .map(sub => {
-                const d = sub.body;
-                return {
-                    objectName: d.name,
-                    objectLabel: d.label,
-                    isCustom: d.custom,
-                    fields: (d.fields ?? []).map(field => ({
-                        fieldName: field.name,
-                        fieldLabel: field.label,
-                        dataType: field.type,
-                        length: field.length,
-                        isRequired: !field.nillable,
-                        isCustom: field.custom,
-                        picklistValues: field.picklistValues
-                            ? field.picklistValues.map(p => ({ label: p.label, value: p.value }))
-                            : null,
-                    })),
-                };
-            })
+            .map(sub => ({
+                ...mapSfObject(sub.body),
+                fields: (sub.body.fields ?? []).map(mapSfField),
+            }))
     );
 
     log.info('describeObjectMultiple completed', {describedObjects: sobjectDescribes.length, orgId: sfOrgId });
@@ -253,20 +235,8 @@ async function describeObject(sfOrgId, objectName) {
         const describeResult = await conn.sobject(objectName).describe();
 
         return {
-            objectName: describeResult.name,
-            objectLabel: describeResult.label,
-            isCustom: describeResult.custom,
-            fields: describeResult.fields.map(field => ({
-                fieldName: field.name,
-                fieldLabel: field.label,
-                dataType: field.type,
-                length: field.length,
-                isRequired: !field.nillable,
-                isCustom: field.custom,
-                picklistValues: field.picklistValues
-                    ? field.picklistValues.map(p => ({ label: p.label, value: p.value }))
-                    : null,
-            })),
+            ...mapSfObject(describeResult),
+            fields: describeResult.fields.map(mapSfField),
         };
     } catch (error) {
         log.error('Failed to get object metadata', error, { sfOrgId, objectName });

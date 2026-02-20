@@ -20,20 +20,36 @@ module.exports = {
                 onUpdate: 'CASCADE',
                 onDelete: 'CASCADE'
             },
-            objectName: {
-                type: Sequelize.STRING,
+            name: {
+                type: Sequelize.STRING(255),
                 allowNull: false,
                 comment: 'Salesforce API name (e.g., Account, CustomObject__c)'
             },
-            objectLabel: {
-                type: Sequelize.STRING,
+            label: {
+                type: Sequelize.STRING(63),
                 allowNull: false,
                 comment: 'Human-readable label'
             },
-            isCustom: {
+            labelPlural: {
+                type: Sequelize.STRING(63),
+                allowNull: true
+            },
+            custom: {
                 type: Sequelize.BOOLEAN,
-                allowNull: false,
-                defaultValue: false
+                allowNull: true
+            },
+            customSetting: {
+                type: Sequelize.BOOLEAN,
+                allowNull: true
+            },
+            keyPrefix: {
+                type: Sequelize.STRING(3),
+                allowNull: true
+            },
+            recordTypeInfos: {
+                type: Sequelize.JSON,
+                allowNull: true,
+                comment: 'Array of { name, developerName, active, master, recordTypeId }'
             },
             recordCount: {
                 type: Sequelize.INTEGER,
@@ -56,7 +72,7 @@ module.exports = {
         });
 
         // Add unique constraint for org + object name combination
-        await queryInterface.addIndex('SfObjectMetadata', ['sfOrgId', 'objectName'], {
+        await queryInterface.addIndex('SfObjectMetadata', ['sfOrgId', 'name'], {
             unique: true,
             name: 'unique_org_object'
         });

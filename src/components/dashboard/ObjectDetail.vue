@@ -18,15 +18,15 @@ const props = defineProps({
 <template>
     <div v-if="object" class="object-detail">
         <div class="object-detail-header">
-            <h3>{{ object.objectLabel }}</h3>
-            <Tag v-if="object.isCustom" value="Custom Object" severity="info" />
+            <h3>{{ object.label }}</h3>
+            <Tag v-if="object.custom" value="Custom Object" severity="info" />
             <Tag v-else value="Standard Object" severity="secondary" />
         </div>
 
         <div class="object-info">
             <div class="info-row">
                 <span class="info-label">API Name:</span>
-                <span class="info-value">{{ object.objectName }}</span>
+                <span class="info-value">{{ object.name }}</span>
             </div>
             <div v-if="object.recordCount != null" class="info-row">
                 <span class="info-label">Total Records:</span>

@@ -86,22 +86,22 @@ export const useMetadataStore = defineStore('metadata', {
          * Get source objects filtered by type
          */
         sourceCustomObjects: (state) => {
-            return state.sourceObjects.filter(obj => obj.isCustom);
+            return state.sourceObjects.filter(obj => obj.custom);
         },
 
         sourceStandardObjects: (state) => {
-            return state.sourceObjects.filter(obj => !obj.isCustom);
+            return state.sourceObjects.filter(obj => !obj.custom);
         },
 
         /**
          * Get target objects filtered by type
          */
         targetCustomObjects: (state) => {
-            return state.targetObjects.filter(obj => obj.isCustom);
+            return state.targetObjects.filter(obj => obj.custom);
         },
 
         targetStandardObjects: (state) => {
-            return state.targetObjects.filter(obj => !obj.isCustom);
+            return state.targetObjects.filter(obj => !obj.custom);
         },
     },
 

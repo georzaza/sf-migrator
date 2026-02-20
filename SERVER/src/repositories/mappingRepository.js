@@ -8,12 +8,12 @@ const OBJECT_MAPPING_INCLUDES = [
     {
         model: SfObjectMetadata,
         as: 'sourceObject',
-        attributes: ['id', 'objectName', 'objectLabel', 'sfOrgId', 'isCustom'],
+        attributes: ['id', 'name', 'label', 'sfOrgId', 'custom'],
     },
     {
         model: SfObjectMetadata,
         as: 'targetObject',
-        attributes: ['id', 'objectName', 'objectLabel', 'sfOrgId', 'isCustom'],
+        attributes: ['id', 'name', 'label', 'sfOrgId', 'custom'],
     },
 ];
 
@@ -26,13 +26,13 @@ const FIELD_MAPPING_INCLUDES = [
     {
         model: SfFieldMetadata,
         as: 'sourceField',
-        attributes: ['id', 'fieldName', 'fieldLabel', 'dataType', 'objectMetadataId'],
+        attributes: ['id', 'name', 'label', 'type', 'objectMetadataId'],
         required: false,
     },
     {
         model: SfFieldMetadata,
         as: 'targetField',
-        attributes: ['id', 'fieldName', 'fieldLabel', 'dataType', 'objectMetadataId'],
+        attributes: ['id', 'name', 'label', 'type', 'objectMetadataId'],
     },
 ];
 
@@ -56,13 +56,13 @@ async function findFieldMappingsByProjectId(projectId) {
             {
                 model: SfFieldMetadata,
                 as: 'sourceField',
-                attributes: ['id', 'fieldName', 'fieldLabel', 'dataType', 'objectMetadataId'],
+                attributes: ['id', 'name', 'label', 'type', 'objectMetadataId'],
                 required: false,
             },
             {
                 model: SfFieldMetadata,
                 as: 'targetField',
-                attributes: ['id', 'fieldName', 'fieldLabel', 'dataType', 'objectMetadataId'],
+                attributes: ['id', 'name', 'label', 'type', 'objectMetadataId'],
             },
         ],
         order: [['createdAt', 'DESC']],

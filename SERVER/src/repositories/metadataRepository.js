@@ -3,56 +3,40 @@
  */
 
 const { SfObjectMetadata, SfFieldMetadata } = require('../../models');
+const { mapSfField, SF_FIELD_COLUMNS } = require('../utils/sfFieldMapper');
+const { mapSfObject, SF_OBJECT_COLUMNS } = require('../utils/sfObjectMapper');
 
 async function findOrCreateObject(sfOrgId, objectData) {
+    const mapped = mapSfObject(objectData);
     const [objectMetadata, created] = await SfObjectMetadata.findOrCreate({
-        where: { sfOrgId, objectName: objectData.objectName },
-        defaults: {
-            sfOrgId,
-            objectName: objectData.objectName,
-            objectLabel: objectData.objectLabel,
-            isCustom: objectData.isCustom,
-            recordCount: objectData.recordCount,
-            lastAnalyzed: new Date(),
-        },
+        where: { sfOrgId, name: mapped.name },
+        defaults: { sfOrgId, ...mapped, lastAnalyzed: new Date() },
     });
 
     if (!created) {
-        await objectMetadata.update({
-            objectLabel: objectData.objectLabel,
-            isCustom: objectData.isCustom,
-            recordCount: objectData.recordCount,
-            lastAnalyzed: new Date(),
-        });
+        const { name: _name, ...updateFields } = mapped;
+        await objectMetadata.update({ ...updateFields, lastAnalyzed: new Date() });
     }
 
     return objectMetadata;
 }
 
+// isFormula and isRollUpSummary are GENERATED ALWAYS AS STORED columns — Postgres owns them.
+// FIELD_UPSERT_COLUMNS and field mapping are defined in utils/sfFieldMapper.js.
+
+function fieldDefaults(objectMetadataId, f) {
+    return { objectMetadataId, ...mapSfField(f) };
+}
+
 async function findOrCreateField(objectMetadataId, fieldData) {
     const [fieldMetadata, created] = await SfFieldMetadata.findOrCreate({
-        where: { objectMetadataId, fieldName: fieldData.fieldName },
-        defaults: {
-            objectMetadataId,
-            fieldName: fieldData.fieldName,
-            fieldLabel: fieldData.fieldLabel,
-            dataType: fieldData.dataType,
-            length: fieldData.length,
-            isRequired: fieldData.isRequired,
-            isCustom: fieldData.isCustom,
-            picklistValues: fieldData.picklistValues,
-        },
+        where: { objectMetadataId, name: fieldData.name },
+        defaults: fieldDefaults(objectMetadataId, fieldData),
     });
 
     if (!created) {
-        await fieldMetadata.update({
-            fieldLabel: fieldData.fieldLabel,
-            dataType: fieldData.dataType,
-            length: fieldData.length,
-            isRequired: fieldData.isRequired,
-            isCustom: fieldData.isCustom,
-            picklistValues: fieldData.picklistValues,
-        });
+        const { objectMetadataId: _omit, name: _name, ...updateFields } = fieldDefaults(objectMetadataId, fieldData);
+        await fieldMetadata.update(updateFields);
     }
 
     return fieldMetadata;
@@ -69,14 +53,14 @@ async function findObjectById(id, options = {}) {
 async function findObjectsByOrgId(sfOrgId, options = {}) {
     const query = {
         where: { sfOrgId },
-        order: [['objectName', 'ASC']],
+        order: [['name', 'ASC']],
     };
 
     if (options.includeFields) {
         query.include = [{
             model: SfFieldMetadata,
             as: 'fields',
-            order: [['fieldName', 'ASC']],
+            order: [['name', 'ASC']],
         }];
     }
 
@@ -86,7 +70,7 @@ async function findObjectsByOrgId(sfOrgId, options = {}) {
 async function findFieldsByObjectId(objectMetadataId) {
     return SfFieldMetadata.findAll({
         where: { objectMetadataId },
-        order: [['fieldName', 'ASC']],
+        order: [['name', 'ASC']],
     });
 }
 
@@ -106,33 +90,22 @@ async function bulkUpsertObjects(sfOrgId, objectDataArray) {
     const now = new Date();
     const rows = objectDataArray.map(obj => ({
         sfOrgId,
-        objectName: obj.objectName,
-        objectLabel: obj.objectLabel,
-        isCustom: obj.isCustom,
-        recordCount: obj.recordCount,
+        ...mapSfObject(obj),
+        recordCount: obj.recordCount ?? null,
         lastAnalyzed: now,
     }));
     return SfObjectMetadata.bulkCreate(rows, {
-        updateOnDuplicate: ['objectLabel', 'isCustom', 'recordCount', 'lastAnalyzed', 'updatedAt'],
-        conflictAttributes: ['sfOrgId', 'objectName'],
+        updateOnDuplicate: [...SF_OBJECT_COLUMNS, 'recordCount', 'lastAnalyzed', 'updatedAt'],
+        conflictAttributes: ['sfOrgId', 'name'],
     });
 }
 
 async function bulkUpsertFields(fieldsArray) {
     if (!fieldsArray.length) return [];
-    const rows = fieldsArray.map(f => ({
-        objectMetadataId: f.objectMetadataId,
-        fieldName: f.fieldName,
-        fieldLabel: f.fieldLabel,
-        dataType: f.dataType,
-        length: f.length ?? null,
-        isRequired: f.isRequired,
-        isCustom: f.isCustom,
-        picklistValues: f.picklistValues ?? null,
-    }));
+    const rows = fieldsArray.map(f => fieldDefaults(f.objectMetadataId, f));
     return SfFieldMetadata.bulkCreate(rows, {
-        updateOnDuplicate: ['fieldLabel', 'dataType', 'length', 'isRequired', 'isCustom', 'picklistValues', 'updatedAt'],
-        conflictAttributes: ['objectMetadataId', 'fieldName'],
+        updateOnDuplicate: SF_FIELD_COLUMNS,
+        conflictAttributes: ['objectMetadataId', 'name'],
     });
 }
 
@@ -143,7 +116,7 @@ async function getStats(sfOrgId) {
     });
 
     const totalObjects = objects.length;
-    const customObjects = objects.filter(obj => obj.isCustom).length;
+    const customObjects = objects.filter(obj => obj.custom).length;
     const totalFields = objects.reduce((sum, obj) => sum + obj.fields.length, 0);
     const totalRecords = objects.reduce((sum, obj) => sum + (obj.recordCount || 0), 0);
     const lastAnalyzed = objects.length > 0

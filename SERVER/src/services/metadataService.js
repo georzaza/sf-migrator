@@ -25,34 +25,34 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
 
         // user filters
         let objectsToProcess = objectsToAnalyze
-            ? objects.filter(obj => objectsToAnalyze.includes(obj.objectName))
+            ? objects.filter(obj => objectsToAnalyze.includes(obj.name))
             : objects;
         log.debug('Object filters applied.', { type: 'user filter', "new objects count": objectsToProcess.length });
 
         // hardcoded filters
         objectsToProcess = objectsToProcess
-            .filter(obj => !standardObjectFilters.hardcodedList.includes(obj.objectName));
+            .filter(obj => !standardObjectFilters.hardcodedList.includes(obj.name));
         log.debug('Object filters applied.', { type: 'hardcoded', "new objects count": objectsToProcess.length });
 
         // pattern filters
         objectsToProcess = objectsToProcess
-            .filter(obj => !standardObjectFilters.patternList.some(pattern => pattern.test(obj.objectName)));
+            .filter(obj => !standardObjectFilters.patternList.some(pattern => pattern.test(obj.name)));
         log.debug('Object filters applied.', { type: 'patterns', "new objects count": objectsToProcess.length });
 
         // delegate to salesforce service, where Composite API will speed up requests.
         const sobjectDescribes = await sfService.describeObjectMultiple(
             sfOrgId,
-            objectsToProcess.map(obj => obj.objectName)
+            objectsToProcess.map(obj => obj.name)
         );
         log.toFile('sobjectDescribes', sobjectDescribes);
 
         // write both objects & fields to db
         const savedObjects = await metadataRepo.bulkUpsertObjects(sfOrgId, sobjectDescribes);
-        const objectIdMap = new Map(savedObjects.map(obj => [obj.objectName, obj.id]));
+        const objectIdMap = new Map(savedObjects.map(obj => [obj.name, obj.id]));
         const fields = sobjectDescribes.flatMap(describe =>
             describe.fields.map(field => ({
                 ...field,
-                objectMetadataId: objectIdMap.get(describe.objectName),
+                objectMetadataId: objectIdMap.get(describe.name),
             }))
         );
         await metadataRepo.bulkUpsertFields(fields);

@@ -229,15 +229,15 @@ watch(targetOrgSelection, async (newOrg, oldOrg) => {
                             scrollHeight="400px"
                             class="compact-table"
                         >
-                            <Column field="objectLabel" header="Object">
+                            <Column field="label" header="Object">
                                 <template #body="slotProps">
                                     <div class="object-name">
-                                        <i v-if="slotProps.data.isCustom" class="pi pi-star-fill text-primary mr-2"></i>
-                                        <span>{{ slotProps.data.objectLabel }}</span>
+                                        <i v-if="slotProps.data.custom" class="pi pi-star-fill text-primary mr-2"></i>
+                                        <span>{{ slotProps.data.label }}</span>
                                     </div>
                                 </template>
                             </Column>
-                            <Column field="objectName" header="API Name" class="text-xs"></Column>
+                            <Column field="name" header="API Name" class="text-xs"></Column>
                             <Column field="recordCount" header="Records">
                                 <template #body="slotProps">
                                     <Badge :value="slotProps.data.recordCount || 0" severity="secondary"></Badge>
@@ -375,15 +375,15 @@ watch(targetOrgSelection, async (newOrg, oldOrg) => {
                             scrollHeight="400px"
                             class="compact-table"
                         >
-                            <Column field="objectLabel" header="Object">
+                            <Column field="label" header="Object">
                                 <template #body="slotProps">
                                     <div class="object-name">
-                                        <i v-if="slotProps.data.isCustom" class="pi pi-star-fill text-primary mr-2"></i>
-                                        <span>{{ slotProps.data.objectLabel }}</span>
+                                        <i v-if="slotProps.data.custom" class="pi pi-star-fill text-primary mr-2"></i>
+                                        <span>{{ slotProps.data.label }}</span>
                                     </div>
                                 </template>
                             </Column>
-                            <Column field="objectName" header="API Name" class="text-xs"></Column>
+                            <Column field="name" header="API Name" class="text-xs"></Column>
                             <Column field="recordCount" header="Records">
                                 <template #body="slotProps">
                                     <Badge :value="slotProps.data.recordCount || 0" severity="secondary"></Badge>

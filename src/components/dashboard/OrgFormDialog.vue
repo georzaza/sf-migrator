@@ -14,6 +14,7 @@
  */
 import { ref, watch, computed } from 'vue';
 import axiosInstance from '@/api/axiosInstance';
+import { useOrgStore } from '@/stores/orgStore';
 
 const props = defineProps({
     visible: {
@@ -32,6 +33,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:visible', 'saved']);
 
+const orgStore = useOrgStore();
 const isEditMode = computed(() => !!props.org);
 const dialogHeader = computed(() => isEditMode.value ? 'Edit Org' : 'Add New Org');
 
@@ -46,10 +48,27 @@ const defaultForm = () => ({
 const form = ref(defaultForm());
 const saving = ref(false);
 const errorMessage = ref('');
+const urlError = ref('');
+
+const SF_URL_REGEX = /^https:\/\/.+\.my\.salesforce\.com$/;
+
+function validateUrl(url) {
+    if (!url) {
+        urlError.value = '';
+        return true;
+    }
+    if (!SF_URL_REGEX.test(url.trim())) {
+        urlError.value = 'Must start with https:// and end with .my.salesforce.com';
+        return false;
+    }
+    urlError.value = '';
+    return true;
+}
 
 watch(() => props.visible, (val) => {
     if (val) {
         errorMessage.value = '';
+        urlError.value = '';
         if (props.org) {
             // Edit mode: pre-fill with org data, leave credentials blank
             form.value = {
@@ -70,6 +89,7 @@ function onClose() {
 }
 
 async function onSave() {
+    if (!validateUrl(form.value.loginURL)) return;
     saving.value = true;
     errorMessage.value = '';
 
@@ -90,6 +110,10 @@ async function onSave() {
                 },
             });
             if (response.data.success) {
+                // Patch store in-place — no re-fetch needed.
+                const idx = orgStore.orgs.findIndex(o => o.id === props.org.id);
+                if (idx !== -1) Object.assign(orgStore.orgs[idx], payload);
+                if (orgStore.selectedOrg?.id === props.org.id) Object.assign(orgStore.selectedOrg, payload);
                 emit('saved');
                 onClose();
             } else {
@@ -106,6 +130,8 @@ async function onSave() {
                 headers: { action: 'add-org' },
             });
             if (response.status === 201) {
+                // New org has a server-generated ID — refetch orgs only (projects unchanged).
+                await orgStore.loadOrgs();
                 emit('saved');
                 onClose();
             } else if (response.status === 400) {
@@ -147,7 +173,16 @@ async function onSave() {
                 </div>
                 <div class="field-row">
                     <label for="org-loginURL">Instance URL *</label>
-                    <InputText id="org-loginURL" v-model="form.loginURL" required placeholder="https://your-org.my.salesforce.com" />
+                    <InputText
+                        id="org-loginURL"
+                        v-model="form.loginURL"
+                        required
+                        placeholder="https://your-org.my.salesforce.com"
+                        @blur="validateUrl(form.loginURL)"
+                        :invalid="!!urlError"
+                    />
+                    <small v-if="urlError" class="field-error">{{ urlError }}</small>
+                    <small v-else class="field-help">Must end in .my.salesforce.com</small>
                 </div>
 
                 <div class="field-row">
@@ -208,6 +243,12 @@ async function onSave() {
 
 .field-help {
     color: var(--text-color-secondary);
+    font-size: 0.8rem;
+    margin-top: 0.15rem;
+}
+
+.field-error {
+    color: var(--red-500, #ef4444);
     font-size: 0.8rem;
     margin-top: 0.15rem;
 }

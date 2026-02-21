@@ -11,6 +11,7 @@ import OrgList from '@/components/dashboard/OrgList.vue';
 import OrgFormDialog from '@/components/dashboard/OrgFormDialog.vue';
 import ProjectPanel from '@/components/dashboard/ProjectPanel.vue';
 import OrgDetailPanel from '@/components/dashboard/OrgDetailPanel.vue';
+import OAuthRedirectOverlay from '@/components/OAuthRedirectOverlay.vue';
 
 const orgStore = useOrgStore();
 const toast = useToast();
@@ -19,10 +20,11 @@ const confirm = useConfirm();
 // ─── Analysis composable ────────────────────────────────
 const {
     analyzingOrgId,
+    showingOAuthOverlay,
+    oauthOrgName,
     objects,
     selectedObject,
     fields,
-    loadingObjects,
     loadingFields,
     hasAnalysis,
     checkingAnalysis,
@@ -45,13 +47,32 @@ const selectedOrg = computed(() => orgStore.selectedOrg);
 
 // ─── Lifecycle ──────────────────────────────────────────
 onMounted(async () => {
-    await orgStore.loadProjects();
+    // Store is persisted — only hit the server when there's nothing cached yet.
+    if (!orgStore.projects.length) await orgStore.loadProjects();
 
     // Check if returning from Salesforce OAuth flow with a pending analyze request
     const urlParams = new URLSearchParams(window.location.search);
     const autoAnalyzeOrgId = urlParams.get('autoAnalyzeOrgId');
+    const oauthError = urlParams.get('oauthError');
 
-    if (autoAnalyzeOrgId) {
+    if (oauthError) {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('oauthError');
+        cleanUrl.searchParams.delete('autoAnalyzeOrgId');
+        window.history.replaceState({}, '', cleanUrl);
+        toast.add({ severity: 'error', summary: 'Authorization Failed', detail: oauthError, life: 8000 });
+
+        // Select the org for context but do NOT retry analysis — that would cause endless redirects
+        if (autoAnalyzeOrgId) {
+            const org = orgStore.orgs.find(o => o.id === autoAnalyzeOrgId);
+            if (org) {
+                const project = orgStore.projects.find(p => p.id === org.projectId);
+                if (project) orgStore.setSelectedProject(project);
+                skipNextOrgWatch = true; // suppress watch — no analysis check after OAuth failure
+                orgStore.setSelectedOrg(org);
+            }
+        }
+    } else if (autoAnalyzeOrgId) {
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('autoAnalyzeOrgId');
         window.history.replaceState({}, '', cleanUrl);
@@ -60,10 +81,8 @@ onMounted(async () => {
         if (org) {
             const project = orgStore.projects.find(p => p.id === org.projectId);
             if (project) orgStore.setSelectedProject(project);
+            skipNextOrgWatch = true; // doAnalysis handles everything, suppress watch
             orgStore.setSelectedOrg(org);
-            // Skip checkOrgAnalysis here — status may still be 'auth_required' from before OAuth,
-            // which would re-redirect in a loop. Just call doAnalysis directly; it will
-            // re-check auth synchronously and start the analysis fresh.
             doAnalysis();
         }
     } else if (orgStore.selectedOrg) {
@@ -75,8 +94,14 @@ onUnmounted(() => {
     stopPolling();
 });
 
-// ─── Watchers ───────────────────────────────────────────
+// skipNextOrgWatch prevents double-checkOrgAnalysis when onMounted
+// manually calls setSelectedOrg (e.g. oauthError / autoAnalyze branches).
+let skipNextOrgWatch = false;
 watch(selectedOrg, async (org) => {
+    if (skipNextOrgWatch) {
+        skipNextOrgWatch = false;
+        return;
+    }
     resetState();
     if (org) await checkOrgAnalysis(org.id);
 });
@@ -132,16 +157,13 @@ function onDeleteOrg(org) {
     });
 }
 
-async function onOrgFormSaved() {
-    await orgStore.loadProjects();
-    if (orgStore.selectedOrg) {
-        await checkOrgAnalysis(orgStore.selectedOrg.id);
-    }
-}
 </script>
 
 <template>
     <div class="dashboard">
+        <!-- OAuth Redirect overlay — Teleport to body, controlled by useOrgAnalysis -->
+        <OAuthRedirectOverlay :show="showingOAuthOverlay" :orgName="oauthOrgName" />
+
         <div class="dashboard-content">
 
             <!-- Left Column: Project Selector + Org List -->
@@ -182,7 +204,6 @@ async function onOrgFormSaved() {
                 :objects="objects"
                 :selectedObject="selectedObject"
                 :fields="fields"
-                :loadingObjects="loadingObjects"
                 :loadingFields="loadingFields"
                 @analyze="doAnalysis"
                 @select-object="onSelectObject"
@@ -200,7 +221,6 @@ async function onOrgFormSaved() {
             v-model:visible="orgFormVisible"
             :org="orgFormOrg"
             :projectId="selectedProject?.id"
-            @saved="onOrgFormSaved"
         />
 
         <AddProjectDialog />
@@ -208,7 +228,6 @@ async function onOrgFormSaved() {
         <EditProjectDialog
             v-model:visible="editProjectVisible"
             :project="selectedProject"
-            @saved="onOrgFormSaved"
         />
 
         <ConfirmDialog />

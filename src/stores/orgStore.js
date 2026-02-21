@@ -48,19 +48,27 @@ export const useOrgStore = defineStore('orgs', {
             this.showAddOrgDialog = false;
         },
 
+        // Fetches projects AND orgs (full refresh).
         async loadProjects() {
-            const response = await axiosInstance.get('/api',
-                {
-                    headers: {
-                        'action': 'get-projects',
-                    },
-                }
-            );
+            const response = await axiosInstance.get('/api', {
+                headers: { 'action': 'get-projects' },
+            });
             if (response.data.success) {
                 this.projects = response.data.data;
                 await this.loadOrgs();
+            } else {
+                console.error('Failed to load projects:', response.data.message);
             }
-            else {
+        },
+
+        // Fetches only projects — use when orgs are unchanged (e.g. after add-project).
+        async loadProjectsOnly() {
+            const response = await axiosInstance.get('/api', {
+                headers: { 'action': 'get-projects' },
+            });
+            if (response.data.success) {
+                this.projects = response.data.data;
+            } else {
                 console.error('Failed to load projects:', response.data.message);
             }
         },
@@ -108,12 +116,10 @@ export const useOrgStore = defineStore('orgs', {
                 },
             });
             if (response.data.success) {
-                await this.loadProjects();
-                // Re-select the updated project
-                const updated = this.projects.find(p => p.id === projectId);
-                if (updated) {
-                    this.selectedProject = updated;
-                }
+                // Patch in-place — no re-fetch needed, we already have the new data.
+                const idx = this.projects.findIndex(p => p.id === projectId);
+                if (idx !== -1) Object.assign(this.projects[idx], projectData);
+                if (this.selectedProject?.id === projectId) Object.assign(this.selectedProject, projectData);
                 return true;
             }
             return false;

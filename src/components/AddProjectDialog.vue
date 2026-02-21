@@ -40,7 +40,8 @@ async function onSave() {
         );
 
         if (response.status === 201) {
-            await orgStore.loadProjects();
+            // New project has a server-generated ID — fetch projects only (orgs unchanged).
+            await orgStore.loadProjectsOnly();
             onClose();
         }
         else {

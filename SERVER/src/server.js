@@ -9,7 +9,7 @@ const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const apiRoutes = require('./routes/api');
-const { router: sfRouter } = require('./services/salesforceService');
+const oauthRoutes = require('./routes/oauth');
 const requestTracer = require('./middleware/requestTracer');
 const logger = require('./lib/logger');
 const log = logger.create('server');
@@ -33,7 +33,7 @@ app.use(requestTracer);
 
 app.use('/auth', authRoutes);
 app.use('/api', apiRoutes);
-app.use('/', sfRouter); // OAuth2 routes: /oauth2/auth and /oauth2/callback
+app.use('/', oauthRoutes); // OAuth2 routes: /oauth2/auth and /oauth2/callback
 
 // SPA fallback: serve index.html for non-API/auth routes so client-side routing works
 /*

@@ -31,10 +31,6 @@ const props = defineProps({
         type: Array,
         default: () => []
     },
-    loadingObjects: {
-        type: Boolean,
-        default: false
-    },
     loadingFields: {
         type: Boolean,
         default: false
@@ -46,7 +42,7 @@ const emit = defineEmits(['analyze', 'select-object']);
 
 <template>
     <div class="dashboard-panel detail-panel">
-        <!-- Header — always visible, never covered by overlay -->
+        <!-- Header -->
         <div class="detail-header">
             <h2>{{ org.name }}</h2>
             <span v-if="org.description" class="detail-desc">{{ org.description }}</span>
@@ -100,7 +96,7 @@ const emit = defineEmits(['analyze', 'select-object']);
                             <ObjectList
                                 :objects="objects"
                                 :selectedObject="selectedObject"
-                                :loading="loadingObjects"
+                                :loading="checkingAnalysis"
                                 @select-object="emit('select-object', $event)"
                             />
                         </div>

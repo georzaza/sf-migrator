@@ -15,6 +15,7 @@ const metadataRepo = require('../repositories/metadataRepository');
 const mappingRepo = require('../repositories/mappingRepository');
 const mdtService = require('../services/metadataService');
 const sfService = require('../services/salesforceService');
+const probeUrl = require('../utils/probeUrl');
 const sendResponse = require('../utils/sendResponse');
 const logger = require('../lib/logger');
 const log = logger.create('api');
@@ -234,6 +235,16 @@ router.put('/', authMiddleware, async (req, res) => {
 
     if (action === 'update-org') {
         const orgId = req.headers.orgid;
+        const { loginURL } = req.body;
+        if (loginURL) {
+            if (!/^https:\/\/.+\.my\.salesforce\.com$/.test(loginURL)) {
+                return sendResponse(res, 400, false, 'Login URL must start with https:// and end with .my.salesforce.com');
+            }
+            const reachable = await probeUrl(loginURL);
+            if (!reachable) {
+                return sendResponse(res, 400, false, `Cannot reach ${loginURL}. Verify the URL is correct and the org is active.`);
+            }
+        }
         try {
             await orgRepo.update(orgId, req.body);
             sendResponse(res, 200, true, 'Salesforce Org updated successfully');
@@ -262,6 +273,17 @@ router.put('/', authMiddleware, async (req, res) => {
         const projectId = req.body.projectId;
         if (!projectId) {
             return sendResponse(res, 400, false, 'No project provided.');
+        }
+        const { loginURL } = req.body;
+        if (!loginURL) {
+            return sendResponse(res, 400, false, 'Login URL is required.');
+        }
+        if (!/^https:\/\/.+\.my\.salesforce\.com$/.test(loginURL)) {
+            return sendResponse(res, 400, false, 'Login URL must start with https:// and end with .my.salesforce.com');
+        }
+        const reachable = await probeUrl(loginURL);
+        if (!reachable) {
+            return sendResponse(res, 400, false, `Cannot reach ${loginURL}. Verify the URL is correct and the org is active.`);
         }
         try {
             const org = await orgRepo.create(req.body);

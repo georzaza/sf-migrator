@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { useOrgStore } from '@/stores/orgStore';
 import axiosInstance from '@/api/axiosInstance';
@@ -16,7 +16,6 @@ export function useOrgAnalysis() {
     const objects = ref([]);
     const selectedObject = ref(null);
     const fields = ref([]);
-    const loadingObjects = ref(false);
     const loadingFields = ref(false);
     const hasAnalysis = ref(false);
     const checkingAnalysis = ref(false);
@@ -24,15 +23,107 @@ export function useOrgAnalysis() {
     // Keyed by orgId so switching orgs never cancels an in-flight background analysis.
     const statusPollTimers = new Map();
 
+    // ─── OAuth overlay state (consumed by OAuthRedirectOverlay.vue via Teleport) ─
+    const showingOAuthOverlay = ref(false);
+    const oauthOrgName = ref('');
+
     // ─── Helpers ────────────────────────────────────────
 
     // authUrl from backend is relative (/oauth2/auth?sfOrgId=...).
     // Prefix with VITE_API_URL (backend origin) so the redirect goes to port 3000, not 5173.
     // Append returnTo so Salesforce bounces back here with autoAnalyzeOrgId set.
-    function oauthRedirect(authUrl, orgId) {
+    function buildOAuthUrl(authUrl, orgId) {
         const base = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? '';
         const returnTo = `${window.location.origin}${window.location.pathname}?autoAnalyzeOrgId=${orgId}`;
-        window.location.href = `${base}${authUrl}&returnTo=${encodeURIComponent(returnTo)}`;
+        return `${base}${authUrl}&returnTo=${encodeURIComponent(returnTo)}`;
+    }
+
+    // Guard against concurrent calls (e.g. doAnalysis + poll both detecting auth_required).
+    let oauthPopupActive = false;
+
+    // Show overlay, then open a popup for Salesforce OAuth.
+    // The callback page sends a postMessage on success/error and closes itself.
+    // If the popup is closed without a message (e.g. redirect_uri_mismatch error on Salesforce's page)
+    // we detect it via polling and show a helpful toast.
+    async function triggerOAuthRedirect(authUrl, orgId) {
+        if (oauthPopupActive) {
+            console.log('[oauthRedirect] Already handling an OAuth popup — ignoring duplicate call.');
+            return;
+        }
+        oauthPopupActive = true;
+
+        const orgName = orgStore.orgs.find(o => o.id === orgId)?.name ?? 'this org';
+        const fullUrl = buildOAuthUrl(authUrl, orgId);
+
+        oauthOrgName.value = orgName;
+        showingOAuthOverlay.value = true;
+        await nextTick();
+
+        // Centre the popup on screen.
+        const w = 700, h = 700;
+        const left = Math.max(0, (window.screen.width - w) / 2);
+        const top  = Math.max(0, (window.screen.height - h) / 2);
+        const popup = window.open(
+            fullUrl, 'sf_oauth',
+            `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`
+        );
+
+        if (!popup || popup.closed) {
+            // Popup blocked — fall back to full-page redirect.
+            oauthPopupActive = false;
+            showingOAuthOverlay.value = false;
+            setTimeout(() => { window.location.href = fullUrl; }, 500);
+            return;
+        }
+
+        const expectedOrigin = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? '';
+
+        await new Promise((resolve) => {
+            let settled = false;
+
+            function settle(fn) {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                showingOAuthOverlay.value = false;
+                oauthPopupActive = false;
+                fn();
+                resolve();
+            }
+
+            function onMessage(event) {
+                if (event.origin !== expectedOrigin) return;
+                const { type, message } = event.data ?? {};
+
+                if (type === 'sf-oauth-success') {
+                    settle(() => doAnalysis());
+                } else if (type === 'sf-oauth-error') {
+                    settle(() => toast.add({ severity: 'error', summary: 'Authorization Failed', detail: message, life: 10000 }));
+                }
+            }
+
+            // Poll for popup closed without a postMessage — happens when the user manually
+            // closes the window before completing OAuth (e.g. redirect_uri_mismatch on Salesforce's page).
+            // The popup page itself no longer calls window.close(), so popup.closed only becomes
+            // true when the user closes it — no race with the message event.
+            const pollTimer = setInterval(() => {
+                if (!popup.closed) return;
+                const callbackUrl = `${expectedOrigin}/oauth2/callback`;
+                settle(() => toast.add({
+                    severity: 'warn',
+                    summary: 'Authorization Incomplete',
+                    detail: `The authorization window was closed before completing. If you saw a "redirect_uri_mismatch" error on Salesforce, make sure the Connected App's Callback URL is set to: ${callbackUrl}`,
+                }));
+            }, 500);
+
+            function cleanup() {
+                window.removeEventListener('message', onMessage);
+                clearInterval(pollTimer);
+                if (!popup.closed) popup.close();
+            }
+
+            window.addEventListener('message', onMessage);
+        });
     }
 
     // ─── Polling ────────────────────────────────────────
@@ -96,7 +187,7 @@ export function useOrgAnalysis() {
                 } else if (status === 'auth_required') {
                     stopPolling(orgId);
                     if (analyzingOrgId.value === orgId) analyzingOrgId.value = null;
-                    oauthRedirect(res.data.data.authUrl, orgId);
+                    triggerOAuthRedirect(res.data.data.authUrl, orgId);
                 }
             } catch (e) {
                 console.error('Status poll error:', e);
@@ -129,9 +220,10 @@ export function useOrgAnalysis() {
                 analyzingOrgId.value = orgId;
                 startPolling(orgId);
             } else if (analysisStatus === 'auth_required') {
-                oauthRedirect(statusRes.data.data.authUrl, orgId);
+                triggerOAuthRedirect(statusRes.data.data.authUrl, orgId);
             }
-        } catch {
+        } catch (e) {
+            console.error('checkOrgAnalysis error:', e);
             hasAnalysis.value = false;
             objects.value = [];
         } finally {
@@ -142,6 +234,7 @@ export function useOrgAnalysis() {
     async function doAnalysis() {
         const orgId = orgStore.selectedOrg?.id;
         if (!orgId) return;
+
         try {
             const response = await axiosInstance.post('/api', {
                 orgId,
@@ -149,17 +242,18 @@ export function useOrgAnalysis() {
             }, {
                 headers: { action: 'analyze-org' },
             });
+
             if (response.status === 202 && response.data.success) {
                 analyzingOrgId.value = orgId;
                 startPolling(orgId);
             } else if (response.status === 401 && response.data.authUrl) {
-                oauthRedirect(response.data.authUrl, orgId);
+                triggerOAuthRedirect(response.data.authUrl, orgId);
             } else {
                 toast.add({ severity: 'error', summary: 'Error', detail: response.data.message || 'Failed to start analysis.', life: 4000 });
             }
         } catch (error) {
             if (error.response?.status === 401 && error.response?.data?.authUrl) {
-                oauthRedirect(error.response.data.authUrl, orgId);
+                triggerOAuthRedirect(error.response.data.authUrl, orgId);
             } else {
                 toast.add({ severity: 'error', summary: 'Error', detail: error.response?.data?.message || error.message || 'Failed to analyze org.', life: 4000 });
             }
@@ -207,10 +301,11 @@ export function useOrgAnalysis() {
     return {
         // State (all refs)
         analyzingOrgId,
+        showingOAuthOverlay,
+        oauthOrgName,
         objects,
         selectedObject,
         fields,
-        loadingObjects,
         loadingFields,
         hasAnalysis,
         checkingAnalysis,

@@ -118,7 +118,6 @@ async function connectToOrg(sfOrgId) {
         const conn = connectionPool.get(sfOrgId);
         try {
             await conn.identity();
-            log.info('Reusing cached connection', { sfOrgId });
             return conn;
         } catch {
             log.warn('Cached connection invalid, removing', { sfOrgId });

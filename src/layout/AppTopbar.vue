@@ -3,10 +3,12 @@ import { useLayout } from '@/layout/composables/layout';
 import AppConfigurator from './AppConfigurator.vue';
 import axiosInstance from '@/api/axiosInstance';
 import { useRouter } from 'vue-router';
+import { useUserStore } from '@/stores/userStore';
 
 const { toggleDarkMode, isDarkTheme } = useLayout();
 
 const router = useRouter();
+const userStore = useUserStore();
 
 const logout = async () => {
     localStorage.clear();
@@ -64,7 +66,7 @@ const logout = async () => {
                     </g>
                 </svg>
 
-                <span>SAKAI</span>
+                <span>{{ userStore.username }}</span>
             </router-link>
         </div>
 

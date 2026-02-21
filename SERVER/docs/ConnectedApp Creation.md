@@ -8,7 +8,7 @@
     - - Email:your email
     - - Enable OAuth Settings:Enabled
     - - Enable for Device Flow:Enabled
-    - - Callback URL:https://login.salesforce.com/services/oauth2/success
+    - - Callback URL:http://localhost:3000/oauth2/callback (should match .env file)
     - - Add "Perform requests at any time (refresh_token, offline_access)" and "Full access" to the OAuth Scopes.
     - - Require PKCE: Disabled
     - - Require Secret for Web Server Flow: Enabled

@@ -6,7 +6,7 @@ const logger = require('../lib/logger');
 const log = logger.create('authMiddleware');
 
 async function authMiddleware(req, res, next) {
-    if (!req.headers || !req.headers.action) {
+    if (!req.headers || !req.get('action')) {
         return sendResponse(res, 400, false, 'Bad request: Missing required headers.');
     }
     const cookies = parseCookies(req.headers.cookie);

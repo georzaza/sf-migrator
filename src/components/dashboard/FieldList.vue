@@ -28,8 +28,8 @@ const filteredFields = computed(() => {
     if (!searchQuery.value.trim()) return props.fields;
     const query = searchQuery.value.toLowerCase();
     return props.fields.filter(f =>
-        f.fieldName?.toLowerCase().includes(query) ||
-        f.fieldLabel?.toLowerCase().includes(query)
+        f.name?.toLowerCase().includes(query) ||
+        f.label?.toLowerCase().includes(query)
     );
 });
 
@@ -68,11 +68,11 @@ const fieldCount = computed(() => {
             <div v-else class="field-items">
                 <div
                     v-for="field in filteredFields"
-                    :key="field.id || field.fieldName"
+                    :key="field.id || field.name"
                     class="field-item"
                 >
-                    <span class="field-label">{{ field.fieldLabel }}</span>
-                    <span class="field-api">({{ field.fieldName }})</span>
+                    <span class="field-label">{{ field.label }}</span>
+                    <span class="field-api">({{ field.name }})</span>
                 </div>
             </div>
         </template>

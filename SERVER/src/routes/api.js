@@ -15,10 +15,6 @@ const metadataRepo = require('../repositories/metadataRepository');
 const mappingRepo = require('../repositories/mappingRepository');
 const metadataService = require('../services/metadataService');
 const salesforceService = require('../services/salesforceService');
-/* todo
-const analysisService = require('../services/analysisService');
-const analysisRepo = require('../repositories/analysisRepository');
-*/
 const sendResponse = require('../utils/sendResponse');
 const logger = require('../lib/logger');
 const log = logger.create('api');
@@ -27,8 +23,8 @@ const log = logger.create('api');
 // ===================== GET Requests =====================
 
 router.get('/', authMiddleware, async (req, res) => {
-    const action = req.headers.action?.toLowerCase();
-
+    const action = req.get('action')?.toLowerCase();
+    log.info(`Received /api GET request with action: ${action}`);
     if (action === 'get-projects') {
         try {
             const projects = await projectRepo.findByUserId(req.user.id);
@@ -42,13 +38,9 @@ router.get('/', authMiddleware, async (req, res) => {
     else if (action === 'get-orgs') {
         try {
             const sfOrgs = await orgRepo.findByUserId(req.user.id);
-            sfOrgs.map(org => {
-                org.username = '*'.repeat(10);
-                org.password = '*'.repeat(10);
-                org.securityToken = '*'.repeat(10);
-                org.clientId = '*'.repeat(10);
-                org.clientSecret = '*'.repeat(10);
-                return org;
+            sfOrgs.forEach(org => {
+                org.clientId = org.clientId ? '*'.repeat(10) : null;
+                org.clientSecret = org.clientSecret ? '*'.repeat(10) : null;
             });
             sendResponse(res, 200, true, 'Salesforce Orgs retrieved successfully', sfOrgs);
         } catch (error) {
@@ -69,6 +61,28 @@ router.get('/', authMiddleware, async (req, res) => {
         } catch (error) {
             log.error('Failed to retrieve objects', error, { orgId });
             sendResponse(res, 500, false, `Failed to retrieve objects.`);
+        }
+    }
+
+    else if (action === 'get-org-status') {
+        const orgId = req.headers.orgid;
+        if (!orgId) {
+            return sendResponse(res, 400, false, 'Org ID is required');
+        }
+        try {
+            const sfOrg = await orgRepo.findById(orgId);
+            if (!sfOrg) return sendResponse(res, 404, false, 'Org not found');
+            const data = {
+                analysisStatus: sfOrg.analysisStatus,
+                analysisStartedAt: sfOrg.analysisStartedAt,
+            };
+            if (sfOrg.analysisStatus === 'auth_required') {
+                data.authUrl = `/oauth2/auth?sfOrgId=${orgId}`;
+            }
+            sendResponse(res, 200, true, 'Org status retrieved', data);
+        } catch (error) {
+            log.error('Failed to retrieve org status', error, { orgId });
+            sendResponse(res, 500, false, 'Failed to retrieve org status');
         }
     }
 
@@ -105,26 +119,6 @@ router.get('/', authMiddleware, async (req, res) => {
     }
 });
 
-/* todo
-// Add endpoint to get latest analysis for an org
-router.get('/analysis', authMiddleware, async (req, res) => {
-    const action = req.headers.action?.toLowerCase();
-
-    if (action === 'get-latest-analysis') {
-        const orgId = req.headers.orgid;
-        if (!orgId) return sendResponse(res, 400, false, 'No org provided');
-        try {
-            const analysis = await analysisRepo.findLatestByOrgId(orgId);
-            sendResponse(res, 200, true, 'Latest analysis retrieved', analysis);
-        } catch (error) {
-            log.error('Failed to retrieve latest analysis', error, { orgId });
-            sendResponse(res, 500, false, 'Failed to retrieve latest analysis');
-        }
-    } else {
-        sendResponse(res, 400, false, 'Unknown analysis GET action');
-    }
-});
-*/
 
 // ===================== POST Requests =====================
 
@@ -150,19 +144,40 @@ router.post('/', authMiddleware, async (req, res) => {
         if (!orgId) {
             return sendResponse(res, 400, false, 'No org provided.');
         }
-        log.info('Starting org analysis', { orgId });
+        log.info('Queueing org analysis', { orgId });
         try {
-            const result = await metadataService.analyzeAndSaveOrg(orgId, options);
-            log.info('Org analysis completed', { orgId, objectsAnalyzed: result.objectsAnalyzed });
-            sendResponse(res, 200, true, 'Org analysis completed successfully', result);
+            // Verify OAuth connection exists BEFORE going async — so we can return 401 synchronously
+            await sfService.connectToOrg(orgId);
+
+            await orgRepo.updateAnalysisStatus(orgId, 'running');
+            sendResponse(res, 202, true, 'Analysis started', { analysisStatus: 'running' });
+
+            mdtService.analyzeAndSaveOrg(orgId, options)
+                .then(async () => {
+                    await orgRepo.updateAnalysisStatus(orgId, 'complete');
+                    log.info('Org analysis completed', { orgId });
+                })
+                .catch(async (error) => {
+                    if (error.name === 'OAuthRequiredError') {
+                        // Connection expired mid-analysis
+                        log.warn('OAuth connection expired during analysis', { orgId });
+                        await orgRepo.updateAnalysisStatus(orgId, 'auth_required').catch(() => {});
+                    } else {
+                        log.error('Org analysis failed (background)', error, { orgId });
+                        await orgRepo.updateAnalysisStatus(orgId, 'failed').catch(() => {});
+                    }
+                });
         } catch (error) {
-            log.error('Error during analysis', error, {orgId: orgId, options: options});
-            sendResponse(res, 500, false, 'Failed to analyze org');
+            if (error.name === 'OAuthRequiredError') {
+                return res.status(401).json({ authUrl: error.authUrl });
+            }
+            log.error('Failed to queue org analysis', error, { orgId });
+            sendResponse(res, 500, false, 'Failed to queue analysis');
         }
     }
-/* todo
-    else if (action === 'start-analysis') {
-        const { orgId, options } = req.body;
+
+    else if (action === 'refresh-metadata') {
+        const { orgId } = req.body;
         if (!orgId) {
             return sendResponse(res, 400, false, 'No org provided.');
         }
@@ -174,20 +189,7 @@ router.post('/', authMiddleware, async (req, res) => {
             sendResponse(res, 500, false, 'Failed to start analysis');
         }
     }
-*/
-    else if (action === 'refresh-metadata') {
-        const { orgId } = req.body;
-        if (!orgId) {
-            return sendResponse(res, 400, false, 'No org provided.');
-        }
-        try {
-            const result = await metadataService.refreshMetadata(orgId);
-            sendResponse(res, 200, true, 'Metadata refreshed successfully', result);
-        } catch (error) {
-            log.error('Error while refreshing mdt.', error, {orgId: orgId} )
-            sendResponse(res, 500, false, 'Failed to refresh metadata');
-        }
-    }
+
 
     else if (action === 'test-sf-connection') {
         const { orgId } = req.body;
@@ -195,7 +197,7 @@ router.post('/', authMiddleware, async (req, res) => {
             return sendResponse(res, 400, false, 'No org provided.');
         }
         try {
-            const result = await salesforceService.testConnection(orgId);
+            const result = await sfService.testConnection(orgId);
             sendResponse(res, 200, true, 'Connection test successful', result);
         } catch (error) {
             log.error('Error while testing connection', error, {orgId: orgId})

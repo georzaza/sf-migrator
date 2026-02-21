@@ -9,14 +9,18 @@ if (fs.existsSync(envFile)) {
     require('dotenv').config({ path: envFile });
 }
 
+const logging = process.env.DB_LOGGING === 'true' ? console.log : false;
+const schema  = process.env.DB_SCHEMA || 'public';
+
 const development = {
     username: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || '9911',
     database: process.env.DB_NAME || `sf_migrator_${env}`,
     host: process.env.DB_HOST || '127.0.0.1',
     dialect: 'postgres',
-    logging: process.env.DB_LOGGING === false,
-    schema: process.env.DB_SCHEMA || 'public'
+    logging,
+    define: { schema },
+    schema,
 };
 
 const test = {
@@ -25,7 +29,9 @@ const test = {
     database: process.env.DB_NAME || `sf_migrator_${env}`,
     host: process.env.DB_HOST || '127.0.0.1',
     dialect: 'postgres',
-    logging: process.env.DB_LOGGING === false
+    logging,
+    define: { schema },
+    schema,
 };
 
 
@@ -35,7 +41,9 @@ const production = {
     database: process.env.DB_NAME || `sf_migrator_${env}`,
     host: process.env.DB_HOST || '127.0.0.1',
     dialect: 'postgres',
-    logging: process.env.DB_LOGGING === true
+    logging,
+    define: { schema },
+    schema,
 }
 
 module.exports = {

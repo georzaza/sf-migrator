@@ -17,8 +17,9 @@ const SALT_ROUNDS = 10;
 router.post('/login', async (req, res) => {
     if (
         !req.body || !req.body.userIdentifier || !req.body.password  || !req.headers ||
-        !req.headers.action || !req.headers.action.toLowerCase() === 'login')
+        !req.get('action') || req.get('action').toLowerCase() !== 'login')
     {
+        log.info('ERROR in auth.js headers parsing', req.headers);
         return sendResponse(res, 400, false, 'Bad request.');
     }
 
@@ -133,7 +134,7 @@ router.post('/register', async (req, res) => {
 
 // ============================= WHOAMI =============================
 router.get('/whoami', async (req, res) => {
-    if (!req.headers || !req.headers.action || !req.headers.action.toLowerCase() === 'whoami')
+    if (!req.headers || !req.headers.action || req.headers.action.toLowerCase() !== 'whoami')
         return sendResponse(res, 400, false, 'Bad request.');
     const cookies = parseCookies(req.headers.cookie);
     const token = cookies.auth_token;

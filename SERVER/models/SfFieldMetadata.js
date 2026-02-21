@@ -12,34 +12,120 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.UUID,
             allowNull: false
         },
-        fieldName: {
-            type: DataTypes.STRING,
+        name: {
+            type: DataTypes.STRING(255),
             allowNull: false
         },
-        fieldLabel: {
-            type: DataTypes.STRING,
+        label: {
+            type: DataTypes.STRING(255),
             allowNull: false
         },
-        dataType: {
-            type: DataTypes.STRING,
+        type: {
+            type: DataTypes.STRING(63),
             allowNull: false
+        },
+        custom: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        autoNumber: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        unique: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        externalId: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        picklistValues: {
+            type: DataTypes.JSON,
+            allowNull: true
+        },
+        restrictedPicklist: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        dependentPicklist: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        calculated: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        calculatedFormula: {
+            type: DataTypes.STRING(1023),
+            allowNull: true
+        },
+        defaultedOnCreate: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        defaultValue: {
+            type: DataTypes.STRING(255),
+            allowNull: true
+        },
+        defaultValueFormula: {
+            type: DataTypes.STRING(1023),
+            allowNull: true
+        },
+        idLookup: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        relationshipName: {
+            type: DataTypes.STRING(255),
+            allowNull: true
+        },
+        referenceTo: {
+            type: DataTypes.JSON,
+            allowNull: true
+        },
+        nillable: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        byteLength: {
+            type: DataTypes.INTEGER,
+            allowNull: true
         },
         length: {
             type: DataTypes.INTEGER,
             allowNull: true
         },
-        isRequired: {
-            type: DataTypes.BOOLEAN,
-            allowNull: false,
-            defaultValue: false
+        digits: {
+            type: DataTypes.INTEGER,
+            allowNull: true
         },
-        isCustom: {
-            type: DataTypes.BOOLEAN,
-            allowNull: false,
-            defaultValue: false
+        scale: {
+            type: DataTypes.INTEGER,
+            allowNull: true
         },
-        picklistValues: {
-            type: DataTypes.JSON,
+        precision: {
+            type: DataTypes.INTEGER,
+            allowNull: true
+        },
+        encrypted: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        createable: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        updateable: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
+        compoundFieldName: {
+            type: DataTypes.STRING(127),
+            allowNull: true
+        },
+        inlineHelpText: {
+            type: DataTypes.STRING(511),
             allowNull: true
         }
     }, {});

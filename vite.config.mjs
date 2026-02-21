@@ -21,5 +21,12 @@ export default defineConfig({
             '@': fileURLToPath(new URL('./src', import.meta.url))
         }
     },
-    assetsInclude: ['**/*.png', '**/*.webp']
+    assetsInclude: ['**/*.png', '**/*.webp'],
+    server: {
+        allowedHosts: [
+            'sf-migrator-frontend.georgezazanis.org',
+            'sf-migrator-backend.georgezazanis.org',
+            'localhost'
+        ]
+    }
 });

@@ -12,7 +12,6 @@ const log = logger.create('metadataService');
 const standardObjectFilters = require('./config/objectsToExclude');
 
 
-// todo async function analyzeAndSaveOrg(sfOrgId, options = {}, progressCallback = null) {
 async function analyzeAndSaveOrg(sfOrgId, options = {}) {
     const {
         objectsToAnalyze = null,

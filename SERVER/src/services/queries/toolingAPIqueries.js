@@ -1,3 +1,12 @@
+/**
+ *  Tooling limits: /services/data/vXX.X/limits
+ *  Each query may create a cursor if results > 2000 rows.
+ *      Max open cursors per user: 50
+ *      Cursor timeout: 15 minutes
+ *  Slow Objects: (not a full list)
+ *      EntityDefinition
+ *      FieldDefinition
+ */
 const toolingQueries = {
     users           : 'SELECT Id, Name, IsActive FROM User',
     lwcs            : 'SELECT Id, DeveloperName, ManageableState, TargetConfigs FROM LightningComponentBundle',
@@ -22,26 +31,6 @@ const toolingQueries = {
     tbd: '...'
 };
 
-/**
- *  Tooling limits: /services/data/vXX.X/limits
- *  Each query may create a cursor if results > 2000 rows.
- *      Max open cursors per user: 50
- *      Cursor timeout: 15 minutes
- *  Slow Objects: (not a full list)
- *      EntityDefinition
- *      FieldDefinition
- *
- *  Rate Limit package: pLimit from 'p-limit'
- *
- *  Consider Composite API:  POST /services/data/vXX.X/composite
- *
- *  Consider dynamic fetching of fields, based on extracts and perform the extraction once so
- *      that it can be used immediately in the migration process. Storing ?
- *
- *  see gpt for the safe extractor.
- *
- *  Developer Edition and Trial orgs limits are 5 concurrent requests!
- */
 module.exports = {
     toolingQueries,
 }

@@ -15,10 +15,6 @@ const metadataRepo = require('../repositories/metadataRepository');
 const mappingRepo = require('../repositories/mappingRepository');
 const mdtService = require('../services/metadataService');
 const sfService = require('../services/salesforceService');
-/* todo
-const analysisService = require('../services/analysisService');
-const analysisRepo = require('../repositories/analysisRepository');
-*/
 const sendResponse = require('../utils/sendResponse');
 const logger = require('../lib/logger');
 const log = logger.create('api');
@@ -123,26 +119,6 @@ router.get('/', authMiddleware, async (req, res) => {
     }
 });
 
-/* todo
-// Add endpoint to get latest analysis for an org
-router.get('/api/analysis', authMiddleware, async (req, res) => {
-    const action = req.headers.action?.toLowerCase();
-
-    if (action === 'get-latest-analysis') {
-        const orgId = req.headers.orgid;
-        if (!orgId) return sendResponse(res, 400, false, 'No org provided');
-        try {
-            const analysis = await analysisRepo.findLatestByOrgId(orgId);
-            sendResponse(res, 200, true, 'Latest analysis retrieved', analysis);
-        } catch (error) {
-            log.error('Failed to retrieve latest analysis', error, { orgId });
-            sendResponse(res, 500, false, 'Failed to retrieve latest analysis');
-        }
-    } else {
-        sendResponse(res, 400, false, 'Unknown analysis GET action');
-    }
-});
-*/
 
 // ===================== POST Requests =====================
 
@@ -199,21 +175,6 @@ router.post('/', authMiddleware, async (req, res) => {
             sendResponse(res, 500, false, 'Failed to queue analysis');
         }
     }
-/* todo
-    else if (action === 'start-analysis') {
-        const { orgId, options } = req.body;
-        if (!orgId) {
-            return sendResponse(res, 400, false, 'No org provided.');
-        }
-        try {
-            const analysis = await analysisService.startAnalysis(orgId, options);
-            sendResponse(res, 202, true, 'Analysis started', { analysisId: analysis.id });
-        } catch (error) {
-            log.error('Failed to start analysis', error, { orgId });
-            sendResponse(res, 500, false, 'Failed to start analysis');
-        }
-    }
-*/
 
     else if (action === 'test-sf-connection') {
         const { orgId } = req.body;

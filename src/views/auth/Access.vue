@@ -17,7 +17,6 @@ import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
                         <div class="col-span-12 mt-8 text-center">
                             <Button as="router-link" label="Login" to="/auth/login" severity="warn" />
                         </div>
-                        <!-- todo -->
                         <div class="col-span-12 mt-8 text-center">
                             <Button as="router-link" label="Register" to="/auth/register" severity="warn" />
                         </div>

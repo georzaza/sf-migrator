@@ -1,6 +1,6 @@
-'use strict';
+"use strict";
 
-module.exports = (sequelize, DataTypes) => {
+export default (sequelize, DataTypes) => {
     const FieldMapping = sequelize.define('FieldMapping', {
         id: {
             type: DataTypes.UUID,

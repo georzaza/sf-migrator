@@ -1,4 +1,4 @@
-const validator = require('validator');
+import validator from 'validator';
 
 const validateUsername = (username) => {
 
@@ -51,8 +51,4 @@ const validatePassword = (password) => {
     return errormessage;
 }
 
-module.exports = {
-    validateUsername,
-    validateEmail,
-    validatePassword
-};
+export { validateUsername, validateEmail, validatePassword };

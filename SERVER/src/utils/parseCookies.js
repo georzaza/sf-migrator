@@ -1,4 +1,4 @@
-const logger = require('../lib/logger');
+import logger from '../lib/logger.js';
 const log = logger.create('parseCookies');
 
 function parseCookies(cookieHeader) {
@@ -16,4 +16,4 @@ function parseCookies(cookieHeader) {
     return cookies;
 }
 
-module.exports = parseCookies;
+export default parseCookies;

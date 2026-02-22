@@ -1,6 +1,6 @@
-'use strict';
+"use strict";
 
-module.exports = (sequelize, DataTypes) => {
+export default (sequelize, DataTypes) => {
     const MigrationJob = sequelize.define('MigrationJob', {
         id: {
             type: DataTypes.UUID,

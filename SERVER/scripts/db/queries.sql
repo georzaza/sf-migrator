@@ -63,18 +63,12 @@ CREATE DATABASE sf_migrator_prod WITH
 
 
 
+SELECT * FROM public."Users" ORDER BY id ASC;
 
-SELECT *
-FROM public."SfOrgs"
-ORDER BY "projectId", id ASC;
+SELECT * FROM public."Projects" ORDER BY "userId", id ASC;
 
-SELECT *
-FROM public."Projects"
-ORDER BY "userId", id ASC;
+SELECT * FROM public."SfOrgs" ORDER BY "projectId", id ASC;
 
-SELECT *
-FROM public."Users"
-ORDER BY id ASC;
 
 -- GROUP objects per org
 SELECT COUNT("id"), "sfOrgId"
@@ -86,9 +80,8 @@ GROUP BY "sfOrgId"
 SELECT
 	orgs."id" orgid,
 	orgs."name" orgname,
-	objects."objectName",
-	fields."fieldName",
-	fields."dataType"
+	objects."name",
+	fields.*
 FROM public."SfOrgs" "orgs"
 JOIN public."SfObjectMetadata" "objects"
   ON (orgs."id" = objects."sfOrgId")
@@ -103,8 +96,8 @@ SELECT
     users."username" user,
 	projects."name" project,
 	orgs."name" org,
-	objects."objectName" object,
-	fields."fieldName" field
+	objects."name" object,
+	fields."name" field
 FROM public."Users" "users"
 JOIN public."Projects" 	"projects"
   ON (users."id" = projects."userId")
@@ -118,8 +111,8 @@ GROUP BY
 	users."username",
 	projects."name",
 	orgs."name",
-	objects."objectName",
-	fields."fieldName"
+	objects."name",
+	fields."name"
 ;
 
 -- GROUP objects per org, project, user
@@ -147,7 +140,7 @@ SELECT
     users."username" user,
 	projects."name" project,
 	orgs."name" org,
-	objects."objectName" object
+	objects."name" object
 FROM public."Users" "users"
 JOIN public."Projects" 	"projects"
   ON (users."id" = projects."userId")
@@ -163,4 +156,6 @@ GROUP BY
 	orgs."id",
 	objects."id"
 ORDER BY object, org, project, user;
+
+
 

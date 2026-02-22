@@ -1,5 +1,5 @@
-const https = require('https');
-const http = require('http');
+import https from 'https';
+import http from 'http';
 
 /**
  * Quick HTTP probe: resolves true if the given URL returns any HTTP response
@@ -21,4 +21,4 @@ function probeUrl(rawUrl, timeoutMs = 6000) {
     });
 }
 
-module.exports = probeUrl;
+export default probeUrl;

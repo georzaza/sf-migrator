@@ -2,9 +2,10 @@
  * Metadata Repository - Database operations for SfObjectMetadata and SfFieldMetadata
  */
 
-const { SfObjectMetadata, SfFieldMetadata } = require('../../models');
-const { mapSfField, SF_FIELD_COLUMNS } = require('../utils/sfFieldMapper');
-const { mapSfObject, SF_OBJECT_COLUMNS } = require('../utils/sfObjectMapper');
+import db from '../../models/index.js';
+import { mapSfField, SF_FIELD_COLUMNS } from '../utils/sfFieldMapper.js';
+import { mapSfObject, SF_OBJECT_COLUMNS } from '../utils/sfObjectMapper.js';
+const { SfObjectMetadata, SfFieldMetadata } = db;
 
 async function findOrCreateObject(sfOrgId, objectData) {
     const mapped = mapSfObject(objectData);
@@ -133,7 +134,7 @@ async function getStats(sfOrgId) {
     };
 }
 
-module.exports = {
+export default {
     findOrCreateObject,
     findOrCreateField,
     findObjectById,

@@ -1,17 +1,19 @@
-const path = require('path');
+import path from 'path';
+import express from 'express';
+import cors from 'cors';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const env = process.env.NODE_ENV || 'development';
-require('dotenv').config({
-    path: path.resolve(__dirname, `../.env.${env}`),
-});
+dotenv.config({ path: path.resolve(__dirname, `../.env.${env}`) });
 
-const express = require('express');
-const cors = require('cors');
-const authRoutes = require('./routes/auth');
-const apiRoutes = require('./routes/api');
-const oauthRoutes = require('./routes/oauth');
-const requestTracer = require('./middleware/requestTracer');
-const logger = require('./lib/logger');
+import authRoutes from './routes/auth.js';
+import apiRoutes from './routes/api.js';
+import oauthRoutes from './routes/oauth.js';
+import requestTracer from './middleware/requestTracer.js';
+import logger from './lib/logger.js';
 const log = logger.create('server');
 
 const distPath = path.join(__dirname, '..', '..', 'dist');

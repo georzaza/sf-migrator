@@ -2,8 +2,9 @@
  * Org Repository - Database operations for SfOrg model
  */
 
-const { SfOrg, Project } = require('../../models');
-const logger = require('../lib/logger');
+import db from '../../models/index.js';
+import logger from '../lib/logger.js';
+const { SfOrg, Project } = db;
 const log = logger.create('orgRepository');
 
 async function findById(id) {
@@ -60,7 +61,7 @@ async function updateAnalysisStatus(id, status) {
     return sfOrg;
 }
 
-module.exports = {
+export default {
     findById,
     findByProjectId,
     findByUserId,

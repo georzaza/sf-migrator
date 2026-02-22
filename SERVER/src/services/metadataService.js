@@ -5,11 +5,11 @@
  * DB operations are delegated to metadataRepository.
  */
 
-const metadataRepo = require('../repositories/metadataRepository');
-const sfService = require('./salesforceService');
-const logger = require('../lib/logger');
+import metadataRepo from '../repositories/metadataRepository.js';
+import sfService from './salesforceService.js';
+import logger from '../lib/logger.js';
 const log = logger.create('metadataService');
-const standardObjectFilters = require('./config/objectsToExclude');
+import standardObjectFilters from './config/objectsToExclude.js';
 
 async function analyzeAndSaveOrg(sfOrgId, options = {}) {
     const {
@@ -18,7 +18,7 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
     } = options;
 
     try {
-        const objects = await sfService.describeGlobal(sfOrgId, filters = {});
+        const objects = await sfService.describeGlobal(sfOrgId);
         log.debug('Retrieved global object describes', { orgId: sfOrgId, "objects count": objects.length });
 
         // user filters
@@ -146,7 +146,7 @@ async function getMetadataStats(sfOrgId) {
     }
 }
 
-module.exports = {
+export default {
     analyzeAndSaveOrg,
     saveObjectMetadata,
     saveFieldMetadata,

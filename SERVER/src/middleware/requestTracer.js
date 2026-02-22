@@ -8,8 +8,10 @@
  * The response always includes X-Request-ID for client-side correlation.
  */
 
-const crypto = require('crypto');
-const { asyncLocalStorage } = require('../lib/logger');
+import crypto from 'crypto';
+import logger from '../lib/logger.js';
+
+const { asyncLocalStorage } = logger;
 
 function requestTracer(req, res, next) {
     const requestId = req.get('x-request-id') || crypto.randomUUID().slice(0, 8);
@@ -24,4 +26,4 @@ function requestTracer(req, res, next) {
     });
 }
 
-module.exports = requestTracer;
+export default requestTracer;

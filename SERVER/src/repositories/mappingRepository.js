@@ -2,7 +2,8 @@
  * Mapping Repository - Database operations for ObjectMapping and FieldMapping
  */
 
-const { ObjectMapping, FieldMapping, SfObjectMetadata, SfFieldMetadata } = require('../../models');
+import db from '../../models/index.js';
+const { ObjectMapping, FieldMapping, SfObjectMetadata, SfFieldMetadata } = db;
 
 const OBJECT_MAPPING_INCLUDES = [
     {
@@ -106,7 +107,7 @@ async function deleteFieldMapping(id) {
     await mapping.destroy();
 }
 
-module.exports = {
+export default {
     findObjectMappingsByProjectId,
     findFieldMappingsByProjectId,
     createObjectMapping,

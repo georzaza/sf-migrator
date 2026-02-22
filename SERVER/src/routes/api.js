@@ -5,19 +5,19 @@
  * Extracted from the monolithic server.js for clarity.
  */
 
-const express = require('express');
+import express from 'express';
 const router = express.Router();
 
-const authMiddleware = require('../middleware/authMiddleware');
-const projectRepo = require('../repositories/projectRepository');
-const orgRepo = require('../repositories/orgRepository');
-const metadataRepo = require('../repositories/metadataRepository');
-const mappingRepo = require('../repositories/mappingRepository');
-const mdtService = require('../services/metadataService');
-const sfService = require('../services/salesforceService');
-const probeUrl = require('../utils/probeUrl');
-const sendResponse = require('../utils/sendResponse');
-const logger = require('../lib/logger');
+import authMiddleware from '../middleware/authMiddleware.js';
+import projectRepo from '../repositories/projectRepository.js';
+import orgRepo from '../repositories/orgRepository.js';
+import metadataRepo from '../repositories/metadataRepository.js';
+import mappingRepo from '../repositories/mappingRepository.js';
+import mdtService from '../services/metadataService.js';
+import sfService from '../services/salesforceService.js';
+import probeUrl from '../utils/probeUrl.js';
+import sendResponse from '../utils/sendResponse.js';
+import logger from '../lib/logger.js';
 const log = logger.create('api');
 
 
@@ -360,4 +360,4 @@ router.delete('/', authMiddleware, async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

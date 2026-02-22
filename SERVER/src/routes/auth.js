@@ -1,14 +1,14 @@
-const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
+import express from 'express';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 const router = express.Router();
 
-const userRepo = require('../repositories/userRepository');
-const validator = require('./validator.js');
+import userRepo from '../repositories/userRepository.js';
+import validator from 'validator';
 
-const sendResponse = require('../utils/sendResponse.js');
-const parseCookies = require('../utils/parseCookies.js');
-const logger = require('../lib/logger');
+import sendResponse from '../utils/sendResponse.js';
+import parseCookies from '../utils/parseCookies.js';
+import logger from '../lib/logger.js';
 const log = logger.create('authRoutes');
 
 const SALT_ROUNDS = 10;
@@ -174,4 +174,4 @@ router.get('/logout', (req, res) => {
 });
 
 
-module.exports = router;
+export default router;

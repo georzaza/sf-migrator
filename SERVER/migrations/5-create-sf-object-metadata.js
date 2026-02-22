@@ -1,8 +1,7 @@
 "use strict";
 
-/** @type {import('sequelize-cli').Migration} */
 module.exports = {
-    async up(queryInterface, Sequelize) {
+    up: async (queryInterface, Sequelize) => {
         await queryInterface.createTable('SfObjectMetadata', {
             id: {
                 type: Sequelize.UUID,
@@ -71,17 +70,16 @@ module.exports = {
             }
         });
 
-        // Add unique constraint for org + object name combination
-        await queryInterface.addIndex('SfObjectMetadata', ['sfOrgId', 'name'], {
-            unique: true,
-            name: 'unique_org_object'
-        });
+        await queryInterface.sequelize.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS "unique_org_object"
+            ON "SfObjectMetadata" ("sfOrgId", "name");
+        `);
 
-        // Add index for faster lookups
         await queryInterface.addIndex('SfObjectMetadata', ['sfOrgId']);
     },
 
-    async down(queryInterface, Sequelize) {
+    down: async (queryInterface, Sequelize) => {
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "unique_org_object";');
         await queryInterface.dropTable('SfObjectMetadata');
     }
 };

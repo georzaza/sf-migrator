@@ -57,17 +57,20 @@ module.exports = {
             }
         });
 
-        // Add unique constraint for project + source + target combination
-        await queryInterface.addIndex('ObjectMappings', ['projectId', 'sourceObjectId', 'targetObjectId'], {
-            unique: true,
-            name: 'unique_project_mapping'
-        });
+        await queryInterface.sequelize.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS "unique_project_mapping"
+            ON "ObjectMappings" ("projectId", "sourceObjectId", "targetObjectId");
+        `);
 
-        // Add index for faster lookups
-        await queryInterface.addIndex('ObjectMappings', ['projectId']);
+        await queryInterface.sequelize.query(`
+            CREATE INDEX IF NOT EXISTS "idx_object_mappings_projectId"
+            ON "ObjectMappings" ("projectId");
+        `);
     },
 
     async down(queryInterface, Sequelize) {
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "unique_project_mapping";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_object_mappings_projectId";');
         await queryInterface.dropTable('ObjectMappings');
     }
 };

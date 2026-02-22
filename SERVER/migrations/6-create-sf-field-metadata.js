@@ -153,14 +153,15 @@ module.exports = {
             }
         });
 
-        // Add unique constraint for object + field name combination
-        await queryInterface.addIndex('SfFieldMetadata', ['objectMetadataId', 'name'], {
-            unique: true,
-            name: 'unique_object_field'
-        });
+        await queryInterface.sequelize.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS "unique_object_field"
+            ON "SfFieldMetadata" ("objectMetadataId", "name");
+        `);
 
-        // Add index for faster lookups
-        await queryInterface.addIndex('SfFieldMetadata', ['objectMetadataId']);
+        await queryInterface.sequelize.query(`
+            CREATE INDEX IF NOT EXISTS "idx_sf_field_object_metadataId"
+            ON "SfFieldMetadata" ("objectMetadataId");
+        `);
 
         await queryInterface.sequelize.query(`
             ALTER TABLE "SfFieldMetadata"
@@ -182,6 +183,8 @@ module.exports = {
     },
 
     async down(queryInterface, Sequelize) {
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "unique_object_field";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_sf_field_object_metadataId";');
         await queryInterface.dropTable('SfFieldMetadata');
     }
 };

@@ -11,6 +11,7 @@ import OrgList from '@/components/dashboard/OrgList.vue';
 import OrgFormDialog from '@/components/dashboard/OrgFormDialog.vue';
 import ProjectPanel from '@/components/dashboard/ProjectPanel.vue';
 import OrgDetailPanel from '@/components/dashboard/OrgDetailPanel.vue';
+import OrgOverview from '@/components/dashboard/OrgOverview.vue';
 import OAuthRedirectOverlay from '@/components/OAuthRedirectOverlay.vue';
 
 const orgStore = useOrgStore();
@@ -196,7 +197,22 @@ function onDeleteOrg(org) {
 
             <!-- Right: Org Detail Panel -->
             <OrgDetailPanel
-                v-if="selectedProject && selectedOrg"
+                v-if="false && selectedProject && selectedOrg"
+                :org="selectedOrg"
+                :analyzingOrgId="analyzingOrgId"
+                :hasAnalysis="hasAnalysis"
+                :checkingAnalysis="checkingAnalysis"
+                :objects="objects"
+                :selectedObject="selectedObject"
+                :fields="fields"
+                :loadingFields="loadingFields"
+                @analyze="doAnalysis"
+                @select-object="onSelectObject"
+            />
+
+            <!-- Org Stats -->
+            <OrgOverview
+                v-if="true && selectedProject && selectedOrg"
                 :org="selectedOrg"
                 :analyzingOrgId="analyzingOrgId"
                 :hasAnalysis="hasAnalysis"

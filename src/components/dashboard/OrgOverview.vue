@@ -88,27 +88,7 @@ const emit = defineEmits(['analyze', 'select-object']);
                     />
                 </div>
 
-                <div class="analysis-content">
-                    <!-- Left: Object List + Object Detail Header -->
-                    <div class="analysis-left-column">
-                        <div class="analysis-panel">
-                            <ObjectList
-                                :objects="objects"
-                                :selectedObject="selectedObject"
-                                :loading="checkingAnalysis"
-                                @select-object="emit('select-object', $event)"
-                            />
-                        </div>
-                        <div v-if="selectedObject" class="analysis-panel">
-                            <ObjectDetail :object="selectedObject" />
-                        </div>
-                    </div>
 
-                    <!-- Right: Field List -->
-                    <div v-if="selectedObject" class="analysis-panel">
-                        <FieldList :fields="fields" :loading="loadingFields" />
-                    </div>
-                </div>
             </template>
 
         </div><!-- /detail-body -->

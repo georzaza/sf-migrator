@@ -24,9 +24,7 @@ axiosInstance.interceptors.request.use(
     (config) => {
         const requestId = generateRequestId();
         config.headers['X-Request-ID'] = requestId;
-        console.log(`[${requestId}] API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-            action: config.headers?.action,
-        });
+        console.group(`[${requestId}] API Request: ${config.method?.toUpperCase()} ${config.url} ${config.headers?.action}`);
         return config;
     },
     (error) => {
@@ -45,6 +43,7 @@ axiosInstance.interceptors.response.use(
                 success: response.data?.success,
             });
         }
+        console.groupEnd();
 
         // 401 + authUrl is handled by the caller (useOrgAnalysis) which shows
         // the overlay first — do NOT navigate here.

@@ -66,7 +66,7 @@ const logout = async () => {
                     </g>
                 </svg>
 
-                <span>{{ userStore.username }}</span>
+                <span>Dashboard</span>
             </router-link>
         </div>
 
@@ -99,3 +99,5 @@ const logout = async () => {
         </div>
     </div>
 </template>
+
+

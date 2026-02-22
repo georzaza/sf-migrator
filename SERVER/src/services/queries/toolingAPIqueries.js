@@ -31,8 +31,8 @@ const toolingQueries = {
     tbd: '...'
 };
 
-module.exports = {
-    toolingQueries,
+export default {
+  toolingQueries,
 }
 
 /* TODO

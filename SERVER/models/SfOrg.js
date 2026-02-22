@@ -1,6 +1,6 @@
-'use strict'
+"use strict"
 
-module.exports = (sequelize, DataTypes) => {
+export default (sequelize, DataTypes) => {
     const SfOrg = sequelize.define('SfOrg', {
         id: {
             type: DataTypes.UUID,

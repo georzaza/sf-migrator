@@ -232,6 +232,6 @@ const standardObjectFilters = {
 
 
 
-module.exports = {
+export default {
     ...standardObjectFilters,
 }

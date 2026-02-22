@@ -43,4 +43,4 @@ function mapSfObject(obj) {
     };
 }
 
-module.exports = { mapSfObject, SF_OBJECT_COLUMNS };
+export { mapSfObject, SF_OBJECT_COLUMNS };

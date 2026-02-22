@@ -1,8 +1,8 @@
-const jwt = require('jsonwebtoken');
-const userRepo = require('../repositories/userRepository');
-const sendResponse = require('../utils/sendResponse');
-const parseCookies = require('../utils/parseCookies');
-const logger = require('../lib/logger');
+import jwt from 'jsonwebtoken';
+import userRepo from '../repositories/userRepository.js';
+import sendResponse from '../utils/sendResponse.js';
+import parseCookies from '../utils/parseCookies.js';
+import logger from '../lib/logger.js';
 const log = logger.create('authMiddleware');
 
 async function authMiddleware(req, res, next) {
@@ -37,4 +37,4 @@ async function authMiddleware(req, res, next) {
     }
 }
 
-module.exports = authMiddleware;
+export default authMiddleware;

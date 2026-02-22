@@ -56,8 +56,4 @@ const getDangerousProfiles = async (conn) =>  {
     return records;
 }
 
-module.exports = {
-    getLimits,
-    getStorage,
-    getDangerousProfiles,
-}
+export { getLimits, getStorage, getDangerousProfiles };

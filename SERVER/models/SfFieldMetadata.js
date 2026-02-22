@@ -1,6 +1,6 @@
-'use strict';
+"use strict";
 
-module.exports = (sequelize, DataTypes) => {
+export default (sequelize, DataTypes) => {
     const SfFieldMetadata = sequelize.define('SfFieldMetadata', {
         id: {
             type: DataTypes.UUID,

@@ -5,12 +5,12 @@
  * Uses OAuth2 Username-Password flow (JSFORCE_REFERENCE.md Pattern 2).
  */
 
-const jsforce = require('jsforce');
-const orgRepo = require('../repositories/orgRepository');
-const logger = require('../lib/logger');
+import jsforce from 'jsforce';
+import orgRepo from '../repositories/orgRepository.js';
+import logger from '../lib/logger.js';
 const log = logger.create('salesforceService');
-const { mapSfField } = require('../utils/sfFieldMapper');
-const { mapSfObject } = require('../utils/sfObjectMapper');
+import { mapSfField } from '../utils/sfFieldMapper.js';
+import { mapSfObject } from '../utils/sfObjectMapper.js';
 
 const VERSION = '65.0';
 
@@ -285,7 +285,7 @@ async function testConnection(sfOrgId) {
     }
 }
 
-module.exports = {
+export default {
     OAuthRequiredError,
     beginOAuth,
     completeOAuth,

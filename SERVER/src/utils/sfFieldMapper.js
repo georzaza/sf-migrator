@@ -64,4 +64,4 @@ function mapSfField(field) {
     };
 }
 
-module.exports = { mapSfField, SF_FIELD_COLUMNS };
+export { mapSfField, SF_FIELD_COLUMNS };

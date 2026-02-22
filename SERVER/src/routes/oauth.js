@@ -6,12 +6,12 @@
  *   GET /oauth2/callback — receives the code/error from Salesforce and postMessages the result back
  */
 
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const sfService = require('../services/salesforceService');
-const probeUrl = require('../utils/probeUrl');
-const popupResultHtml = require('../utils/popupResultHtml');
-const logger = require('../lib/logger');
+import sfService from '../services/salesforceService.js';
+import probeUrl from '../utils/probeUrl.js';
+import popupResultHtml from '../utils/popupResultHtml.js';
+import logger from '../lib/logger.js';
 const log = logger.create('oauthRoutes');
 
 /**
@@ -89,4 +89,4 @@ router.get('/oauth2/callback', async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

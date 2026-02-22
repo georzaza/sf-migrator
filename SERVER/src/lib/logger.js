@@ -14,9 +14,13 @@
  *   log.error('Something failed', error, { orgId: '...' });
  */
 
-const { AsyncLocalStorage } = require('async_hooks');
-const fs = require('fs');
-const path = require('path');
+import { AsyncLocalStorage } from 'async_hooks';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const asyncLocalStorage = new AsyncLocalStorage();
 
@@ -186,7 +190,7 @@ function create(callerName) {
             const sanitizedTs = ts.replace(/:/g, '-');
             const dateStr = ts.substring(0, 10).replace(/-/g, '');
             const filename = `${sanitizedTs}_${callerName}_${ctx.action}_${ctx.orgId}_${ctx.requestId}_${name}.log`;
-            const logDir = path.join(__dirname, '../../logs', dateStr);
+            const logDir = path.join(__dirname, '..', '..', 'logs', dateStr);
             const logPath = path.join(logDir, filename);
 
             // Ensure logs directory exists
@@ -207,7 +211,7 @@ function create(callerName) {
     };
 }
 
-module.exports = {
+export default {
     create,
     asyncLocalStorage,
     getRequestContext,

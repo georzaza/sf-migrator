@@ -2,8 +2,9 @@
  * Project Repository - Database operations for Project model
  */
 
-const { Project } = require('../../models');
-const logger = require('../lib/logger');
+import db from '../../models/index.js';
+import logger from '../lib/logger.js';
+const { Project } = db;
 const log = logger.create('projectRepository');
 
 async function findById(id) {
@@ -43,7 +44,7 @@ async function findAll() {
     return Project.findAll();
 }
 
-module.exports = {
+export default {
     findById,
     findByUserId,
     create,

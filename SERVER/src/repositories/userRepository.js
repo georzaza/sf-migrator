@@ -2,8 +2,9 @@
  * User Repository - Database operations for User model
  */
 
-const { User } = require('../../models');
-const logger = require('../lib/logger');
+import db from '../../models/index.js';
+import logger from '../lib/logger.js';
+const { User } = db;
 const log = logger.create('userRepository');
 
 async function findByEmail(email) {
@@ -36,7 +37,7 @@ async function updateLastLogin(id) {
     }
 }
 
-module.exports = {
+export default {
     findByEmail,
     findByUsername,
     findById,

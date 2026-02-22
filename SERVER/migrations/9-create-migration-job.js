@@ -78,12 +78,20 @@ module.exports = {
             }
         });
 
-        // Add index for faster status lookups
-        await queryInterface.addIndex('MigrationJobs', ['status']);
-        await queryInterface.addIndex('MigrationJobs', ['objectMappingId']);
+        await queryInterface.sequelize.query(`
+            CREATE INDEX IF NOT EXISTS "idx_migration_jobs_status"
+            ON "MigrationJobs" ("status");
+        `);
+        await queryInterface.sequelize.query(`
+            CREATE INDEX IF NOT EXISTS "idx_migration_jobs_objectMappingId"
+            ON "MigrationJobs" ("objectMappingId");
+        `);
     },
 
     async down(queryInterface, Sequelize) {
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_migration_jobs_status";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_migration_jobs_objectMappingId";');
         await queryInterface.dropTable('MigrationJobs');
+        await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_MigrationJobs_status";');
     }
 };

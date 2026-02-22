@@ -78,13 +78,24 @@ module.exports = {
             }
         });
 
-        // Add index for faster lookups
-        await queryInterface.addIndex('FieldMappings', ['objectMappingId']);
-        await queryInterface.addIndex('FieldMappings', ['sourceFieldId']);
-        await queryInterface.addIndex('FieldMappings', ['targetFieldId']);
+        await queryInterface.sequelize.query(`
+            CREATE INDEX IF NOT EXISTS "idx_field_mappings_objectMappingId"
+            ON "FieldMappings" ("objectMappingId");
+        `);
+        await queryInterface.sequelize.query(`
+            CREATE INDEX IF NOT EXISTS "idx_field_mappings_sourceFieldId"
+            ON "FieldMappings" ("sourceFieldId");
+        `);
+        await queryInterface.sequelize.query(`
+            CREATE INDEX IF NOT EXISTS "idx_field_mappings_targetFieldId"
+            ON "FieldMappings" ("targetFieldId");
+        `);
     },
 
     async down(queryInterface, Sequelize) {
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_field_mappings_objectMappingId";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_field_mappings_sourceFieldId";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_field_mappings_targetFieldId";');
         await queryInterface.dropTable('FieldMappings');
     }
 };

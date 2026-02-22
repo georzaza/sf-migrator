@@ -13,7 +13,7 @@ const logging = process.env.DB_LOGGING === 'true' ? console.log : false;
 const schema  = process.env.DB_SCHEMA || 'public';
 
 const development = {
-    username: process.env.DB_USER || 'postgres',
+    username: process.env.DB_USER || 'sf_migrator',
     password: process.env.DB_PASSWORD || '9911',
     database: process.env.DB_NAME || `sf_migrator_${env}`,
     host: process.env.DB_HOST || '127.0.0.1',

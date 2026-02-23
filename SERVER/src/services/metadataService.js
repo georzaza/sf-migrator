@@ -7,7 +7,7 @@
 
 import mdtRepo from '../repositories/metadataRepository.js';
 import sfService from './salesforceService.js';
-import standardObjectFilters from './config/objectsToExclude.js';
+import standardObjectFilters from '../excludedObjects.js';
 import logger from '../lib/logger.js';
 const log = logger.create('metadataService');
 

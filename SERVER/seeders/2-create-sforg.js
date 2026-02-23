@@ -20,16 +20,18 @@ module.exports = {
 
         const sforgs = [];
 
-        // Create 2 orgs per user using real Salesforce credentials
+        // Create 2 orgs per user
+        let idx = 0;
         for (const user of users) {
+
             // First org: Superbadge Formulas
             const formulasOrg = realOrgs.realOrgs.superbadgeFormulas;
             let formulasOrgId = user.id.slice(0, -3) + '0' + user.id.slice(-2);
 
             sforgs.push({
                 id: formulasOrgId,
-                name: formulasOrg.name,
-                description: formulasOrg.description,
+                name: formulasOrg.name + ` (User ${++idx})`,
+                description: formulasOrg.description + ` (User ${++idx})`,
                 loginURL: formulasOrg.loginURL,
                 connectionType: 'OAuth',
                 clientId: formulasOrg.clientId || null,
@@ -45,8 +47,8 @@ module.exports = {
 
             sforgs.push({
                 id: apexOrgId,
-                name: apexOrg.name,
-                description: apexOrg.description,
+                name: apexOrg.name + ` (User ${++idx})`,
+                description: apexOrg.description + ` (User ${++idx})`,
                 loginURL: apexOrg.loginURL,
                 connectionType: 'OAuth',
                 clientId: apexOrg.clientId || null,

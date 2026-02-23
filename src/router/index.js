@@ -16,17 +16,7 @@ const router = createRouter({
                     name: 'org-stats',
                     component: () => import('@/views/OrgStatsView.vue')
                 },
-                {
-                    path: '/migrate',
-                    name: 'migrate',
-                    component: () => import('@/views/MigrationWorkspace.vue')
-                },
             ]
-        },
-        {
-            path: '/pages/notfound',
-            name: 'notfound',
-            component: () => import('@/views/NotFound.vue')
         },
         {
             path: '/auth/login',

@@ -136,20 +136,6 @@ export default (sequelize, DataTypes) => {
             foreignKey: 'objectMetadataId',
             as: 'object'
         });
-
-        // Can be a source in many field mappings
-        SfFieldMetadata.hasMany(models.FieldMapping, {
-            foreignKey: 'sourceFieldId',
-            as: 'sourceMappings',
-            onDelete: 'SET NULL'
-        });
-
-        // Can be a target in many field mappings
-        SfFieldMetadata.hasMany(models.FieldMapping, {
-            foreignKey: 'targetFieldId',
-            as: 'targetMappings',
-            onDelete: 'CASCADE'
-        });
     };
 
     return SfFieldMetadata;

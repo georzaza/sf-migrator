@@ -24,7 +24,6 @@ export const useGlobalStore = defineStore('global', {
             'Master Data',
             'Reporting & Monitoring'
         ],
-        dummyOrgMappingCreationInProgress: false
     }),
 
     actions: {
@@ -120,13 +119,5 @@ export const useGlobalStore = defineStore('global', {
         getLoggedInUser() {
             return this.loggedInUser;
         },
-
-        dummyOrgMappingCreationTimeout(ms) {
-            this.dummyOrgMappingCreationInProgress = true;
-            setTimeout(() => {
-                console.log('store: timeout');
-                this.dummyOrgMappingCreationInProgress = false;
-            }, ms);
-        }
     },
 });

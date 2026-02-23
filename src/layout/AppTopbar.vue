@@ -5,18 +5,12 @@ import axiosInstance from '@/api/axiosInstance';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/userStore';
 import { useOrgStore } from '@/stores/orgStore';
-import { useMetadataStore } from '@/stores/metadataStore';
-import { useMappingStore } from '@/stores/mappingStore';
-import { useGlobalStore } from '@/stores/globalStore';
 
 const { toggleDarkMode, isDarkTheme } = useLayout();
 
 const router = useRouter();
 const userStore = useUserStore();
 const orgStore = useOrgStore();
-const metadataStore = useMetadataStore();
-const mappingStore = useMappingStore();
-const globalStore = useGlobalStore();
 
 const logout = async () => {
     // Clear persisted storage
@@ -25,8 +19,6 @@ const logout = async () => {
     // Reset all Pinia store state in-memory
     userStore.$reset();
     orgStore.$reset();
-    metadataStore.$reset();
-    mappingStore.$reset();
     globalStore.$reset();
     try {
         axiosInstance.get('/auth/logout',

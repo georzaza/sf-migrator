@@ -136,61 +136,121 @@ function onDeleteOrg() {
         },
     });
 }
+
+function onAnalyzeOrg() {
+    const org = orgStore.selectedOrg;
+    if (!org) return;
+    confirm.require({
+        message: "Analysis might take a while depending on your org's complexity. Proceed?",
+        header: 'Confirm Analysis',
+        icon: 'pi pi-exclamation-triangle',
+        acceptLabel: 'Proceed',
+        rejectLabel: 'Cancel',
+        acceptClass: 'p-button-primary',
+        accept: () => {
+            doAnalysis();
+        },
+    });
+}
 </script>
 
 <template>
-    <OAuthRedirectOverlay :show="showingOAuthOverlay" :orgName="oauthOrgName" />
+    <OAuthRedirectOverlay
+        :show="showingOAuthOverlay"
+        :orgName="oauthOrgName"
+    />
 
-    <!-- Sub-bar below the topbar -->
-    <div class="flex items-center gap-3 px-6 border-b"
-         style="height:3rem; background:var(--surface-card); border-color:var(--surface-border)">
+    <div class="card flex items-center gap-3 pt-1"
+         style="height:3rem; padding-bottom: 1rem; padding-top: 1rem; background:var(--surface-card); border-color:var(--surface-border)">
 
-        <!-- ORG pill -->
         <div class="flex items-center rounded-lg overflow-hidden shrink-0"
-             style="border:1px solid var(--surface-border); height:2rem">
+             style="border:1px solid var(--surface-border); height:2.5rem">
             <span class="flex items-center px-2.5 h-full text-xs font-semibold uppercase tracking-wide select-none whitespace-nowrap"
                   style="background:var(--surface-ground); border-right:1px solid var(--surface-border); color:var(--text-color-secondary)">
-                Org
+                Selected Org
             </span>
+
             <Select
                 v-model="selectedOrg"
                 :options="orgStore.orgs"
                 optionLabel="name"
                 placeholder="— none —"
                 size="small"
-                class="w-40"
+                class="w-64"
                 :pt="{ root: { style: 'border:none; box-shadow:none; border-radius:0' } }"
             />
-            <div class="flex items-center h-full" style="border-left:1px solid var(--surface-border)">
-                <Button icon="pi pi-plus"          text size="small" severity="secondary" class="!rounded-none !h-full !w-8" v-tooltip.bottom="'Add org'"             @click="onAddOrg" />
-                <Button icon="pi pi-pencil"         text size="small" severity="secondary" class="!rounded-none !h-full !w-8" v-tooltip.bottom="'Edit org'"             :disabled="!selectedOrg"     @click="onEditOrg" />
-                <Button icon="pi pi-external-link" text size="small" severity="secondary" class="!rounded-none !h-full !w-8" v-tooltip.bottom="'Open in Salesforce'" :disabled="!selectedOrg"     @click="onOpenOrg" />
-                <Button icon="pi pi-trash"          text size="small" severity="danger"    class="!rounded-none !h-full !w-8" v-tooltip.bottom="'Delete org'"           :disabled="!selectedOrg"     @click="onDeleteOrg" />
-            </div>
+        </div>
+
+        <div class="flex items-center gap-1">
+            <Button
+                icon="pi pi-plus"
+                rounded
+                outlined
+                raised
+                size="small"
+                severity="primary"
+                v-tooltip.bottom="'Add org'"
+                @click="onAddOrg"
+            />
+            <Button
+                icon="pi pi-pencil"
+                rounded
+                outlined
+                raised
+                size="small"
+                severity="info"
+                v-tooltip.bottom="'Edit org'"
+                :disabled="!selectedOrg"
+                @click="onEditOrg"
+            />
+            <Button
+                icon="pi pi-trash"
+                rounded
+                outlined
+                raised
+                size="small"
+                severity="danger"
+                v-tooltip.bottom="'Delete org'"
+                :disabled="!selectedOrg && (isAnalyzing || checkingAnalysis)"
+                @click="onDeleteOrg"
+            />
+            <Button
+                icon="pi pi-external-link"
+                rounded
+                outlined
+                raised
+                severity="secondary"
+                size="small"
+                v-tooltip.bottom="'Open in Salesforce'"
+                :disabled="!selectedOrg"
+                @click="onOpenOrg"
+            />
         </div>
 
         <!-- ANALYSIS -->
         <template v-if="selectedOrg">
-            <i class="pi pi-chevron-right text-xs" style="color:var(--text-color-secondary); opacity:0.3"></i>
-
-            <span v-if="analyzedDate"
-                  class="flex items-center gap-1 text-xs whitespace-nowrap"
-                  style="color:var(--text-color-secondary)">
-                <i class="pi pi-calendar" style="font-size:0.65rem"></i>
-                {{ analyzedDate }}
-            </span>
-
-            <span v-if="isAnalyzing || checkingAnalysis"
-                  class="flex items-center gap-1.5 text-xs whitespace-nowrap"
-                  style="color:var(--text-color-secondary)">
-                <ProgressSpinner style="width:0.85rem;height:0.85rem" strokeWidth="6" />
+            <span v-if="isAnalyzing || checkingAnalysis" class="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                <ProgressSpinner
+                    style="width:2rem;height:2rem"
+                    strokeWidth="6"
+                />
                 {{ checkingAnalysis ? 'Checking…' : 'Analyzing…' }}
             </span>
-            <Button v-else label="Analyze" icon="pi pi-chart-bar" outlined size="small"
-                    v-tooltip.bottom="'Run org analysis'" @click="doAnalysis" />
+
+            <Button v-else
+                label="Analyze"
+                icon="pi pi-chart-bar"
+                size="small"
+                raised
+                v-tooltip.bottom="'Run org analysis'"
+                @click="onAnalyzeOrg"
+            />
+
+            <span v-if="analyzedDate" class="flex items-center gap-1 text-xs whitespace-nowrap" style="color:var(--text-color-secondary)">
+                Last analyzed on {{ analyzedDate }}
+            </span>
         </template>
     </div>
 
-    <!-- Dialogs -->
     <OrgFormDialog v-model:visible="orgFormVisible" :org="orgFormOrg" />
 </template>

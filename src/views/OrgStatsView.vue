@@ -1,5 +1,5 @@
 <script setup>
-import OrgStats from '@/components/dashboard/OrgStats.vue';
+import OrgStats from '@/components/OrgStats.vue';
 </script>
 
 <template>

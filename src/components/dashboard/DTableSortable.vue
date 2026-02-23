@@ -1,7 +1,6 @@
 <script>
 import { FilterMatchMode } from '@primevue/core/api'
 import {ref} from 'vue'
-import { useGlobalStore } from '@/store';
 
 export default {
     name: 'TableSortable',
@@ -65,11 +64,10 @@ export default {
             showMessage: false,
         }
     },
+    /*
     computed: {
-        store() {
-            return useGlobalStore();
-        }
     },
+    */
     methods: {
         toggleMessage() {
             this.showMessage = !this.showMessage;
@@ -113,8 +111,7 @@ export default {
         <template #header>
             <div class="flex flex-wrap gap-2 items-center justify-between mb-2">
                 <div class="font-semibold m-0 text-base"> {{title}}
-                    <i v-if="store.isTouchScreenDevice" class="pi pi-info-circle text-muted-color !text-l" tabindex="0" v-tooltip.focus="insights" ></i>
-                    <i v-else class="pi pi-info-circle text-muted-color !text-l" v-tooltip="insights" ></i>
+                    <i class="pi pi-info-circle text-muted-color !text-l" v-tooltip="insights" ></i>
                 </div>
             </div>
             <div class="flex flex-wrap items-center justify-between">

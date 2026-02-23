@@ -10,7 +10,6 @@ import authMiddleware from '../middleware/authMiddleware.js';
 
 import orgRepo from '../repositories/orgRepository.js';
 import mdtRepo from '../repositories/metadataRepository.js';
-import mappingRepo from '../repositories/mappingRepository.js';
 
 import mdtService from '../services/metadataService.js';
 import sfService from '../services/salesforceService.js';
@@ -176,26 +175,6 @@ router.post('/', authMiddleware, async (req, res) => {
         } catch (error) {
             log.error('Error while testing connection', error, {orgId: orgId})
             sendResponse(res, 500, false, error.message || 'Connection test failed');
-        }
-    }
-
-    else if (action === 'get-object-mappings') {
-        try {
-            const mappings = await mappingRepo.findObjectMappingsByUserId(req.user.id);
-            sendResponse(res, 200, true, 'Object mappings retrieved successfully', mappings);
-        } catch (error) {
-            log.error('Failed to retrieve object mappings', error, { userId: req.user.id });
-            sendResponse(res, 500, false, `Failed to retrieve object mappings: ${error.message}`);
-        }
-    }
-
-    else if (action === 'get-field-mappings') {
-        try {
-            const mappings = await mappingRepo.findFieldMappingsByUserId(req.user.id);
-            sendResponse(res, 200, true, 'Field mappings retrieved successfully', mappings);
-        } catch (error) {
-            log.error('Failed to retrieve field mappings', error, { userId: req.user.id });
-            sendResponse(res, 500, false, `Failed to retrieve field mappings: ${error.message}`);
         }
     }
 

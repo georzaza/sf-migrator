@@ -1,7 +1,6 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import { onMounted, ref, watch } from 'vue';
-import { useGlobalStore } from '@/store';
 
 const { getPrimary, getSurface, isDarkTheme } = useLayout();
 
@@ -42,7 +41,6 @@ const props = defineProps({
     }
 });
 
-const store = useGlobalStore()
 const chartOptions = ref(null);
 const showMessage = ref(false);
 
@@ -141,8 +139,7 @@ onMounted(() => {
     <div class="flex justify-start mb-2">
         <div>
             <h4 class="font-semibold mb-1 text-lg"> {{props.title}}
-                <i v-if="store.isTouchScreenDevice" class="pi pi-info-circle text-muted-color !text-l" tabindex="0" v-tooltip.focus="insights" ></i>
-                <i v-else class="pi pi-info-circle text-muted-color !text-l" v-tooltip="insights" ></i>
+                <i class="pi pi-info-circle text-muted-color !text-l" v-tooltip="insights" ></i>
             </h4>
             <span v-if="description" class="text-muted-color">{{ props.description }}</span>
         </div>

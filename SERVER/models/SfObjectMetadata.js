@@ -65,19 +65,6 @@ export default (sequelize, DataTypes) => {
             onDelete: 'CASCADE'
         });
 
-        // Can be a source in many object mappings
-        SfObjectMetadata.hasMany(models.ObjectMapping, {
-            foreignKey: 'sourceObjectId',
-            as: 'sourceMappings',
-            onDelete: 'CASCADE'
-        });
-
-        // Can be a target in many object mappings
-        SfObjectMetadata.hasMany(models.ObjectMapping, {
-            foreignKey: 'targetObjectId',
-            as: 'targetMappings',
-            onDelete: 'CASCADE'
-        });
     };
 
     return SfObjectMetadata;

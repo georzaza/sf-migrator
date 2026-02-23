@@ -46,6 +46,10 @@ export function useAuth() {
         }
         catch (error) {
             console.error('Login failed.', error?.message);
+            // mark server down on network errors so UI can react after redirect
+            if (error.code === 'ERR_NETWORK' || !error.response) {
+                userStore.serverDown = true;
+            }
             return null;
         }
     };
@@ -73,6 +77,9 @@ export async function isLoggedIn() {
         return false;
     } catch (error) {
         console.error('Error checking authentication status:', error);
+        if (error.code === 'ERR_NETWORK' || !error.response) {
+            userStore.serverDown = true;
+        }
         return false;
     }
 }

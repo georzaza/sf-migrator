@@ -1,13 +1,15 @@
 <script setup>
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/composables/auth/useAuth';
 import { useToast } from 'primevue/usetoast';
+import { useUserStore } from '@/stores/userStore';
 
 const router = useRouter();
 const { login } = useAuth();
 const toast = useToast();
+const userStore = useUserStore();
 
 const userIdentifier = ref('');
 const password = ref('');
@@ -31,9 +33,16 @@ const handleLogin = async () => {
         }
 
         console.error('Login failed:', error.response?.data || error.message);
-        toast.add({ severity: 'error', summary: 'Login Error', detail: 'Error occurred during login. Is the server up and running?', life: 6000 });
     }
 };
+
+// Show a toast when server is down
+watch(() => userStore.serverDown, (val) => {
+    if (val) {
+        toast.add({ severity: 'error', summary: 'NETWORK ERROR', detail: 'Server is unreachable.\nPlease try again later.', life: 6000 });
+        userStore.serverDown = false;
+    }
+}, { immediate: true });
 
 </script>
 
@@ -77,6 +86,7 @@ const handleLogin = async () => {
             </div>
         </div>
     </div>
+    <Toast />
 </template>
 
 

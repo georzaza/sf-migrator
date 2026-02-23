@@ -1,11 +1,17 @@
 <script setup>
 import FloatingConfigurator from '@/components/FloatingConfigurator.vue';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/composables/auth/useAuth';
+import { useUserStore } from '@/stores/userStore';
+import { useToast } from 'primevue/usetoast';
 import axiosInstance from '@/api/axiosInstance';
 
+
 const router = useRouter();
+const userStore = useUserStore();
+const toast = useToast();
+
 const { login } = useAuth();
 
 const email = ref('');
@@ -22,6 +28,14 @@ const formErrorPassword = ref(false);
 const formErrorMessage = ref('');
 
 const showRedirectAlert = ref(false);
+
+// Show a toast when server is down
+watch(() => userStore.serverDown, (val) => {
+    if (val) {
+        toast.add({ severity: 'error', summary: 'NETWORK ERROR.', detail: 'Server is unreachable.\nPlease try again later.', life: 6000 });
+        userStore.serverDown = false;
+    }
+}, { immediate: true });
 
 const handleRegister = async () => {
     userExists.value             = false;
@@ -102,8 +116,10 @@ const handleRegister = async () => {
         formErrorMessage.value = response.data?.message || 'An unexpected error occurred. Please try again.';
     }
     catch (error) {
-        console.error('Register failed:', error?.message);
-        alert('There might be an issue with the server. Please try again later.');
+        if (error.code === 'ERR_NETWORK' || !error.response) {
+            userStore.serverDown = true;
+        }
+        console.error('Register failed:', error);
     }
 };
 
@@ -158,6 +174,7 @@ const handleRegister = async () => {
             <p class="text-gray-700">Redirecting to org view...</p>
         </div>
     </div>
+    <Toast />
 </template>
 
 

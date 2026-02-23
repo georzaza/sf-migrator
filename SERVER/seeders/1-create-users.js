@@ -16,11 +16,11 @@ module.exports = {
         const users = [
             {
                 id: '00000000-0000-4000-8000-000000000000',
-                email: 'georzaza@gmail.com',
+                email: 'example@example.com',
                 password: hashedPassword,
-                firstname: `Geo_${envSuffix}`,
-                lastname: `Zaza_${envSuffix}`,
-                username: `georzaza_${envLower}`,
+                firstname: `Geo${envSuffix}_1`,
+                lastname: `Zaza_${envSuffix}_1`,
+                username: `georzaza_${envLower}_1`,
                 role: 'user',
                 isActive: true,
                 emailVerified: false,
@@ -31,7 +31,7 @@ module.exports = {
                 updatedAt: new Date()
             }, {
                 id: '00000000-0000-4000-8000-100000000000',
-                email: 'georzaza@gmail2.com',
+                email: 'example@example.com',
                 password: hashedPassword,
                 firstname: `Geo_${envSuffix}_2`,
                 lastname: `Zaza_${envSuffix}_2`,

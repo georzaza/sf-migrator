@@ -8,7 +8,6 @@
 import express from 'express';
 import authMiddleware from '../middleware/authMiddleware.js';
 
-import projectRepo from '../repositories/projectRepository.js';
 import orgRepo from '../repositories/orgRepository.js';
 import mdtRepo from '../repositories/metadataRepository.js';
 import mappingRepo from '../repositories/mappingRepository.js';
@@ -31,17 +30,7 @@ router.get('/', authMiddleware, async (req, res) => {
     const action = req.get('action')?.toLowerCase();
     log.info(`Received /api GET request with action: ${action}`);
 
-    if (action === 'get-projects') {
-        try {
-            const projects = await projectRepo.findByUserId(req.user.id);
-            sendResponse(res, 200, true, 'Projects retrieved successfully', projects);
-        } catch (error) {
-            log.error('Failed to retrieve projects', error, { userId: req.user.id });
-            sendResponse(res, 500, false, 'Failed to retrieve projects');
-        }
-    }
-
-    else if (action === 'get-orgs') {
+    if (action === 'get-orgs') {
         try {
             const sfOrgs = await orgRepo.findByUserId(req.user.id);
             sfOrgs.forEach(org => {
@@ -132,23 +121,7 @@ router.post('/', authMiddleware, async (req, res) => {
     const action = req.headers.action?.toLowerCase();
     log.info(`Received /api POST request with action: ${action}`);
 
-    if (action === 'get-orgs-for-project') {
-        const projectId = req.body.projectId;
-        if (!projectId) {
-            return sendResponse(res, 400, false, 'No project provided');
-        }
-        try {
-            const sfOrgs = await orgRepo.findByProjectId(projectId);
-            sendResponse(res, 200, true, 'Salesforce Orgs for project retrieved successfully', sfOrgs);
-        } catch (error) {
-            log.error('Failed to retrieve Salesforce Orgs for project. ', error, { projectId });
-            sendResponse(res, 500, false, 'Failed to retrieve Salesforce Orgs for project');
-        }
-    }
-
-    //TODO promise rejections dont bubble up properly and org analysis status is not updated correctly upon failure.
-    // Need to refactor to ensure any failure in the async chain is caught at the top level and results in org analysis status being set to 'failed'
-    else if (action === 'analyze-org') {
+    if (action === 'analyze-org') {
         const { orgId, options } = req.body;
         if (!orgId) {
             return sendResponse(res, 400, false, 'No org provided.');
@@ -206,35 +179,25 @@ router.post('/', authMiddleware, async (req, res) => {
         }
     }
 
-    /*
     else if (action === 'get-object-mappings') {
-        const { projectId } = req.body;
-        if (!projectId) {
-            return sendResponse(res, 400, false, 'Project ID is required');
-        }
         try {
-            const mappings = await mappingRepo.findObjectMappingsByProjectId(projectId);
+            const mappings = await mappingRepo.findObjectMappingsByUserId(req.user.id);
             sendResponse(res, 200, true, 'Object mappings retrieved successfully', mappings);
         } catch (error) {
-            log.error('Failed to retrieve object mappings', error, { projectId });
+            log.error('Failed to retrieve object mappings', error, { userId: req.user.id });
             sendResponse(res, 500, false, `Failed to retrieve object mappings: ${error.message}`);
         }
     }
 
     else if (action === 'get-field-mappings') {
-        const { projectId } = req.body;
-        if (!projectId) {
-            return sendResponse(res, 400, false, 'Project ID is required');
-        }
         try {
-            const mappings = await mappingRepo.findFieldMappingsByProjectId(projectId);
+            const mappings = await mappingRepo.findFieldMappingsByUserId(req.user.id);
             sendResponse(res, 200, true, 'Field mappings retrieved successfully', mappings);
         } catch (error) {
-            log.error('Failed to retrieve field mappings', error, { projectId });
+            log.error('Failed to retrieve field mappings', error, { userId: req.user.id });
             sendResponse(res, 500, false, `Failed to retrieve field mappings: ${error.message}`);
         }
     }
-    */
 
     else {
         sendResponse(res, 400, false, 'Unknown POST action');
@@ -269,26 +232,7 @@ router.put('/', authMiddleware, async (req, res) => {
         }
     }
 
-    else if (action === 'add-project') {
-        const projectData = {
-            name: req.body.name,
-            description: req.body.description,
-            userId: req.user.id,
-        };
-        try {
-            const project = await projectRepo.create(projectData);
-            sendResponse(res, 201, true, 'Project added successfully', project);
-        } catch (error) {
-            log.error('Failed to add project', error, { userId: req.user.id });
-            sendResponse(res, 500, false, 'Failed to add project');
-        }
-    }
-
     else if (action === 'add-org') {
-        const projectId = req.body.projectId;
-        if (!projectId) {
-            return sendResponse(res, 400, false, 'No project provided.');
-        }
         const { loginURL } = req.body;
         if (!loginURL) {
             return sendResponse(res, 400, false, 'Login URL is required.');
@@ -301,28 +245,14 @@ router.put('/', authMiddleware, async (req, res) => {
             return sendResponse(res, 400, false, `Cannot reach ${loginURL}. Verify the URL is correct and the org is active.`);
         }
         try {
-            const org = await orgRepo.create(req.body);
+            const org = await orgRepo.create({ ...req.body, userId: req.user.id });
             sendResponse(res, 201, true, 'Salesforce Org added successfully', org);
         } catch (error) {
             if (error.name === 'SequelizeValidationError') {
                 return sendResponse(res, 400, false, error.message);
             }
-            log.error('Failed to add Salesforce Org', error, { projectId });
+            log.error('Failed to add Salesforce Org', error, { userId: req.user.id });
             sendResponse(res, 500, false, 'Failed to add Salesforce Org');
-        }
-    }
-
-    else if (action === 'update-project') {
-        const projectId = req.headers.projectid;
-        if (!projectId) {
-            return sendResponse(res, 400, false, 'No project provided.');
-        }
-        try {
-            const project = await projectRepo.update(projectId, req.body);
-            sendResponse(res, 200, true, 'Project updated successfully', project);
-        } catch (error) {
-            log.error('Failed to update project', error, { projectId });
-            sendResponse(res, 500, false, 'Failed to update project');
         }
     }
 
@@ -349,25 +279,6 @@ router.delete('/', authMiddleware, async (req, res) => {
         } catch (error) {
             log.error('Failed to delete Salesforce Org', error, { orgId });
             sendResponse(res, 500, false, 'Failed to delete Salesforce Org');
-        }
-    }
-
-    else if (action === 'delete-project') {
-        const projectId = req.headers.projectid;
-        if (!projectId) {
-            return sendResponse(res, 400, false, 'No project provided.');
-        }
-        try {
-            // Delete all orgs belonging to this project first
-            const orgs = await orgRepo.findByProjectId(projectId);
-            for (const org of orgs) {
-                await orgRepo.delete(org.id);
-            }
-            await projectRepo.delete(projectId);
-            sendResponse(res, 200, true, 'Project and its orgs deleted successfully');
-        } catch (error) {
-            log.error('Failed to delete project', error, { projectId });
-            sendResponse(res, 500, false, 'Failed to delete project');
         }
     }
 

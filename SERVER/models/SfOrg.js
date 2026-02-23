@@ -30,11 +30,11 @@ export default (sequelize, DataTypes) => {
         clientSecret: {
             type: DataTypes.STRING,
         },
-        projectId: {
+        userId: {
             type: DataTypes.UUID,
             allowNull: false,
             references: {
-                model: 'Projects',
+                model: 'Users',
                 key: 'id',
             }
         },
@@ -50,7 +50,7 @@ export default (sequelize, DataTypes) => {
     });
 
     SfOrg.associate = function(models) {
-        SfOrg.belongsTo(models.Project, { foreignKey: 'projectId', as: 'project' });
+        SfOrg.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
     };
 
     return SfOrg;

@@ -33,7 +33,7 @@ export function useAuth() {
                     userStore.setIsAuthenticated(true);
                     userStore.setEmail(whoamiResponse.data.data.email);
                     userStore.setUsername(whoamiResponse.data.data.username);
-                    orgStore.loadProjects(); // loads projects + orgs
+                    orgStore.loadOrgs(); // loads orgs
                 }
                 else {
                     console.error('Whoami request failed:', whoamiResponse);

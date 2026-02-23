@@ -1,7 +1,6 @@
 <script setup>
 /**
  * FieldList - Displays fields for a Salesforce object.
- * Reusable: used in Dashboard (ObjectDetail) and Migration Workspace.
  *
  * Props:
  *   fields - Array of field metadata

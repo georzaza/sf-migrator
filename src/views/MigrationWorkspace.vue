@@ -1,6 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, watch, onMounted } from 'vue';
 import { useOrgStore } from '@/stores/orgStore';
 import { useMetadataStore } from '@/stores/metadataStore';
 import { useMappingStore } from '@/stores/mappingStore';
@@ -14,35 +13,19 @@ import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
 import Badge from 'primevue/badge';
 
-const route = useRoute();
 const orgStore = useOrgStore();
 const metadataStore = useMetadataStore();
 const mappingStore = useMappingStore();
 
-// State
-const projectId = ref(null);
-const currentProject = computed(() => {
-    return orgStore.projects.find(p => p.id === projectId.value);
-});
-
-const availableOrgs = computed(() => {
-    if (!projectId.value) return [];
-    return orgStore.orgs.filter(org => org.projectId === projectId.value);
-});
-
-const sourceOrgOptions = computed(() => {
-    return availableOrgs.value.map(org => ({
+const orgOptions = computed(() => {
+    return orgStore.orgs.map(org => ({
         label: org.name,
         value: org
     }));
 });
 
-const targetOrgOptions = computed(() => {
-    return availableOrgs.value.map(org => ({
-        label: org.name,
-        value: org
-    }));
-});
+const sourceOrgOptions = computed(() => orgOptions.value);
+const targetOrgOptions = computed(() => orgOptions.value);
 
 const sourceOrgSelection = computed({
     get: () => metadataStore.sourceOrg,
@@ -103,27 +86,9 @@ function selectTargetObject(object) {
 
 // Lifecycle
 onMounted(async () => {
-    // Get project ID from route params or selected project
-    projectId.value = route.params.projectId || orgStore.selectedProject?.id;
-
-    if (!projectId.value) {
-        console.error('No project selected');
-        return;
-    }
-
-    // Load projects and orgs if not already loaded
-    if (orgStore.projects.length === 0) {
-        await orgStore.loadProjects();
-    }
-
-    // Load existing mappings for this project
-    if (projectId.value) {
-        try {
-            await mappingStore.loadMappings(projectId.value);
-        } catch (error) {
-            console.error('Failed to load mappings:', error);
-            // Non-critical error - continue without mappings
-        }
+    // Load orgs if not already loaded
+    if (orgStore.orgs.length === 0) {
+        await orgStore.loadOrgs();
     }
 });
 
@@ -159,7 +124,6 @@ watch(targetOrgSelection, async (newOrg, oldOrg) => {
         <div class="workspace-header">
             <div class="header-content">
                 <h1>Migration Workspace</h1>
-                <p v-if="currentProject" class="project-name">{{ currentProject.name }}</p>
             </div>
             <div v-if="metadataStore.readyForMapping" class="mapping-summary">
                 <Badge :value="mappingSummary.objectMappings" severity="info" class="mr-2">

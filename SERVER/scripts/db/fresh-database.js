@@ -102,8 +102,7 @@ function runFreshSetup() {
         console.log(`Environment: ${normalizedEnv}`);
         console.log('\nDatabase contains:');
         console.log('  ✓ 1 user (georzaza_${normalizedEnv === "development" ? "dev" : normalizedEnv})');
-        console.log('  ✓ 2 projects (Test_${normalizedEnv === "development" ? "Dev" : normalizedEnv === "test" ? "Test" : "Prod"}, Project2_...)');
-        console.log('  ✓ 4 orgs (2 real Salesforce orgs per project)');
+        console.log('  ✓ 2 orgs per user (real Salesforce orgs)');
         console.log('    - Superbadge: Formulas');
         console.log('    - Superbadge: Apex Web Services');
         console.log('\n');

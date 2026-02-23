@@ -1,7 +1,6 @@
 <script setup>
 /**
  * ObjectList - Displays Salesforce objects for an org with search/filter.
- * Reusable: used in Dashboard and Migration Workspace (source + target panels).
  *
  * Props:
  *   objects - Array of object metadata

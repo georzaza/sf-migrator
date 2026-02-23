@@ -46,11 +46,11 @@ module.exports = {
                 type: Sequelize.STRING,
                 allowNull: true
             },
-            projectId: {
+            userId: {
                 type: Sequelize.UUID,
                 allowNull: false,
                 references: {
-                    model: 'Projects',
+                    model: 'Users',
                     key: 'id'
                 },
                 onUpdate: 'CASCADE',

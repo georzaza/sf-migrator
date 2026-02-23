@@ -104,20 +104,16 @@ export const useMappingStore = defineStore('mapping', {
 
     actions: {
         /**
-         * Load all mappings for a project
+         * Load all mappings for the current user
          */
-        async loadMappings(projectId) {
-            if (!projectId) {
-                throw new Error('Project ID is required');
-            }
-
+        async loadMappings() {
             this.loadingMappings = true;
             this.error = null;
 
             try {
                 // Load object mappings
                 const objResponse = await axiosInstance.post('/api',
-                    { projectId },
+                    {},
                     { headers: { action: 'get-object-mappings' } }
                 );
 
@@ -129,7 +125,7 @@ export const useMappingStore = defineStore('mapping', {
 
                 // Load field mappings
                 const fieldResponse = await axiosInstance.post('/api',
-                    { projectId },
+                    {},
                     { headers: { action: 'get-field-mappings' } }
                 );
 
@@ -156,9 +152,9 @@ export const useMappingStore = defineStore('mapping', {
          * Create object mapping between source and target objects
          */
         async createObjectMapping(data) {
-            const { projectId, sourceObjectId, targetObjectId } = data;
+            const { sourceObjectId, targetObjectId } = data;
 
-            if (!projectId || !sourceObjectId || !targetObjectId) {
+            if (!sourceObjectId || !targetObjectId) {
                 throw new Error('Missing required fields for object mapping');
             }
 
@@ -168,7 +164,6 @@ export const useMappingStore = defineStore('mapping', {
             try {
                 const response = await axiosInstance.put('/api',
                     {
-                        projectId,
                         sourceObjectId,
                         targetObjectId,
                         isActive: true

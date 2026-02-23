@@ -1,24 +1,13 @@
 {
-    "type": "module",
+
     "scripts": {
         "start:dev": "cross-env NODE_ENV=development nodemon --watch src --exec \"node src/server.js\"",
-        "start:test": "cross-env NODE_ENV=test node src/server.js",
-        "start:prod": "cross-env NODE_ENV=production node src/server.js",
         "migrate:dev": "cross-env NODE_ENV=development npx sequelize-cli db:migrate --env development --migrations-path migrations --config config/config.cjs",
-        "migrate:test": "cross-env NODE_ENV=test npx sequelize-cli db:migrate --env test --migrations-path migrations --config config/config.cjs",
-        "migrate:prod": "cross-env NODE_ENV=production npx sequelize-cli db:migrate --env production --migrations-path migrations --config config/config.cjs",
-        "migrate:status:dev": "cross-env NODE_ENV=development npx sequelize-cli db:migrate:status --env development --migrations-path migrations --config config/config.cjs",
-        "migrate:status:test": "cross-env NODE_ENV=test npx sequelize-cli db:migrate:status --env test --migrations-path migrations --config config/config.cjs",
-        "migrate:status:prod": "cross-env NODE_ENV=production npx sequelize-cli db:migrate:status --env production --migrations-path migrations --config config/config.cjs",
+        "migrate:dev:undo": "cross-env NODE_ENV=development npx sequelize-cli db:migrate:undo:all --env development --migrations-path migrations --config config/config.cjs",
+        "migrate:dev:status": "cross-env NODE_ENV=development npx sequelize-cli db:migrate:status --env development --migrations-path migrations --config config/config.cjs",
         "seed:dev": "cross-env NODE_ENV=development npx sequelize-cli db:seed:all --env development --seeders-path seeders --config config/config.cjs",
-        "seed:test": "cross-env NODE_ENV=test npx sequelize-cli db:seed:all --env test --seeders-path seeders --config config/config.cjs",
-        "seed:prod": "cross-env NODE_ENV=production npx sequelize-cli db:seed:all --env production --seeders-path seeders --config config/config.cjs",
-        "seed:undo:dev": "cross-env NODE_ENV=development npx sequelize-cli db:seed:undo:all --seeders-path seeders --env development --config config/config.cjs",
-        "seed:undo:test": "cross-env NODE_ENV=test npx sequelize-cli db:seed:undo:all --seeders-path seeders --env test --config config/config.cjs",
-        "seed:undo:prod": "cross-env NODE_ENV=production npx sequelize-cli db:seed:undo:all --seeders-path seeders --env production --config config/config.cjs",
-        "fresh:dev": "echo First remove type module from package.json && cross-env NODE_ENV=development npx sequelize-cli db:migrate:undo:all --config config/config.cjs --migrations-path migrations && npm run migrate:dev && npm run seed:dev",
-        "fresh:test": "cross-env NODE_ENV=test npx sequelize-cli db:migrate:undo:all --config config/config.cjs --migrations-path migrations && npm run migrate:test && npm run seed:test",
-        "fresh:prod": "cross-env NODE_ENV=production npx sequelize-cli db:migrate:undo:all --config config/config.cjs --migrations-path migrations && npm run migrate:prod"
+        "seed:dev:undo": "cross-env NODE_ENV=development npx sequelize-cli db:seed:undo:all --seeders-path seeders --env development --config config/config.cjs",
+        "fresh:dev": "echo First remove type module from package.json && npm run seed:dev:undo && npm run migrate:dev:undo && npm run migrate:dev && npm run seed:dev"
     },
     "dependencies": {
         "bcrypt": "^6.0.0",

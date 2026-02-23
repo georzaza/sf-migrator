@@ -46,7 +46,7 @@ const emit = defineEmits(['analyze', 'select-object']);
 
         <!-- Header -->
         <div class="detail-header">
-            <h2>{{ org.name }} OVERVIEW PANEL</h2>
+            <h2>{{ org.name }}</h2>
             <span v-if="org.description" class="detail-desc">{{ org.description }}</span>
         </div>
 

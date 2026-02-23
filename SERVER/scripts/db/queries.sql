@@ -1,10 +1,14 @@
 
 SELECT * FROM public."Users" ORDER BY id ASC;
 
-SELECT * FROM public."Projects" ORDER BY "userId", id ASC;
+SELECT * FROM public."SfOrgs" ORDER BY "userId", id ASC;
 
-SELECT * FROM public."SfOrgs" ORDER BY "projectId", id ASC;
+SELECT "id", "analysisStatus" from public."SfOrgs" WHERE "id" = '00000000-0000-4000-8000-000000000010';
 
+UPDATE public."SfOrgs" SET "analysisStatus"='idle' WHERE "id" = '00000000-0000-4000-8000-000000000010';
+UPDATE public."SfOrgs" SET "analysisStatus"='idle' WHERE "id" = '00000000-0000-4000-8000-000000000110';
+
+UPDATE public."SfOrgs" SET "analysisStatus"='idle';
 
 -- GROUP objects per org
 SELECT COUNT("id"), "sfOrgId"
@@ -30,68 +34,56 @@ JOIN public."SfFieldMetadata" "fields"
 SELECT
     count(*),
     users."username" user,
-	projects."name" project,
 	orgs."name" org,
 	objects."name" object,
 	fields."name" field
 FROM public."Users" "users"
-JOIN public."Projects" 	"projects"
-  ON (users."id" = projects."userId")
 JOIN public."SfOrgs" "orgs"
-  ON (orgs."projectId"=projects."id")
+  ON (orgs."userId" = users."id")
 JOIN public."SfObjectMetadata" "objects"
   ON (orgs."id" = objects."sfOrgId")
 JOIN public."SfFieldMetadata" "fields"
   ON (fields."objectMetadataId" = objects."id")
 GROUP BY
 	users."username",
-	projects."name",
 	orgs."name",
 	objects."name",
 	fields."name"
 ;
 
--- GROUP objects per org, project, user
+-- GROUP objects per org, user
 SELECT
     count(*) totalObjects,
     users."username" user,
-	projects."name" project,
 	orgs."name" org
 FROM public."Users" "users"
-JOIN public."Projects" 	"projects"
-  ON (users."id" = projects."userId")
 JOIN public."SfOrgs" "orgs"
-  ON (orgs."projectId"=projects."id")
+  ON (orgs."userId" = users."id")
 JOIN public."SfObjectMetadata" "objects"
   ON (orgs."id" = objects."sfOrgId")
 GROUP BY
 	users."id",
-	projects."id",
 	orgs."id"
 ;
 
--- GROUP fields per object, org, project, user
+-- GROUP fields per object, org, user
 SELECT
     count(*) totalFields,
     users."username" user,
-	projects."name" project,
 	orgs."name" org,
 	objects."name" object
 FROM public."Users" "users"
-JOIN public."Projects" 	"projects"
-  ON (users."id" = projects."userId")
 JOIN public."SfOrgs" "orgs"
-  ON (orgs."projectId"=projects."id")
+  ON (orgs."userId" = users."id")
 JOIN public."SfObjectMetadata" "objects"
   ON (orgs."id" = objects."sfOrgId")
 JOIN public."SfFieldMetadata" "fields"
   ON (fields."objectMetadataId" = objects."id")
 GROUP BY
 	users."id",
-	projects."id",
 	orgs."id",
 	objects."id"
-ORDER BY object, org, project, user;
+ORDER BY object, org, user;
 
 
 

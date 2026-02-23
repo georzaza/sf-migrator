@@ -21,7 +21,7 @@ const handleLogin = async () => {
             router.push('/auth/access');
             return;
         }
-        setTimeout(() => { router.push('/dashboard'); }, 1000);
+        setTimeout(() => { router.push('/org-stats'); }, 300);
     }
     catch (error) {
         if (error.response?.status === 401) {

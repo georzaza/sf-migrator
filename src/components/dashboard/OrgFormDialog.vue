@@ -6,7 +6,6 @@
  * Props:
  *   visible - Controls dialog visibility
  *   org - Org object to edit (null = add mode)
- *   projectId - Project ID for new orgs
  *
  * Emits:
  *   update:visible - v-model for visibility
@@ -23,10 +22,6 @@ const props = defineProps({
     },
     org: {
         type: Object,
-        default: null,
-    },
-    projectId: {
-        type: String,
         default: null,
     },
 });
@@ -121,10 +116,7 @@ async function onSave() {
             }
         } else {
             // Create new org
-            const payload = {
-                ...form.value,
-                projectId: props.projectId,
-            };
+            const payload = { ...form.value };
 
             const response = await axiosInstance.put('/api', payload, {
                 headers: { action: 'add-org' },

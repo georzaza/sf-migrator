@@ -8,7 +8,7 @@ export default (sequelize, DataTypes) => {
             primaryKey: true,
             allowNull: false
         },
-        projectId: {
+        userId: {
             type: DataTypes.UUID,
             allowNull: false
         },
@@ -28,10 +28,10 @@ export default (sequelize, DataTypes) => {
     }, {});
 
     ObjectMapping.associate = function(models) {
-        // Belongs to a project
-        ObjectMapping.belongsTo(models.Project, {
-            foreignKey: 'projectId',
-            as: 'project'
+        // Belongs to a user
+        ObjectMapping.belongsTo(models.User, {
+            foreignKey: 'userId',
+            as: 'user'
         });
 
         // Has a source object

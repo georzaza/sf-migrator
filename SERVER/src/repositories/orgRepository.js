@@ -4,22 +4,15 @@
 
 import db from '../../models/index.js';
 import logger from '../lib/logger.js';
-const { SfOrg, Project } = db;
+const { SfOrg } = db;
 const log = logger.create('orgRepository');
 
 async function findById(id) {
     return SfOrg.findByPk(id);
 }
 
-async function findByProjectId(projectId) {
-    return SfOrg.findAll({ where: { projectId } });
-}
-
 async function findByUserId(userId) {
-    const projects = await Project.findAll({ where: { userId }, attributes: ['id'] });
-    const projectIds = projects.map(p => p.id);
-    if (!projectIds.length) return [];
-    return SfOrg.findAll({ where: { projectId: projectIds } });
+    return SfOrg.findAll({ where: { userId } });
 }
 
 async function create(sfOrgData) {
@@ -63,7 +56,6 @@ async function updateAnalysisStatus(id, status) {
 
 export default {
     findById,
-    findByProjectId,
     findByUserId,
     create,
     update,

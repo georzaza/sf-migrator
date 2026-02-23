@@ -6,19 +6,18 @@ import { isLoggedIn } from '@/composables/auth/useAuth';
 const router = createRouter({
     history: createWebHistory(),
     routes: [
-        /* / */
         {
             path: '/',
             component: AppLayout,
-            redirect: '/dashboard',
+            redirect: '/org-stats',
             children: [
                 {
-                    path: '/dashboard',
-                    name: 'dashboard',
-                    component: () => import('@/views/Dashboard.vue')
+                    path: '/org-stats',
+                    name: 'org-stats',
+                    component: () => import('@/views/OrgStatsView.vue')
                 },
                 {
-                    path: '/migrate/:projectId?',
+                    path: '/migrate',
                     name: 'migrate',
                     component: () => import('@/views/MigrationWorkspace.vue')
                 },
@@ -29,19 +28,16 @@ const router = createRouter({
             name: 'notfound',
             component: () => import('@/views/NotFound.vue')
         },
-        /* /auth/login */
         {
             path: '/auth/login',
             name: 'login',
             component: () => import('@/views/auth/Login.vue')
         },
-        /* /auth/register */
         {
             path: '/auth/register',
             name: 'register',
             component: () => import('@/views/auth/Register.vue')
         },
-        /* /auth/access */
         {
             path: '/auth/access',
             name: 'accessDenied',

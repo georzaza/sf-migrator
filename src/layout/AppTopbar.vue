@@ -4,15 +4,30 @@ import AppConfigurator from './AppConfigurator.vue';
 import axiosInstance from '@/api/axiosInstance';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/userStore';
+import { useOrgStore } from '@/stores/orgStore';
+import { useMetadataStore } from '@/stores/metadataStore';
+import { useMappingStore } from '@/stores/mappingStore';
+import { useGlobalStore } from '@/stores/globalStore';
 
 const { toggleDarkMode, isDarkTheme } = useLayout();
 
 const router = useRouter();
 const userStore = useUserStore();
+const orgStore = useOrgStore();
+const metadataStore = useMetadataStore();
+const mappingStore = useMappingStore();
+const globalStore = useGlobalStore();
 
 const logout = async () => {
+    // Clear persisted storage
     localStorage.clear();
     sessionStorage.clear();
+    // Reset all Pinia store state in-memory
+    userStore.$reset();
+    orgStore.$reset();
+    metadataStore.$reset();
+    mappingStore.$reset();
+    globalStore.$reset();
     try {
         axiosInstance.get('/auth/logout',
         {
@@ -47,7 +62,7 @@ const logout = async () => {
 <template>
     <div class="layout-topbar">
         <div class="layout-topbar-logo-container">
-            <router-link to="/dashboard" class="layout-topbar-logo">
+            <router-link to="/org-stats" class="layout-topbar-logo">
                 <svg viewBox="0 0 54 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
                         fill-rule="evenodd"
@@ -66,7 +81,7 @@ const logout = async () => {
                     </g>
                 </svg>
 
-                <span>Dashboard</span>
+                <span>Salesforce Data Migration Tool</span>
             </router-link>
         </div>
 

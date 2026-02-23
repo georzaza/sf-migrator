@@ -154,14 +154,11 @@ export function useOrgAnalysis() {
                     stopPolling(orgId);
                     if (analyzingOrgId.value === orgId) analyzingOrgId.value = null;
                     const completedOrg = orgStore.orgs.find(o => o.id === orgId);
-                    const completedProject = completedOrg
-                        ? orgStore.projects.find(p => p.id === completedOrg.projectId)
-                        : null;
                     toast.add({
                         severity: 'success',
                         summary: 'Analysis Complete',
                         detail: completedOrg
-                            ? `${completedProject ? completedProject.name + ' › ' : ''}${completedOrg.name} analysis finished successfully.`
+                            ? `${completedOrg.name} analysis finished successfully.`
                             : 'Org analysis finished successfully.',
                         life: 6000,
                     });
@@ -173,14 +170,11 @@ export function useOrgAnalysis() {
                     stopPolling(orgId);
                     if (analyzingOrgId.value === orgId) analyzingOrgId.value = null;
                     const failedOrg = orgStore.orgs.find(o => o.id === orgId);
-                    const failedProject = failedOrg
-                        ? orgStore.projects.find(p => p.id === failedOrg.projectId)
-                        : null;
                     toast.add({
                         severity: 'error',
                         summary: 'Analysis Failed',
                         detail: failedOrg
-                            ? `${failedProject ? failedProject.name + ' › ' : ''}${failedOrg.name} analysis failed. Please try again.`
+                            ? `${failedOrg.name} analysis failed. Please try again.`
                             : 'Org analysis failed. Please try again.',
                         life: 5000,
                     });

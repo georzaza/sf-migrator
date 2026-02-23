@@ -155,7 +155,7 @@ const handleRegister = async () => {
     <!-- Redirect Alert Overlay -->
     <div v-if="false" class="fixed inset-0 bg-transparent flex items-center justify-center z-50">
         <div class="bg-white p-8 rounded-lg shadow-lg text-center">
-            <p class="text-gray-700">Redirecting to Dashboard...</p>
+            <p class="text-gray-700">Redirecting to org view...</p>
         </div>
     </div>
 </template>

@@ -22,7 +22,7 @@ const FIELD_MAPPING_INCLUDES = [
     {
         model: ObjectMapping,
         as: 'objectMapping',
-        attributes: ['id', 'projectId', 'sourceObjectId', 'targetObjectId'],
+        attributes: ['id', 'userId', 'sourceObjectId', 'targetObjectId'],
     },
     {
         model: SfFieldMetadata,
@@ -37,22 +37,22 @@ const FIELD_MAPPING_INCLUDES = [
     },
 ];
 
-async function findObjectMappingsByProjectId(projectId) {
+async function findObjectMappingsByUserId(userId) {
     return ObjectMapping.findAll({
-        where: { projectId },
+        where: { userId },
         include: OBJECT_MAPPING_INCLUDES,
         order: [['createdAt', 'DESC']],
     });
 }
 
-async function findFieldMappingsByProjectId(projectId) {
+async function findFieldMappingsByUserId(userId) {
     return FieldMapping.findAll({
         include: [
             {
                 model: ObjectMapping,
                 as: 'objectMapping',
-                where: { projectId },
-                attributes: ['id', 'projectId', 'sourceObjectId', 'targetObjectId'],
+                where: { userId },
+                attributes: ['id', 'userId', 'sourceObjectId', 'targetObjectId'],
             },
             {
                 model: SfFieldMetadata,
@@ -108,8 +108,8 @@ async function deleteFieldMapping(id) {
 }
 
 export default {
-    findObjectMappingsByProjectId,
-    findFieldMappingsByProjectId,
+    findObjectMappingsByUserId,
+    findFieldMappingsByUserId,
     createObjectMapping,
     createFieldMapping,
     updateObjectMapping,

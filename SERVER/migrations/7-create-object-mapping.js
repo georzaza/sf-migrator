@@ -10,11 +10,11 @@ module.exports = {
                 primaryKey: true,
                 allowNull: false
             },
-            projectId: {
+            userId: {
                 type: Sequelize.UUID,
                 allowNull: false,
                 references: {
-                    model: 'Projects',
+                    model: 'Users',
                     key: 'id'
                 },
                 onUpdate: 'CASCADE',
@@ -58,19 +58,19 @@ module.exports = {
         });
 
         await queryInterface.sequelize.query(`
-            CREATE UNIQUE INDEX IF NOT EXISTS "unique_project_mapping"
-            ON "ObjectMappings" ("projectId", "sourceObjectId", "targetObjectId");
+            CREATE UNIQUE INDEX IF NOT EXISTS "unique_user_mapping"
+            ON "ObjectMappings" ("userId", "sourceObjectId", "targetObjectId");
         `);
 
         await queryInterface.sequelize.query(`
-            CREATE INDEX IF NOT EXISTS "idx_object_mappings_projectId"
-            ON "ObjectMappings" ("projectId");
+            CREATE INDEX IF NOT EXISTS "idx_object_mappings_userId"
+            ON "ObjectMappings" ("userId");
         `);
     },
 
     async down(queryInterface, Sequelize) {
-        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "unique_project_mapping";');
-        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_object_mappings_projectId";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "unique_user_mapping";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_object_mappings_userId";');
         await queryInterface.dropTable('ObjectMappings');
     }
 };

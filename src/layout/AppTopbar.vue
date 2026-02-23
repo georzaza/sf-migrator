@@ -19,7 +19,6 @@ const logout = async () => {
     // Reset all Pinia store state in-memory
     userStore.$reset();
     orgStore.$reset();
-    globalStore.$reset();
     try {
         axiosInstance.get('/auth/logout',
         {

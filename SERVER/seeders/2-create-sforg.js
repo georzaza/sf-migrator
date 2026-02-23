@@ -31,7 +31,7 @@ module.exports = {
             sforgs.push({
                 id: formulasOrgId,
                 name: formulasOrg.name + ` (User ${++idx})`,
-                description: formulasOrg.description + ` (User ${++idx})`,
+                description: formulasOrg.description + ` (User ${idx})`,
                 loginURL: formulasOrg.loginURL,
                 connectionType: 'OAuth',
                 clientId: formulasOrg.clientId || null,
@@ -47,8 +47,8 @@ module.exports = {
 
             sforgs.push({
                 id: apexOrgId,
-                name: apexOrg.name + ` (User ${++idx})`,
-                description: apexOrg.description + ` (User ${++idx})`,
+                name: apexOrg.name + ` (User ${idx})`,
+                description: apexOrg.description + ` (User ${idx})`,
                 loginURL: apexOrg.loginURL,
                 connectionType: 'OAuth',
                 clientId: apexOrg.clientId || null,

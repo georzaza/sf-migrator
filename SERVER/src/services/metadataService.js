@@ -5,18 +5,18 @@
  * DB operations are delegated to metadataRepository.
  */
 
-import metadataRepo from '../repositories/metadataRepository.js';
+import mdtRepo from '../repositories/metadataRepository.js';
 import sfService from './salesforceService.js';
+import standardObjectFilters from './config/objectsToExclude.js';
 import logger from '../lib/logger.js';
 const log = logger.create('metadataService');
-import standardObjectFilters from './config/objectsToExclude.js';
 
 async function analyzeAndSaveOrg(sfOrgId, options = {}) {
     const {
         objectsToAnalyze = null,
         includeCustomOnly = false,
     } = options;
-
+    return null;
     try {
         const objects = await sfService.describeGlobal(sfOrgId);
         log.debug('Retrieved global object describes', { orgId: sfOrgId, "objects count": objects.length });
@@ -45,7 +45,7 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
         log.toFile('sobjectDescribes', sobjectDescribes);
 
         // write both objects & fields to db
-        const savedObjects = await metadataRepo.bulkUpsertObjects(sfOrgId, sobjectDescribes);
+        const savedObjects = await mdtRepo.bulkUpsertObjects(sfOrgId, sobjectDescribes);
         const objectIdMap = new Map(savedObjects.map(obj => [obj.name, obj.id]));
         const fields = sobjectDescribes.flatMap(describe =>
             describe.fields.map(field => ({
@@ -53,7 +53,7 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
                 objectMetadataId: objectIdMap.get(describe.name),
             }))
         );
-        await metadataRepo.bulkUpsertFields(fields);
+        await mdtRepo.bulkUpsertFields(fields);
         log.debug('Describes completed. Results written to database', {
             sfOrgId,
             describedObjects: sobjectDescribes.length,
@@ -73,13 +73,13 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
 
 async function saveObjectMetadata(sfOrgId, metadata) {
     try {
-        const objectMetadata = await metadataRepo.findOrCreateObject(sfOrgId, metadata);
+        const objectMetadata = await mdtRepo.findOrCreateObject(sfOrgId, metadata);
 
         if (metadata.fields && metadata.fields.length > 0) {
             await saveFieldMetadata(objectMetadata.id, metadata.fields);
         }
 
-        return await metadataRepo.findObjectById(objectMetadata.id, { includeFields: true });
+        return await mdtRepo.findObjectById(objectMetadata.id, { includeFields: true });
     } catch (error) {
         // Error already logged at source or will be logged at top level, just re-throw
         throw error;
@@ -92,7 +92,7 @@ async function saveFieldMetadata(objectMetadataId, fields) {
         const savedFields = [];
 
         for (const field of fields) {
-            const fieldMetadata = await metadataRepo.findOrCreateField(objectMetadataId, field);
+            const fieldMetadata = await mdtRepo.findOrCreateField(objectMetadataId, field);
             savedFields.push(fieldMetadata);
         }
 
@@ -108,7 +108,7 @@ async function getObjectsForOrg(sfOrgId, options = {}) {
     const { includeFields = false } = options;
 
     try {
-        return await metadataRepo.findObjectsByOrgId(sfOrgId, { includeFields });
+        return await mdtRepo.findObjectsByOrgId(sfOrgId, { includeFields });
     } catch (error) {
         log.error('Failed to get objects for org', error, { sfOrgId });
         throw error;
@@ -118,7 +118,7 @@ async function getObjectsForOrg(sfOrgId, options = {}) {
 
 async function getFieldsForObject(objectMetadataId) {
     try {
-        return await metadataRepo.findFieldsByObjectId(objectMetadataId);
+        return await mdtRepo.findFieldsByObjectId(objectMetadataId);
     } catch (error) {
         log.error('Failed to get fields for object', error, { objectMetadataId });
         throw error;
@@ -128,7 +128,7 @@ async function getFieldsForObject(objectMetadataId) {
 
 async function deleteOrgMetadata(sfOrgId) {
     try {
-        const deletedCount = await metadataRepo.deleteObjectsByOrgId(sfOrgId);
+        const deletedCount = await mdtRepo.deleteObjectsByOrgId(sfOrgId);
         return { success: true, deletedObjects: deletedCount };
     } catch (error) {
         log.error('Failed to delete org metadata', error, { sfOrgId });
@@ -139,7 +139,7 @@ async function deleteOrgMetadata(sfOrgId) {
 
 async function getMetadataStats(sfOrgId) {
     try {
-        return await metadataRepo.getStats(sfOrgId);
+        return await mdtRepo.getStats(sfOrgId);
     } catch (error) {
         log.error('Failed to get metadata stats', error, { sfOrgId });
         throw error;

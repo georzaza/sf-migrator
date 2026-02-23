@@ -51,7 +51,7 @@ async function calculateAndSaveOrgStats(conn, orgId) {
 
 
 async function getNoUsers(conn){
-    log.info('----> getNoUsers started');
+    log.info('getNoUsers started', {userInfo: conn.userInfo});
     const result = await conn.query('SELECT Id, Name FROM User');
     const users_no = result.totalSize;
     return users_no;
@@ -59,21 +59,21 @@ async function getNoUsers(conn){
 
 
 async function getActiveUsersCheckbox(conn, usersNo){
-    log.info('----> getActiveUsersCheckbox started');
+    log.info('getActiveUsersCheckbox started', {userInfo: conn.userInfo});
     const result = await conn.query('SELECT Name, IsActive FROM USER WHERE IsActive=true');
     return (result.totalSize / usersNo) * 100;
 }
 
 
 async function getActiveUsersLastXDays(conn, usersNo, days){
-    log.info('----> getActiveUsersLastXDays started');
+    log.info('getActiveUsersLastXDays started', {userInfo: conn.userInfo});
     const result = await conn.query('SELECT UserId FROM LoginHistory WHERE LoginTime= LAST_N_DAYS:'+days+ ' GROUP BY UserId');
     return (result.totalSize / usersNo) * 100;
 }
 
 
 async function getAccessPercent(conn) {
-    log.info('----> getAccessPercent started');
+    log.info('getAccessPercent started', {userInfo: conn.userInfo});
     let mobile = 0;
     let desktop = 0;
     let total_access = 0;
@@ -97,7 +97,7 @@ async function getAccessPercent(conn) {
 
 
 async function getLimits(conn){
-    log.info('----> getLimits started');
+    log.info('getLimits started', {userInfo: conn.userInfo});
     return await _(conn.request('/limits'))
         .flatMap(Object.entries)
         .map(([k, v]) => ({
@@ -111,21 +111,21 @@ async function getLimits(conn){
 
 
 async function getEntitlements(conn){
-    log.info('----> getEntitlements started');
+    log.info('getEntitlements started', {userInfo: conn.userInfo});
     const ret = await conn.query('SELECT MasterLabel, CurrentAmountAllowed, AmountUsed, Frequency FROM TenantUsageEntitlement');
     return _(ret.records).omit('attributes').values();
 }
 
 
 async function getLicenseLimits(conn){
-    log.info('----> getLicenseLimits started');
+    log.info('getLicenseLimits started', {userInfo: conn.userInfo});
     const ret = await conn.query('SELECT Name, TotalLicenses, UsedLicenses FROM UserLicense ORDER BY Name');
     return _(ret.records).omit('attributes').values();
 }
 
 
 async function getObjectLimits(conn) {
-    log.info('----> getObjectLimits started');
+    log.info('getObjectLimits started', {userInfo: conn.userInfo});
     const objectLimits = (await conn.tooling.query(conn, 'SELECT Id, DeveloperName, NamespacePrefix, IsCustomizable FROM EntityDefinition WHERE IsCustomizable = TRUE limit 25'))
         .records
         .map(async x => { return ( await helper(conn, 'SELECT Id, DurableId, Type, Label, Max, Remaining, EntityDefinition.DeveloperName FROM EntityLimit WHERE EntityDefinition.DeveloperName = \'' + x.DeveloperName + '\''))
@@ -143,7 +143,7 @@ async function getObjectLimits(conn) {
 
 
 async function getUnusedProfilesAndPS(conn, type){
-    log.info('----> getUnusedProfilesAndPS started');
+    log.info('getUnusedProfilesAndPS started', {userInfo: conn.userInfo});
     const ret = await conn.query(`SELECT Id, Name, Profile.Name, NamespacePrefix, Type FROM PermissionSet WHERE IsCustom = TRUE AND Id NOT IN (SELECT PermissionSetId FROM PermissionSetAssignment)`);
     const unassignedPermissionSets = _(ret.records)
         .filter(x => type(x.Type))
@@ -161,7 +161,7 @@ async function getUnusedProfilesAndPS(conn, type){
 
 
 async function getUsedProfilesAndPS(conn, type){
-    log.info('----> getUsedProfilesAndPS started');
+    log.info('getUsedProfilesAndPS started', {userInfo: conn.userInfo});
     const ret = await _(conn.query(`SELECT Id, Name, Profile.Name, NamespacePrefix, Type FROM PermissionSet WHERE IsCustom = TRUE AND Id IN (SELECT PermissionSetId FROM PermissionSetAssignment)`));
     const assignedPermissionSets = _(ret.records)
         .filter(x => type(x.Type))
@@ -178,7 +178,7 @@ async function getUsedProfilesAndPS(conn, type){
 
 
 async function getStorage(conn){
-    log.info('----> getStorage started');
+    log.info('getStorage started', {userInfo: conn.userInfo});
     const recordCounts = await _(conn.request('/limits/recordCount'))
         .flatMap(x => x.sObjects)
         .map(x => ({ name: x.name, count: x.count }))
@@ -189,7 +189,7 @@ async function getStorage(conn){
 
 
 async function getCustomObjects(conn){
-    log.info('----> getCustomObjects started');
+    log.info('getCustomObjects started', {userInfo: conn.userInfo});
     // TODO return from DB
     // Custom Objects
     const objects = await conn.tooling.query('SELECT Id, NamespacePrefix, DeveloperName FROM CustomObject WHERE NamespacePrefix=null');
@@ -202,7 +202,7 @@ async function getCustomObjects(conn){
 
 
 async function getCustomFields(conn, customObjs){
-    log.info('----> getCustomFields started');
+    log.info('getCustomFields started', {userInfo: conn.userInfo});
     // TODO return from DB
     const fields = (await helper(conn, 'SELECT Id, NamespacePrefix, DeveloperName, TableEnumOrId FROM CustomField WHERE (NOT DeveloperName LIKE \'%del\') AND NamespacePrefix=null')) // check if we get deleted objects
     return fields.map(x => ({
@@ -214,7 +214,7 @@ async function getCustomFields(conn, customObjs){
 }
 
 async function getRecordTypes(conn){
-    log.info('----> getRecordTypes started');
+    log.info('getRecordTypes started', {userInfo: conn.userInfo});
     const types = await conn.tooling.query('SELECT Id, NamespacePrefix, Name, SobjectType FROM RecordType WHERE IsActive=true');
     return types.records.map(x => ({
         Id: x.Id,
@@ -225,7 +225,7 @@ async function getRecordTypes(conn){
 }
 
 async function getApexTriggers(conn, customObjs){
-    log.info('----> getApexTriggers started');
+    log.info('getApexTriggers started', {userInfo: conn.userInfo});
     const triggers = await conn.tooling.query('SELECT Id, NamespacePrefix, Name, TableEnumOrId, Status FROM ApexTrigger');
     return triggers.records.map(x => ({
         Id: x.Id,
@@ -237,7 +237,7 @@ async function getApexTriggers(conn, customObjs){
 }
 
 async function getApexClasses(conn){
-    log.info('----> getApexClasses started');
+    log.info('getApexClasses started', {userInfo: conn.userInfo});
     const apex = await conn.tooling.query('SELECT Id, NamespacePrefix, Name, Status FROM ApexClass');
     return apex.records.map(x => ({
         Id: x.Id,
@@ -248,7 +248,7 @@ async function getApexClasses(conn){
 }
 
 async function getFlows(conn) {
-    log.info('----> getFlows started');
+    log.info('getFlows started', {userInfo: conn.userInfo});
     const query = await conn.query('SELECT Id, ApiName, ProcessType, TriggerType, NamespacePrefix, IsActive, IsTemplate, Builder, ManageableState, InstalledPackageName FROM FlowDefinitionView WHERE IsActive=true');
     let flows = query.records
         .filter(x=>x.ProcessType!=='Workflow')
@@ -267,8 +267,13 @@ async function getFlows(conn) {
 
 
 async function getProcessBuilderRules(flowDefs){
-    log.info('----> getProcessBuilderRules started');
-    return flowDefs.filter(x=>x.ProcessType=='Workflow').map(x => ({
+    log.info('getProcessBuilderRules started');
+    if (!flowDefs || flowDefs.length === 0)
+        return [];
+    const workflowRules = flowDefs.filter(x=>x.ProcessType=='Workflow');
+    if (!workflowRules || workflowRules.length === 0)
+        return [];
+    return workflowRules.map(x => ({
         Id: x.Id,
         Flow: x.ApiName,
         ProcessType: x.ProcessType,
@@ -280,7 +285,7 @@ async function getProcessBuilderRules(flowDefs){
 }
 
 async function getWorkflowRules(conn){
-    log.info('----> getWorkflowRules started');
+    log.info('getWorkflowRules started', {userInfo: conn.userInfo});
     const result = await conn.tooling.query('SELECT Id, ManageableState, Name, NamespacePrefix, TableEnumOrId from WorkflowRule');
     return result.records.map(x => ({
         Id: x.Id,
@@ -293,7 +298,7 @@ async function getWorkflowRules(conn){
 
 
 async function getLWC(conn){
-    log.info('----> getLWC started');
+    log.info('getLWC started', {userInfo: conn.userInfo});
     const lwcs = await conn.tooling.query('SELECT Id, DeveloperName, ManageableState, NamespacePrefix, TargetConfigs FROM LightningComponentBundle');
     return lwcs.records.map(x => ({
         Id: x.Id,
@@ -304,7 +309,7 @@ async function getLWC(conn){
 }
 
 async function getAura(conn){
-    log.info('----> getAura started');
+    log.info('getAura started', {userInfo: conn.userInfo});
     const auras = await conn.tooling.query('SELECT Id, DeveloperName, ManageableState, NamespacePrefix FROM AuraDefinitionBundle');
     return auras.records.map(x => ({
         Id: x.Id,
@@ -316,7 +321,7 @@ async function getAura(conn){
 
 
 async function getVisualforce(conn){
-    log.info('----> getVisualforce started');
+    log.info('getVisualforce started', {userInfo: conn.userInfo});
     const vfs = await conn.tooling.query('SELECT Id, Name, ManageableState, NamespacePrefix, ControllerKey, ControllerType FROM ApexPage');
     return vfs.records.map(x => ({
         Id: x.Id,
@@ -329,7 +334,7 @@ async function getVisualforce(conn){
 
 
 async function getDangerousProfiles(conn){
-    log.info('----> getDangerousProfiles started');
+    log.info('getDangerousProfiles started', {userInfo: conn.userInfo});
     const permissionSetDescribe = await conn.request('/sobjects/PermissionSet/describe');
     const hasEncryption = permissionSetDescribe.fields.some(x => x.name === 'PermissionsManageEncryptionKeys');
 

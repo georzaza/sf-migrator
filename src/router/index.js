@@ -1,5 +1,4 @@
 import AppLayout from '@/layout/AppLayout.vue';
-import { useUserStore } from '@/stores/userStore';
 import { createRouter, createWebHistory } from 'vue-router';
 import { isLoggedIn } from '@/composables/auth/useAuth';
 
@@ -49,7 +48,7 @@ router.beforeEach( async (to, from, next) => {
         next();
         return;
     }
-    const publicPages = ['/auth/login', '/auth/register']; // Define public routes
+    const publicPages = ['/auth/login', '/auth/register', '/auth/access']; // Define public routes
     const authRequired = !publicPages.includes(to.path); // Check if the route requires authentication
     const loggedIn = await isLoggedIn(); // Check if the user is logged in
     console.log(`Navigating to: ${to.path}, Auth Required: ${authRequired}, Logged In? ${loggedIn}`);

@@ -10,7 +10,8 @@ module.exports = {
         const envSuffix = env === 'development' ? 'Dev' : env === 'test' ? 'Test' : 'Prod';
         const envLower = env === 'development' ? 'dev' : env === 'test' ? 'test' : 'prod';
 
-        const hashedPassword = await bcrypt.hash('Passw0rd!', saltRounds);
+        const plainPassword = 'Passw0rd!';
+        const hashedPassword = await bcrypt.hash(plainPassword, saltRounds);
 
         const users = [
             {
@@ -46,7 +47,12 @@ module.exports = {
             }
         ];
 
-        console.log(`Created Users: ${JSON.stringify(users, null, 2)}`);
+        // log the usernames and the password
+        console.log('\nSeeding users with the following credentials:');
+        users.forEach(user => {
+            console.log(`\tUsername: ${user.username}, Password: ${plainPassword}`);
+        });
+        console.log();
         return queryInterface.bulkInsert('Users', users);
     },
 

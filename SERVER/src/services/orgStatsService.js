@@ -3,11 +3,6 @@ import fsService from './filesystemService.js';
 import logger from '../lib/logger.js';
 const log = logger.create('orgStatsService');
 
-const helper = async function(conn, query){
-    let ret = await conn.tooling.query(query);
-    return ret.records;
-}
-
 
 async function calculateAndSaveOrgStats(conn, orgId) {
     // call the various function serially, then for each function, call the filesystem service to save the results in a common json file.
@@ -21,7 +16,7 @@ async function calculateAndSaveOrgStats(conn, orgId) {
         stats.limits                = await getLimits(conn);
         stats.entitlements          = await getEntitlements(conn);
         stats.licenseLimits         = await getLicenseLimits(conn);
-        //stats.objectLimits          = await getObjectLimits(conn);
+        stats.objectLimits          = await getObjectLimits(conn);
         stats.unusedProfiles        = await getUnusedProfilesAndPS(conn, type => type === 'Profile');
         stats.unusedPermissionSets  = await getUnusedProfilesAndPS(conn, type => type === 'PermissionSet');
         stats.usedProfiles          = await getUsedProfilesAndPS(conn, type => type === 'Profile');
@@ -126,18 +121,18 @@ async function getLicenseLimits(conn){
 
 async function getObjectLimits(conn) {
     log.info('getObjectLimits started', {userInfo: conn.userInfo});
-    const objectLimits = (await conn.tooling.query(conn, 'SELECT Id, DeveloperName, NamespacePrefix, IsCustomizable FROM EntityDefinition WHERE IsCustomizable = TRUE limit 25'))
-        .records
-        .map(async x => { return ( await helper(conn, 'SELECT Id, DurableId, Type, Label, Max, Remaining, EntityDefinition.DeveloperName FROM EntityLimit WHERE EntityDefinition.DeveloperName = \'' + x.DeveloperName + '\''))
-            .map( x => ({
-                SObject: x.EntityDefinition.DeveloperName,
-                Type: x.Type,
-                Label: x.Label,
-                Max: x.Max,
-                Remaining: x.Remaining,
-                PercentageUsage: Math.round((x.Max - x.Remaining) / x.Max * 100)
-            }))
-        });
+    const result = await conn.tooling.query('SELECT Id, DeveloperName, NamespacePrefix, IsCustomizable FROM EntityDefinition WHERE IsCustomizable = TRUE');
+    const objectLimits = result.records.map(async x => {
+        const entityLimits = await conn.tooling.query('SELECT Id, DurableId, Type, Label, Max, Remaining, EntityDefinition.DeveloperName FROM EntityLimit WHERE EntityDefinition.DeveloperName = \'' + x.DeveloperName + '\'');
+        return entityLimits.records.map( x => ({
+            SObject: x.EntityDefinition.DeveloperName,
+            Type: x.Type,
+            Label: x.Label,
+            Max: x.Max,
+            Remaining: x.Remaining,
+            PercentageUsage: Math.round((x.Max - x.Remaining) / x.Max * 100)
+        }))
+    });
     return Promise.all(objectLimits);
 }
 
@@ -191,8 +186,7 @@ async function getStorage(conn){
 async function getCustomObjects(conn){
     log.info('getCustomObjects started', {userInfo: conn.userInfo});
     // TODO return from DB
-    // Custom Objects
-    const objects = await conn.tooling.query('SELECT Id, NamespacePrefix, DeveloperName FROM CustomObject WHERE NamespacePrefix=null');
+    const objects = await conn.tooling.query('SELECT Id, NamespacePrefix, DeveloperName FROM CustomObject');
     return objects.records.map(x => ({
             Id: x.Id,
             SObject: x.DeveloperName,
@@ -204,8 +198,8 @@ async function getCustomObjects(conn){
 async function getCustomFields(conn, customObjs){
     log.info('getCustomFields started', {userInfo: conn.userInfo});
     // TODO return from DB
-    const fields = (await helper(conn, 'SELECT Id, NamespacePrefix, DeveloperName, TableEnumOrId FROM CustomField WHERE (NOT DeveloperName LIKE \'%del\') AND NamespacePrefix=null')) // check if we get deleted objects
-    return fields.map(x => ({
+    const fields = (await conn.tooling.query('SELECT Id, NamespacePrefix, DeveloperName, TableEnumOrId FROM CustomField WHERE (NOT DeveloperName LIKE \'%del\')')) // check if we get deleted objects
+    return fields.records.map(x => ({
         Id: x.Id,
         SObject: customObjs.find(c => c.Id === x.TableEnumOrId) !=null ? customObjs.find(c => c.Id === x.TableEnumOrId).SObject: x.TableEnumOrId,
         CustomField: x.DeveloperName,

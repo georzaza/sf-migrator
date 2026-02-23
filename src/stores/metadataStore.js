@@ -382,7 +382,7 @@ export const useMetadataStore = defineStore('metadata', {
             try {
                 const response = await axiosInstance.get('/api', {
                     headers: {
-                        action: 'get-metadata-stats',
+                        action: 'get-org-stats',
                         orgid: this.sourceOrg.id
                     }
                 });
@@ -410,7 +410,7 @@ export const useMetadataStore = defineStore('metadata', {
             try {
                 const response = await axiosInstance.get('/api', {
                     headers: {
-                        action: 'get-metadata-stats',
+                        action: 'get-org-stats',
                         orgid: this.targetOrg.id
                     }
                 });

@@ -143,5 +143,20 @@ export const useOrgStore = defineStore('orgs', {
             }
             return false;
         },
-    },
+
+        async getOrgStats(orgId) {
+            const response = await axiosInstance.get('/api', {
+                headers: {
+                    action: 'get-org-stats',
+                    orgid: orgId,
+                },
+            });
+            if (response.data.success) {
+                return response.data.data;
+            } else {
+                console.error('Failed to get org stats:', response.data.message);
+                return null;
+            }
+        },
+    }
 });

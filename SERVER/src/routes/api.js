@@ -6,26 +6,31 @@
  */
 
 import express from 'express';
-const router = express.Router();
-
 import authMiddleware from '../middleware/authMiddleware.js';
+
 import projectRepo from '../repositories/projectRepository.js';
 import orgRepo from '../repositories/orgRepository.js';
-import metadataRepo from '../repositories/metadataRepository.js';
+import mdtRepo from '../repositories/metadataRepository.js';
 import mappingRepo from '../repositories/mappingRepository.js';
+
 import mdtService from '../services/metadataService.js';
 import sfService from '../services/salesforceService.js';
+import fsService from '../services/filesystemService.js';
+import orgStatsService from '../services/orgStatsService.js';
+
 import probeUrl from '../utils/probeUrl.js';
 import sendResponse from '../utils/sendResponse.js';
 import logger from '../lib/logger.js';
-const log = logger.create('api');
 
+const log = logger.create('api');
+const router = express.Router();
 
 // ===================== GET Requests =====================
 
 router.get('/', authMiddleware, async (req, res) => {
     const action = req.get('action')?.toLowerCase();
     log.info(`Received /api GET request with action: ${action}`);
+
     if (action === 'get-projects') {
         try {
             const projects = await projectRepo.findByUserId(req.user.id);
@@ -57,11 +62,25 @@ router.get('/', authMiddleware, async (req, res) => {
         }
         try {
             const includeFields = req.query.includeFields === 'true';
-            const objects = await metadataRepo.findObjectsByOrgId(orgId, { includeFields });
+            const objects = await mdtRepo.findObjectsByOrgId(orgId, { includeFields });
             sendResponse(res, 200, true, 'Objects retrieved successfully', objects);
         } catch (error) {
             log.error('Failed to retrieve objects', error, { orgId });
             sendResponse(res, 500, false, `Failed to retrieve objects.`);
+        }
+    }
+
+    else if (action === 'get-fields') {
+        const objectId = req.headers.objectid;
+        if (!objectId) {
+            return sendResponse(res, 400, false, 'Object ID is required');
+        }
+        try {
+            const fields = await mdtRepo.findFieldsByObjectId(objectId);
+            sendResponse(res, 200, true, 'Fields retrieved successfully', fields);
+        } catch (error) {
+            log.error('Failed to retrieve fields', error, { objectId });
+            sendResponse(res, 500, false, `Failed to retrieve fields.`);
         }
     }
 
@@ -87,27 +106,13 @@ router.get('/', authMiddleware, async (req, res) => {
         }
     }
 
-    else if (action === 'get-fields') {
-        const objectId = req.headers.objectid;
-        if (!objectId) {
-            return sendResponse(res, 400, false, 'Object ID is required');
-        }
-        try {
-            const fields = await metadataRepo.findFieldsByObjectId(objectId);
-            sendResponse(res, 200, true, 'Fields retrieved successfully', fields);
-        } catch (error) {
-            log.error('Failed to retrieve fields', error, { objectId });
-            sendResponse(res, 500, false, `Failed to retrieve fields.`);
-        }
-    }
-
-    else if (action === 'get-metadata-stats') {
+    else if (action === 'get-org-stats') {
         const orgId = req.headers.orgid;
         if (!orgId) {
             return sendResponse(res, 400, false, 'Org ID is required');
         }
         try {
-            const stats = await metadataRepo.getStats(orgId);
+            const stats = await fsService.getLatestOrgStats(orgId);
             sendResponse(res, 200, true, 'Metadata statistics retrieved successfully', stats);
         } catch (error) {
             log.error('Failed to retrieve metadata statistics', error, { orgId });
@@ -125,6 +130,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
 router.post('/', authMiddleware, async (req, res) => {
     const action = req.headers.action?.toLowerCase();
+    log.info(`Received /api POST request with action: ${action}`);
 
     if (action === 'get-orgs-for-project') {
         const projectId = req.body.projectId;
@@ -140,40 +146,48 @@ router.post('/', authMiddleware, async (req, res) => {
         }
     }
 
+    //TODO promise rejections dont bubble up properly and org analysis status is not updated correctly upon failure.
+    // Need to refactor to ensure any failure in the async chain is caught at the top level and results in org analysis status being set to 'failed'
     else if (action === 'analyze-org') {
         const { orgId, options } = req.body;
         if (!orgId) {
             return sendResponse(res, 400, false, 'No org provided.');
         }
-        log.info('Queueing org analysis', { orgId });
+        log.info('Starting org analysis', { orgId });
         try {
             // Verify OAuth connection exists BEFORE going async — so we can return 401 synchronously
-            await sfService.connectToOrg(orgId);
-
+            const conn = await sfService.connectToOrg(orgId);
             await orgRepo.updateAnalysisStatus(orgId, 'running');
             sendResponse(res, 202, true, 'Analysis started', { analysisStatus: 'running' });
 
+            // STEP 1: object & field metadata retrieval
+            // Return the inner promise so rejections propagate to the top level .catch
             mdtService.analyzeAndSaveOrg(orgId, options)
+                .then(() => {
+                    log.info('Objects & fields metadata retrieval was successful. Entering org stats calculation.', { orgId });
+                    // STEP 2: org stats retrieval — returns the promise
+                    return orgStatsService.calculateAndSaveOrgStats(conn, orgId);
+                })
                 .then(async () => {
+                    log.info('Org stats retrieval was successful.', { orgId });
+                    // STEP 3: all analysis completed, update db
                     await orgRepo.updateAnalysisStatus(orgId, 'complete');
                     log.info('Org analysis completed', { orgId });
                 })
                 .catch(async (error) => {
-                    if (error.name === 'OAuthRequiredError') {
-                        // Connection expired mid-analysis
-                        log.warn('OAuth connection expired during analysis', { orgId });
-                        await orgRepo.updateAnalysisStatus(orgId, 'auth_required').catch(() => {});
-                    } else {
-                        log.error('Org analysis failed (background)', error, { orgId });
-                        await orgRepo.updateAnalysisStatus(orgId, 'failed').catch(() => {});
-                    }
+                    log.error('Org analysis failed', error, { orgId });
+                    await orgRepo.updateAnalysisStatus(orgId, 'failed').catch(() => {});
                 });
+
         } catch (error) {
             if (error.name === 'OAuthRequiredError') {
+                log.warn('OAuth connection expired during analysis', { orgId });
+                await orgRepo.updateAnalysisStatus(orgId, 'auth_required').catch(() => {});
                 return res.status(401).json({ authUrl: error.authUrl });
             }
-            log.error('Failed to queue org analysis', error, { orgId });
-            sendResponse(res, 500, false, 'Failed to queue analysis');
+            log.error('Org analysis failed', error, { orgId });
+            await orgRepo.updateAnalysisStatus(orgId, 'failed').catch(() => {});
+            sendResponse(res, 500, false, 'Failed to run analysis');
         }
     }
 
@@ -232,6 +246,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
 router.put('/', authMiddleware, async (req, res) => {
     const action = req.headers.action?.toLowerCase();
+    log.info(`Received /api PUT request with action: ${action}`);
 
     if (action === 'update-org') {
         const orgId = req.headers.orgid;
@@ -321,6 +336,7 @@ router.put('/', authMiddleware, async (req, res) => {
 
 router.delete('/', authMiddleware, async (req, res) => {
     const action = req.headers.action?.toLowerCase();
+    log.info(`Received /api DELETE request with action: ${action}`);
 
     if (action === 'delete-org') {
         const orgId = req.headers.orgid;

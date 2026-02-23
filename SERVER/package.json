@@ -25,6 +25,7 @@
         "cors": "^2.8.5",
         "dotenv": "^16.4.7",
         "express": "^4.21.2",
+        "exstream.js": "^0.25.0",
         "jsforce": "^3.6.5",
         "jsonwebtoken": "^9.0.2",
         "pg": "^8.16.2",
@@ -33,8 +34,10 @@
     },
     "devDependencies": {
         "cross-env": "^7.0.3",
-        "sequelize-cli": "^6.3.0"    },
+        "sequelize-cli": "^6.3.0"
+    },
     "overrides": {
         "minimatch": "^10.2.1",
-        "glob": "^11.0.0"    }
+        "glob": "^11.0.0"
+    }
 }

@@ -48,7 +48,7 @@ const emit = defineEmits(['analyze', 'select-object']);
             <span v-if="org.description" class="detail-desc">{{ org.description }}</span>
         </div>
 
-        <!-- Body — overlay is positioned relative to this -->
+        <!-- Body  -->
         <div class="detail-body">
 
             <div></div>
@@ -121,7 +121,6 @@ const emit = defineEmits(['analyze', 'select-object']);
     border: 1px solid var(--surface-border);
     border-radius: 12px;
     padding: 1.25rem;
-    min-height: 300px;
 }
 
 .detail-header {

@@ -42,35 +42,40 @@ const emit = defineEmits(['analyze', 'select-object']);
 
 <template>
     <div class="dashboard-panel detail-panel">
+
+
         <!-- Header -->
         <div class="detail-header">
-            <h2>{{ org.name }}</h2>
+            <h2>{{ org.name }} OVERVIEW PANEL</h2>
             <span v-if="org.description" class="detail-desc">{{ org.description }}</span>
         </div>
 
-        <!-- Body — overlay is positioned relative to this -->
+        <!-- Body -->
         <div class="detail-body">
 
             <div></div>
+
+            <!-- Analysis in progress -->
             <div v-if="analyzingOrgId" class="loading-overlay">
                 <ProgressSpinner />
                 <span>Analyzing org</span>
             </div>
 
+            <!-- Polling for analysis -->
             <div v-else-if="checkingAnalysis" class="loading-overlay">
                 <ProgressSpinner />
                 <span>Retrieving org details...</span>
             </div>
 
-            <!-- No analysis yet -->
+            <!-- No analysis -->
             <template v-else-if="!hasAnalysis">
-                <div class="no-analysis">
-                    <i class="pi pi-search" style="font-size: 2rem; color: var(--text-color-secondary);"></i>
-                    <p>No analysis found for this org.</p>
+                <div class="analysis-actions">
                     <Button
                         label="Analyze Org"
                         icon="pi pi-cloud-download"
+                        size="small"
                         @click="emit('analyze')"
+                        :disabled="analyzingOrgId || checkingAnalysis"
                     />
                 </div>
             </template>
@@ -80,18 +85,13 @@ const emit = defineEmits(['analyze', 'select-object']);
                 <div class="analysis-actions">
                     <Button
                         label="Re-Analyze Org"
-                        icon="pi pi-refresh"
-                        size="small"
-                        severity="warning"
-                        outlined
+                        icon="pi pi-cloud-download"
                         @click="emit('analyze')"
                     />
                 </div>
-
-
             </template>
 
-        </div><!-- /detail-body -->
+        </div>
     </div>
 </template>
 
@@ -101,7 +101,7 @@ const emit = defineEmits(['analyze', 'select-object']);
     border: 1px solid var(--surface-border);
     border-radius: 12px;
     padding: 1.25rem;
-    min-height: 300px;
+    position: relative;
 }
 
 .detail-header {
@@ -167,6 +167,7 @@ const emit = defineEmits(['analyze', 'select-object']);
     border-radius: 8px;
     font-size: 0.95rem;
     color: var(--text-color-secondary);
+    max-height: 50px;
 }
 
 @media (max-width: 1200px) {

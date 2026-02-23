@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { useOrgStore } from '@/stores/orgStore';
@@ -15,6 +16,11 @@ const emit = defineEmits(['create', 'edit', 'change']);
 const orgStore = useOrgStore();
 const confirm = useConfirm();
 const toast = useToast();
+
+const selectedProjectModel = computed({
+    get: () => orgStore.selectedProject,
+    set: (val) => orgStore.setSelectedProject(val),
+});
 
 function onDeleteProject() {
     if (!props.selectedProject) return;
@@ -47,7 +53,7 @@ function onDeleteProject() {
         <div class="project-list-header">
             <h3>Projects</h3>
             <Select
-                v-model="orgStore.selectedProject"
+                v-model="selectedProjectModel"
                 :options="orgStore.projects"
                 optionLabel="name"
                 placeholder="Select Project"

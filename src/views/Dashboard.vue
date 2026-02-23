@@ -10,9 +10,11 @@ import EditProjectDialog from '@/components/dashboard/EditProjectDialog.vue';
 import OrgList from '@/components/dashboard/OrgList.vue';
 import OrgFormDialog from '@/components/dashboard/OrgFormDialog.vue';
 import ProjectPanel from '@/components/dashboard/ProjectPanel.vue';
-import OrgDetailPanel from '@/components/dashboard/OrgDetailPanel.vue';
+//import OrgObjectsPanel from '@/components/dashboard/OrgObjectsPanel.vue';
 import OrgOverview from '@/components/dashboard/OrgOverview.vue';
 import OAuthRedirectOverlay from '@/components/OAuthRedirectOverlay.vue';
+
+import OrgStats from '@/components/dashboard/OrgStats.vue';
 
 const orgStore = useOrgStore();
 const toast = useToast();
@@ -161,20 +163,20 @@ function onDeleteOrg(org) {
 </script>
 
 <template>
-    <div class="dashboard">
-        <!-- OAuth Redirect overlay — Teleport to body, controlled by useOrgAnalysis -->
+    <div class="flex flex-row gap-4">
+        <!-- OAuth Redirect overlay -->
         <OAuthRedirectOverlay :show="showingOAuthOverlay" :orgName="oauthOrgName" />
 
-        <div class="dashboard-content">
-
             <!-- Left Column: Project Selector + Org List -->
-            <div class="left-column">
+            <div class="card">
                 <ProjectPanel
                     :selectedProject="selectedProject"
                     @create="onCreateProject"
                     @edit="onEditProject"
                 />
+            </div>
 
+            <div class="card">
                 <div v-if="selectedProject" class="dashboard-panel org-panel">
                     <OrgList
                         :orgs="projectOrgs"
@@ -195,24 +197,9 @@ function onDeleteOrg(org) {
                 </div>
             </div>
 
-            <!-- Right: Org Detail Panel -->
-            <OrgDetailPanel
-                v-if="false && selectedProject && selectedOrg"
-                :org="selectedOrg"
-                :analyzingOrgId="analyzingOrgId"
-                :hasAnalysis="hasAnalysis"
-                :checkingAnalysis="checkingAnalysis"
-                :objects="objects"
-                :selectedObject="selectedObject"
-                :fields="fields"
-                :loadingFields="loadingFields"
-                @analyze="doAnalysis"
-                @select-object="onSelectObject"
-            />
-
-            <!-- Org Stats -->
+            <!-- Org Overview -->
             <OrgOverview
-                v-if="true && selectedProject && selectedOrg"
+                v-if="selectedProject && selectedOrg"
                 :org="selectedOrg"
                 :analyzingOrgId="analyzingOrgId"
                 :hasAnalysis="hasAnalysis"
@@ -230,7 +217,6 @@ function onDeleteOrg(org) {
                 <p>Select an org to view its details</p>
             </div>
 
-        </div>
 
         <!-- ─── Dialogs ──────────────────────────────────── -->
         <OrgFormDialog
@@ -251,67 +237,6 @@ function onDeleteOrg(org) {
 </template>
 
 <style scoped>
-.dashboard {
-    display: flex;
-    flex-direction: column;
-    padding: 1rem;
-}
 
-.dashboard-content {
-    display: grid;
-    grid-template-columns: 350px 1fr;
-    gap: 1.5rem;
-    align-items: start;
-}
 
-.left-column {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.dashboard-panel {
-    background: var(--surface-card);
-    border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    padding: 1.25rem;
-}
-
-.org-panel {
-    min-height: 200px;
-}
-
-.org-panel-empty {
-    min-height: auto;
-}
-
-.empty-org-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 2rem;
-    color: var(--text-color-secondary);
-    text-align: center;
-}
-
-.empty-org-content p {
-    margin: 0;
-}
-
-.detail-placeholder {
-    min-height: 300px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1rem;
-    color: var(--text-color-secondary);
-}
-
-@media (max-width: 768px) {
-    .dashboard-content {
-        grid-template-columns: 1fr;
-    }
-}
 </style>

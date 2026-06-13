@@ -1,15 +1,24 @@
 
 SELECT * FROM public."Users" ORDER BY id ASC;
 
+<<<<<<< HEAD
 SELECT * FROM public."SfOrgs" ORDER BY "userId", id ASC;
 
 SELECT "id", "analysisStatus" from public."SfOrgs" WHERE "id" = '00000000-0000-4000-8000-000000000010';
+=======
+SELECT * FROM public."Projects" ORDER BY "userId", id ASC;
+
+SELECT * FROM public."SfOrgs" ORDER BY "projectId", id ASC;
+>>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
 
 UPDATE public."SfOrgs" SET "analysisStatus"='idle' WHERE "id" = '00000000-0000-4000-8000-000000000010';
 UPDATE public."SfOrgs" SET "analysisStatus"='idle' WHERE "id" = '00000000-0000-4000-8000-000000000110';
 
+<<<<<<< HEAD
 UPDATE public."SfOrgs" SET "analysisStatus"='idle';
 
+=======
+>>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
 -- GROUP objects per org
 SELECT COUNT("id"), "sfOrgId"
 FROM public."SfObjectMetadata"

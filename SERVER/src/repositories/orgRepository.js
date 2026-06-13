@@ -1,6 +1,16 @@
+<<<<<<< HEAD
 import db from '../../models/index.js';
 import logger from '../lib/logger.js';
 const { SfOrg } = db;
+=======
+/**
+ * Org Repository - Database operations for SfOrg model
+ */
+
+import db from '../../models/index.js';
+import logger from '../lib/logger.js';
+const { SfOrg, Project } = db;
+>>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
 const log = logger.create('orgRepository');
 
 
@@ -53,7 +63,10 @@ async function updateAnalysisStatus(id, status) {
     return sfOrg;
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
 export default {
     findById,
     findByUserId,

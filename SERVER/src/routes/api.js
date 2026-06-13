@@ -6,6 +6,7 @@
  */
 
 import express from 'express';
+<<<<<<< HEAD
 import authMiddleware from '../middleware/authMiddleware.js';
 
 import orgRepo from '../repositories/orgRepository.js';
@@ -20,6 +21,20 @@ import probeUrl from '../utils/probeUrl.js';
 import sendResponse from '../utils/sendResponse.js';
 import logger from '../lib/logger.js';
 
+=======
+const router = express.Router();
+
+import authMiddleware from '../middleware/authMiddleware.js';
+import projectRepo from '../repositories/projectRepository.js';
+import orgRepo from '../repositories/orgRepository.js';
+import metadataRepo from '../repositories/metadataRepository.js';
+import mappingRepo from '../repositories/mappingRepository.js';
+import mdtService from '../services/metadataService.js';
+import sfService from '../services/salesforceService.js';
+import probeUrl from '../utils/probeUrl.js';
+import sendResponse from '../utils/sendResponse.js';
+import logger from '../lib/logger.js';
+>>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
 const log = logger.create('api');
 const router = express.Router();
 

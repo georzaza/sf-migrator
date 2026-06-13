@@ -5,11 +5,19 @@
  * DB operations are delegated to metadataRepository.
  */
 
+<<<<<<< HEAD
 import mdtRepo from '../repositories/metadataRepository.js';
 import sfService from './salesforceService.js';
 import standardObjectFilters from '../utils/excludedObjects.js';
 import logger from '../lib/logger.js';
 const log = logger.create('metadataService');
+=======
+import metadataRepo from '../repositories/metadataRepository.js';
+import sfService from './salesforceService.js';
+import logger from '../lib/logger.js';
+const log = logger.create('metadataService');
+import standardObjectFilters from './config/objectsToExclude.js';
+>>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
 
 async function analyzeAndSaveOrg(sfOrgId, options = {}) {
     const {

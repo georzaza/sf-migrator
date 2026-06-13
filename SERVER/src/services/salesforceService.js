@@ -7,11 +7,18 @@
 
 import jsforce from 'jsforce';
 import orgRepo from '../repositories/orgRepository.js';
+<<<<<<< HEAD
 import { mapSfField } from '../utils/sfFieldMapper.js';
 import { mapSfObject } from '../utils/sfObjectMapper.js';
 
 import logger from '../lib/logger.js';
 const log = logger.create('salesforceService');
+=======
+import logger from '../lib/logger.js';
+const log = logger.create('salesforceService');
+import { mapSfField } from '../utils/sfFieldMapper.js';
+import { mapSfObject } from '../utils/sfObjectMapper.js';
+>>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
 
 const VERSION = '65.0';
 

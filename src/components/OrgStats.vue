@@ -477,7 +477,8 @@ onMounted(() => {
 
 <template>
 
-    <Fluid class="card grid grid-cols-12 gap-4">
+
+    <Fluid v-for="i in 5" :key="i" class="card grid grid-cols-12 gap-4">
         <div class="col-span-12 font-semibold text-base iqvia-blue-dark" style="text-align: center;">
             <h2>General Statistics</h2>
         </div>

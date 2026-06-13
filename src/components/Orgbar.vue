@@ -245,7 +245,6 @@ function onAnalyzeOrg() {
                 v-tooltip.bottom="'Run org analysis'"
                 @click="onAnalyzeOrg"
             />
-
             <span v-if="analyzedDate" class="flex items-center gap-1 text-xs whitespace-nowrap" style="color:var(--text-color-secondary)">
                 Last analyzed on {{ analyzedDate }}
             </span>

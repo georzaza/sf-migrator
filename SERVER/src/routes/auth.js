@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 const router = express.Router();
 
 import userRepo from '../repositories/userRepository.js';
-import validator from 'validator';
+import validator from './validator.js';
 
 import sendResponse from '../utils/sendResponse.js';
 import parseCookies from '../utils/parseCookies.js';

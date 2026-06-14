@@ -51,4 +51,4 @@ const validatePassword = (password) => {
     return errormessage;
 }
 
-export { validateUsername, validateEmail, validatePassword };
+export default { validateUsername, validateEmail, validatePassword };

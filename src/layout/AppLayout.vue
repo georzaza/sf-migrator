@@ -1,7 +1,7 @@
 <script setup>
 import AppFooter from './AppFooter.vue';
 import AppTopbar from './AppTopbar.vue';
-import OrgBar from '@/components/OrgBar.vue';
+import Orgbar from '@/components/Orgbar.vue';
 </script>
 
 <template>
@@ -9,7 +9,7 @@ import OrgBar from '@/components/OrgBar.vue';
         <app-topbar></app-topbar>
         <div class="layout-main-container">
             <div class="layout-main">
-                <OrgBar />
+                <Orgbar />
                 <router-view></router-view>
             </div>
             <app-footer></app-footer>

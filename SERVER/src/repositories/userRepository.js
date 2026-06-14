@@ -1,10 +1,7 @@
-<<<<<<< HEAD
-=======
 /**
  * User Repository - Database operations for User model
  */
 
->>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
 import db from '../../models/index.js';
 import logger from '../lib/logger.js';
 const { User } = db;
@@ -44,10 +41,6 @@ async function updateLastLogin(id) {
     }
 }
 
-<<<<<<< HEAD
-
-=======
->>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
 export default {
     findByEmail,
     findByUsername,

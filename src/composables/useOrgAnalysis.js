@@ -29,6 +29,13 @@ export function useOrgAnalysis() {
 
     // ─── Helpers ────────────────────────────────────────
 
+    // Applies a partial update to an org in both orgs[] and selectedOrg (same pattern as OrgFormDialog).
+    function patchOrgInStore(orgId, updates) {
+        const idx = orgStore.orgs.findIndex(o => o.id === orgId);
+        if (idx !== -1) Object.assign(orgStore.orgs[idx], updates);
+        if (orgStore.selectedOrg?.id === orgId) Object.assign(orgStore.selectedOrg, updates);
+    }
+
     // authUrl from backend is relative (/oauth2/auth?sfOrgId=...).
     // Prefix with VITE_API_URL (backend origin) so the redirect goes to port 3000, not 5173.
     // Append returnTo so Salesforce bounces back here with autoAnalyzeOrgId set.
@@ -150,9 +157,15 @@ export function useOrgAnalysis() {
                     headers: { action: 'get-org-status', orgid: orgId },
                 });
                 const status = res.data.data?.analysisStatus;
+                const analysisStartedAt = res.data.data?.analysisStartedAt;
                 if (status === 'complete') {
                     stopPolling(orgId);
                     if (analyzingOrgId.value === orgId) analyzingOrgId.value = null;
+                    patchOrgInStore(orgId, {
+                        analysisStatus: 'complete',
+                        ...(analysisStartedAt && { analysisStartedAt }),
+                    });
+
                     const completedOrg = orgStore.orgs.find(o => o.id === orgId);
                     toast.add({
                         severity: 'success',
@@ -210,11 +223,17 @@ export function useOrgAnalysis() {
                 headers: { action: 'get-org-status', orgid: orgId },
             });
             const analysisStatus = statusRes.data.data?.analysisStatus;
+            const analysisStartedAt = statusRes.data.data?.analysisStartedAt;
             if (analysisStatus === 'running') {
                 analyzingOrgId.value = orgId;
                 startPolling(orgId);
             } else if (analysisStatus === 'auth_required') {
                 triggerOAuthRedirect(statusRes.data.data.authUrl, orgId);
+            } else if (analysisStatus === 'complete') {
+                patchOrgInStore(orgId, {
+                    analysisStatus: 'complete',
+                    ...(analysisStartedAt && { analysisStartedAt }),
+                });
             }
         } catch (e) {
             console.error('checkOrgAnalysis error:', e);

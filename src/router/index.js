@@ -8,12 +8,34 @@ const router = createRouter({
         {
             path: '/',
             component: AppLayout,
-            redirect: '/org-stats',
+            redirect: '/welcome',
+            children: [
+                {
+                    path: '/welcome',
+                    name: 'welcome',
+                    component: () => import('@/components/Welcome.vue')
+                },
+            ]
+        },
+        {
+            path: '/',
+            component: AppLayout,
+            redirect: ' ',
             children: [
                 {
                     path: '/org-stats',
                     name: 'org-stats',
                     component: () => import('@/views/OrgStatsView.vue')
+                },
+                {
+                    path: '/migration-workspace',
+                    name: 'migration-workspace',
+                    component: () => import('@/views/MigrationWorkspace.vue')
+                },
+                {
+                    path: '/field-mapping/:mappingId',
+                    name: 'field-mapping',
+                    component: () => import('@/views/FieldMapping.vue')
                 },
             ]
         },

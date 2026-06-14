@@ -3,14 +3,6 @@ import { mapSfField, SF_FIELD_COLUMNS } from '../utils/sfFieldMapper.js';
 import { mapSfObject, SF_OBJECT_COLUMNS } from '../utils/sfObjectMapper.js';
 const { SfObjectMetadata, SfFieldMetadata } = db;
 
-<<<<<<< HEAD
-=======
-import db from '../../models/index.js';
-import { mapSfField, SF_FIELD_COLUMNS } from '../utils/sfFieldMapper.js';
-import { mapSfObject, SF_OBJECT_COLUMNS } from '../utils/sfObjectMapper.js';
-const { SfObjectMetadata, SfFieldMetadata } = db;
->>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
-
 async function findOrCreateObject(sfOrgId, objectData) {
     const mapped = mapSfObject(objectData);
     const [objectMetadata, created] = await SfObjectMetadata.findOrCreate({
@@ -81,6 +73,11 @@ async function findFieldsByObjectId(objectMetadataId) {
 }
 
 
+async function findFieldById(id) {
+    return SfFieldMetadata.findByPk(id);
+}
+
+
 async function deleteObjectsByOrgId(sfOrgId) {
     const objects = await SfObjectMetadata.findAll({ where: { sfOrgId } });
     for (const obj of objects) {
@@ -141,16 +138,13 @@ async function getStats(sfOrgId) {
     };
 }
 
-<<<<<<< HEAD
-
-=======
->>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
 export default {
     findOrCreateObject,
     findOrCreateField,
     findObjectById,
     findObjectsByOrgId,
     findFieldsByObjectId,
+    findFieldById,
     deleteObjectsByOrgId,
     bulkUpsertObjects,
     bulkUpsertFields,

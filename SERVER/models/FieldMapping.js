@@ -25,9 +25,10 @@ export default (sequelize, DataTypes) => {
             allowNull: false,
             defaultValue: 'as-is'
         },
-        transformExpression: {
+        transformationRule: {
             type: DataTypes.TEXT,
-            allowNull: true
+            allowNull: true,
+            comment: 'JSON-encoded transformation rule (type, params, etc.)'
         },
         constantValue: {
             type: DataTypes.STRING,
@@ -41,9 +42,9 @@ export default (sequelize, DataTypes) => {
     }, {
         validate: {
             mappingTypeValidation() {
-                // If type is expression, must have transformExpression
-                if (this.mappingType === 'expression' && !this.transformExpression) {
-                    throw new Error('Transform expression is required for expression mapping type');
+                // If type is expression, must have transformationRule
+                if (this.mappingType === 'expression' && !this.transformationRule) {
+                    throw new Error('Transformation rule is required for expression mapping type');
                 }
                 // If type is constant, must have constantValue
                 if (this.mappingType === 'constant' && !this.constantValue) {

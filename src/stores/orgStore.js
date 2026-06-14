@@ -26,13 +26,11 @@ export const useOrgStore = defineStore('orgs', {
         },
 
         async loadOrgs() {
-            const response = await axiosInstance.get('/api',
-                {
-                    headers: {
-                        'action': 'get-orgs',
-                    },
-                }
-            );
+            const response = await axiosInstance.get('/api', {
+                headers: {
+                    'action': 'get-orgs',
+                },
+            });
             if (response.data.success) {
                 this.orgs = response.data.data;
                 return true;

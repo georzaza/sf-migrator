@@ -6,35 +6,18 @@
  */
 
 import express from 'express';
-<<<<<<< HEAD
-import authMiddleware from '../middleware/authMiddleware.js';
 
+import authMiddleware from '../middleware/authMiddleware.js';
 import orgRepo from '../repositories/orgRepository.js';
 import mdtRepo from '../repositories/metadataRepository.js';
-
-import mdtService from '../services/metadataService.js';
-import sfService from '../services/salesforceService.js';
-import fsService from '../services/filesystemService.js';
-import orgStatsService from '../services/orgStatsService.js';
-
-import probeUrl from '../utils/probeUrl.js';
-import sendResponse from '../utils/sendResponse.js';
-import logger from '../lib/logger.js';
-
-=======
-const router = express.Router();
-
-import authMiddleware from '../middleware/authMiddleware.js';
-import projectRepo from '../repositories/projectRepository.js';
-import orgRepo from '../repositories/orgRepository.js';
-import metadataRepo from '../repositories/metadataRepository.js';
 import mappingRepo from '../repositories/mappingRepository.js';
+import orgStatsService from '../services/orgStatsService.js';
 import mdtService from '../services/metadataService.js';
 import sfService from '../services/salesforceService.js';
+import mappingService from '../services/mappingService.js';
 import probeUrl from '../utils/probeUrl.js';
 import sendResponse from '../utils/sendResponse.js';
 import logger from '../lib/logger.js';
->>>>>>> baed379c4165f113ea1b2ceeb37e220ba9d20803
 const log = logger.create('api');
 const router = express.Router();
 
@@ -123,6 +106,44 @@ router.get('/', authMiddleware, async (req, res) => {
         }
     }
 
+    else if (action === 'get-mappings') {
+        const sourceOrgId = req.headers.sourceorgid;
+        const targetOrgId = req.headers.targetorgid;
+
+        if (!sourceOrgId) {
+            return sendResponse(res, 400, false, 'Source Org ID is required');
+        }
+
+        try {
+            let mappings;
+            if (targetOrgId) {
+                // Get mappings for specific org pair
+                mappings = await mappingService.getObjectMappingsByOrgPair(sourceOrgId, targetOrgId);
+            } else {
+                // Get all mappings for source org
+                mappings = await mappingService.getObjectMappingsBySourceOrg(sourceOrgId);
+            }
+            sendResponse(res, 200, true, 'Mappings retrieved successfully', mappings);
+        } catch (error) {
+            log.error('Failed to retrieve mappings', error, { sourceOrgId, targetOrgId });
+            sendResponse(res, 500, false, 'Failed to retrieve mappings');
+        }
+    }
+
+    else if (action === 'get-field-mappings') {
+        const mappingId = req.headers.mappingid;
+        if (!mappingId) {
+            return sendResponse(res, 400, false, 'Mapping ID is required');
+        }
+        try {
+            const fieldMappings = await mappingService.getFieldMappingsByObjectMapping(mappingId);
+            sendResponse(res, 200, true, 'Field mappings retrieved successfully', fieldMappings);
+        } catch (error) {
+            log.error('Failed to retrieve field mappings', error, { mappingId });
+            sendResponse(res, 500, false, 'Failed to retrieve field mappings');
+        }
+    }
+
     else {
         sendResponse(res, 400, false, 'Unknown GET action');
     }
@@ -193,6 +214,41 @@ router.post('/', authMiddleware, async (req, res) => {
         }
     }
 
+    else if (action === 'create-mapping') {
+        const { sourceObjectId, targetObjectId } = req.body;
+        if (!sourceObjectId || !targetObjectId) {
+            return sendResponse(res, 400, false, 'Source and target object IDs are required');
+        }
+        try {
+            const mapping = await mappingService.upsertObjectMapping(sourceObjectId, targetObjectId);
+            sendResponse(res, 201, true, 'Object mapping created successfully', mapping);
+        } catch (error) {
+            log.error('Failed to create object mapping', error, { sourceObjectId, targetObjectId });
+            sendResponse(res, 500, false, error.message || 'Failed to create object mapping');
+        }
+    }
+
+    else if (action === 'create-field-mapping') {
+        const { objectMappingId, sourceFieldId, targetFieldId, mappingType, transformationRule, constantValue } = req.body;
+        if (!objectMappingId || !targetFieldId) {
+            return sendResponse(res, 400, false, 'Object mapping ID and target field ID are required');
+        }
+        try {
+            const mapping = await mappingService.createFieldMapping({
+                objectMappingId,
+                sourceFieldId,
+                targetFieldId,
+                mappingType: mappingType || 'as-is',
+                transformationRule,
+                constantValue
+            });
+            sendResponse(res, 201, true, 'Field mapping created successfully', mapping);
+        } catch (error) {
+            log.error('Failed to create field mapping', error, { objectMappingId });
+            sendResponse(res, 500, false, error.message || 'Failed to create field mapping');
+        }
+    }
+
     else {
         sendResponse(res, 400, false, 'Unknown POST action');
     }
@@ -250,6 +306,34 @@ router.put('/', authMiddleware, async (req, res) => {
         }
     }
 
+    else if (action === 'update-mapping') {
+        const mappingId = req.headers.mappingid;
+        if (!mappingId) {
+            return sendResponse(res, 400, false, 'Mapping ID is required');
+        }
+        try {
+            const mapping = await mappingService.updateObjectMapping(mappingId, req.body);
+            sendResponse(res, 200, true, 'Object mapping updated successfully', mapping);
+        } catch (error) {
+            log.error('Failed to update object mapping', error, { mappingId });
+            sendResponse(res, 500, false, error.message || 'Failed to update object mapping');
+        }
+    }
+
+    else if (action === 'update-field-mapping') {
+        const mappingId = req.headers.mappingid;
+        if (!mappingId) {
+            return sendResponse(res, 400, false, 'Mapping ID is required');
+        }
+        try {
+            const mapping = await mappingService.updateFieldMapping(mappingId, req.body);
+            sendResponse(res, 200, true, 'Field mapping updated successfully', mapping);
+        } catch (error) {
+            log.error('Failed to update field mapping', error, { mappingId });
+            sendResponse(res, 500, false, error.message || 'Failed to update field mapping');
+        }
+    }
+
     else {
         sendResponse(res, 400, false, 'Unknown PUT action');
     }
@@ -273,6 +357,34 @@ router.delete('/', authMiddleware, async (req, res) => {
         } catch (error) {
             log.error('Failed to delete Salesforce Org', error, { orgId });
             sendResponse(res, 500, false, 'Failed to delete Salesforce Org');
+        }
+    }
+
+    else if (action === 'delete-mapping') {
+        const mappingId = req.headers.mappingid;
+        if (!mappingId) {
+            return sendResponse(res, 400, false, 'Mapping ID is required');
+        }
+        try {
+            await mappingService.deleteObjectMapping(mappingId);
+            sendResponse(res, 200, true, 'Object mapping deleted successfully');
+        } catch (error) {
+            log.error('Failed to delete object mapping', error, { mappingId });
+            sendResponse(res, 500, false, error.message || 'Failed to delete object mapping');
+        }
+    }
+
+    else if (action === 'delete-field-mapping') {
+        const mappingId = req.headers.mappingid;
+        if (!mappingId) {
+            return sendResponse(res, 400, false, 'Mapping ID is required');
+        }
+        try {
+            await mappingService.deleteFieldMapping(mappingId);
+            sendResponse(res, 200, true, 'Field mapping deleted successfully');
+        } catch (error) {
+            log.error('Failed to delete field mapping', error, { mappingId });
+            sendResponse(res, 500, false, error.message || 'Failed to delete field mapping');
         }
     }
 

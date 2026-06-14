@@ -5,7 +5,7 @@ module.exports = {
     async up(queryInterface, Sequelize) {
         await queryInterface.sequelize.query(`
             DO $$ BEGIN
-                CREATE TYPE "enum_FieldMappings_transformType" AS ENUM ('as-is', 'expression', 'constant');
+                CREATE TYPE "enum_FieldMappings_mappingType" AS ENUM ('as-is', 'expression', 'constant');
             EXCEPTION WHEN duplicate_object THEN null;
             END $$;
         `);
@@ -51,12 +51,12 @@ module.exports = {
                 type: Sequelize.ENUM('as-is', 'expression', 'constant'),
                 allowNull: false,
                 defaultValue: 'as-is',
-                comment: 'as-is: direct copy, expression: JS transformation, constant: static value'
+                comment: 'as-is: direct copy, expression: transformation, constant: static value'
             },
-            transformExpression: {
+            transformationRule: {
                 type: Sequelize.TEXT,
                 allowNull: true,
-                comment: 'JavaScript expression for transformation (e.g., "sourceField * 10")'
+                comment: 'JSON-encoded transformation rule (type, params, etc.)'
             },
             constantValue: {
                 type: Sequelize.STRING,
@@ -78,14 +78,26 @@ module.exports = {
             }
         });
 
+        // Unique constraint: within an object mapping, each source field can be mapped to a target field only once
+        // This allows the same source field to be mapped to different targets in different object mappings (different org pairs)
+        await queryInterface.sequelize.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS "unique_object_source_target_field"
+            ON "FieldMappings" ("objectMappingId", "sourceFieldId", "targetFieldId");
+        `);
+
+        // Index for querying by object mapping
         await queryInterface.sequelize.query(`
             CREATE INDEX IF NOT EXISTS "idx_field_mappings_objectMappingId"
             ON "FieldMappings" ("objectMappingId");
         `);
+
+        // Index for querying by source field
         await queryInterface.sequelize.query(`
             CREATE INDEX IF NOT EXISTS "idx_field_mappings_sourceFieldId"
             ON "FieldMappings" ("sourceFieldId");
         `);
+
+        // Index for querying by target field
         await queryInterface.sequelize.query(`
             CREATE INDEX IF NOT EXISTS "idx_field_mappings_targetFieldId"
             ON "FieldMappings" ("targetFieldId");
@@ -93,6 +105,7 @@ module.exports = {
     },
 
     async down(queryInterface, Sequelize) {
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "unique_object_source_target_field";');
         await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_field_mappings_objectMappingId";');
         await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_field_mappings_sourceFieldId";');
         await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_field_mappings_targetFieldId";');

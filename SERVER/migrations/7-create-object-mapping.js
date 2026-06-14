@@ -10,16 +10,6 @@ module.exports = {
                 primaryKey: true,
                 allowNull: false
             },
-            projectId: {
-                type: Sequelize.UUID,
-                allowNull: false,
-                references: {
-                    model: 'Projects',
-                    key: 'id'
-                },
-                onUpdate: 'CASCADE',
-                onDelete: 'CASCADE'
-            },
             sourceObjectId: {
                 type: Sequelize.UUID,
                 allowNull: false,
@@ -42,6 +32,12 @@ module.exports = {
                 onDelete: 'CASCADE',
                 comment: 'Target Salesforce object'
             },
+            mappingStatus: {
+                type: Sequelize.ENUM('draft', 'validated', 'ready', 'in_progress', 'complete', 'failed'),
+                allowNull: false,
+                defaultValue: 'draft',
+                comment: 'Tracks the state of the mapping workflow'
+            },
             isActive: {
                 type: Sequelize.BOOLEAN,
                 allowNull: false,
@@ -57,20 +53,30 @@ module.exports = {
             }
         });
 
+        // Unique constraint: each source object can only be mapped to a target object once
+        // Note: sourceObjectId already includes org info (via SfObjectMetadata.sfOrgId)
         await queryInterface.sequelize.query(`
-            CREATE UNIQUE INDEX IF NOT EXISTS "unique_project_mapping"
-            ON "ObjectMappings" ("projectId", "sourceObjectId", "targetObjectId");
+            CREATE UNIQUE INDEX IF NOT EXISTS "unique_source_target_mapping"
+            ON "ObjectMappings" ("sourceObjectId", "targetObjectId");
         `);
 
+        // Index for querying by source object
         await queryInterface.sequelize.query(`
-            CREATE INDEX IF NOT EXISTS "idx_object_mappings_projectId"
-            ON "ObjectMappings" ("projectId");
+            CREATE INDEX IF NOT EXISTS "idx_object_mappings_sourceObjectId"
+            ON "ObjectMappings" ("sourceObjectId");
+        `);
+
+        // Index for querying by target object
+        await queryInterface.sequelize.query(`
+            CREATE INDEX IF NOT EXISTS "idx_object_mappings_targetObjectId"
+            ON "ObjectMappings" ("targetObjectId");
         `);
     },
 
     async down(queryInterface, Sequelize) {
-        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "unique_project_mapping";');
-        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_object_mappings_projectId";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "unique_source_target_mapping";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_object_mappings_sourceObjectId";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_object_mappings_targetObjectId";');
         await queryInterface.dropTable('ObjectMappings');
     }
 };

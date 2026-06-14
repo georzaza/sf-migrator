@@ -45,39 +45,63 @@ const analyzedDate = computed(() => {
 
 // ─── Lifecycle ──────────────────────────────────────────
 onMounted(async () => {
-    if (!orgStore.orgs.length) await orgStore.loadOrgs();
+    console.log('[Orgbar] onMounted start', { orgCount: orgStore.orgs.length, href: window.location.href });
+
+    if (!orgStore.orgs.length) {
+        console.log('[Orgbar] no orgs loaded, calling loadOrgs()');
+        await orgStore.loadOrgs();
+        console.log('[Orgbar] orgs loaded', orgStore.orgs.length);
+    } else {
+        console.log('[Orgbar] orgs already present', orgStore.orgs.length);
+    }
 
     const urlParams = new URLSearchParams(window.location.search);
     const autoAnalyzeOrgId = urlParams.get('autoAnalyzeOrgId');
     const oauthError = urlParams.get('oauthError');
 
+    console.log('[Orgbar] urlParams', { autoAnalyzeOrgId, oauthError });
+
     if (oauthError) {
+        console.log('[Orgbar] oauthError present', oauthError);
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('oauthError');
         cleanUrl.searchParams.delete('autoAnalyzeOrgId');
         window.history.replaceState({}, '', cleanUrl);
+        console.log('[Orgbar] cleaned URL, removed oauthError and autoAnalyzeOrgId');
         toast.add({ severity: 'error', summary: 'Authorization Failed', detail: oauthError, life: 8000 });
+        console.log('[Orgbar] toast shown for oauthError');
 
         if (autoAnalyzeOrgId) {
             const org = orgStore.orgs.find(o => o.id === autoAnalyzeOrgId);
+            console.log('[Orgbar] autoAnalyzeOrgId found in url', autoAnalyzeOrgId, 'org:', org);
             if (org) {
                 skipNextOrgWatch = true;
                 orgStore.setSelectedOrg(org);
+                console.log('[Orgbar] selectedOrg set from autoAnalyzeOrgId', org.id);
             }
         }
     } else if (autoAnalyzeOrgId) {
+        console.log('[Orgbar] autoAnalyzeOrgId present', autoAnalyzeOrgId);
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('autoAnalyzeOrgId');
         window.history.replaceState({}, '', cleanUrl);
+        console.log('[Orgbar] cleaned URL, removed autoAnalyzeOrgId');
 
         const org = orgStore.orgs.find(o => o.id === autoAnalyzeOrgId);
+        console.log('[Orgbar] org found for autoAnalyzeOrgId', org);
         if (org) {
             skipNextOrgWatch = true;
             orgStore.setSelectedOrg(org);
+            console.log('[Orgbar] selectedOrg set and will start analysis', org.id);
             doAnalysis();
+            console.log('[Orgbar] doAnalysis() called');
         }
     } else if (orgStore.selectedOrg) {
+        console.log('[Orgbar] selectedOrg exists at mount, checking analysis', orgStore.selectedOrg.id);
         await checkOrgAnalysis(orgStore.selectedOrg.id);
+        console.log('[Orgbar] checkOrgAnalysis completed for', orgStore.selectedOrg.id);
+    } else {
+        console.log('[Orgbar] no selectedOrg at mount');
     }
 });
 
@@ -87,12 +111,21 @@ onUnmounted(() => {
 
 let skipNextOrgWatch = false;
 watch(() => orgStore.selectedOrg, async (org) => {
+    console.log('[Orgbar] watch:selectedOrg triggered', { skipNextOrgWatch, org });
     if (skipNextOrgWatch) {
+        console.log('[Orgbar] skipping watch invocation due to skipNextOrgWatch');
         skipNextOrgWatch = false;
         return;
     }
+    console.log('[Orgbar] resetState() called from watch');
     resetState();
-    if (org) await checkOrgAnalysis(org.id);
+    if (org) {
+        console.log('[Orgbar] selectedOrg present in watch, checking analysis for', org.id);
+        await checkOrgAnalysis(org.id);
+        console.log('[Orgbar] checkOrgAnalysis completed for', org.id);
+    } else {
+        console.log('[Orgbar] selectedOrg is null in watch');
+    }
 });
 
 // ─── Org Actions ────────────────────────────────────────
@@ -161,7 +194,16 @@ function onAnalyzeOrg() {
     />
 
     <div class="card flex items-center gap-3 pt-1"
-         style="height:3rem; padding-bottom: 1rem; padding-top: 1rem; background:var(--surface-card); border-color:var(--surface-border)">
+         style="
+         height:3rem;
+         padding:0.25rem;
+         margin-top: 0px;
+         margin-bottom: 0px;
+         min-width:450px;
+         background:var(--surface-card);
+         border-color:var(--surface-border);
+         "
+    >
 
         <div class="flex items-center rounded-lg overflow-hidden shrink-0"
              style="border:1px solid var(--surface-border); height:2.5rem">
@@ -174,12 +216,24 @@ function onAnalyzeOrg() {
                 v-model="selectedOrg"
                 :options="orgStore.orgs"
                 optionLabel="name"
-                placeholder="— none —"
+                placeholder="-- none --"
                 size="small"
-                class="w-64"
+                style="max-width:fit-content;"
                 :pt="{ root: { style: 'border:none; box-shadow:none; border-radius:0' } }"
             />
         </div>
+    </div>
+    <div class="card flex items-center gap-3 pt-1"
+         style="
+         height:3rem;
+         padding-left: 0.25rem;
+         padding-right: 0.25rem;
+         padding-top: 0.25rem;
+         margin-bottom: 1rem;
+         min-width:450px;
+         background:var(--surface-card);
+         border-color:var(--surface-border);"
+    >
 
         <div class="flex items-center gap-1">
             <Button
@@ -244,6 +298,7 @@ function onAnalyzeOrg() {
                 raised
                 v-tooltip.bottom="'Run org analysis'"
                 @click="onAnalyzeOrg"
+                style="min-width:68px"
             />
             <span v-if="analyzedDate" class="flex items-center gap-1 text-xs whitespace-nowrap" style="color:var(--text-color-secondary)">
                 Last analyzed on {{ analyzedDate }}

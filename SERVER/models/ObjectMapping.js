@@ -8,10 +8,6 @@ export default (sequelize, DataTypes) => {
             primaryKey: true,
             allowNull: false
         },
-        projectId: {
-            type: DataTypes.UUID,
-            allowNull: false
-        },
         sourceObjectId: {
             type: DataTypes.UUID,
             allowNull: false
@@ -19,6 +15,11 @@ export default (sequelize, DataTypes) => {
         targetObjectId: {
             type: DataTypes.UUID,
             allowNull: false
+        },
+        mappingStatus: {
+            type: DataTypes.ENUM('draft', 'validated', 'ready', 'in_progress', 'complete', 'failed'),
+            allowNull: false,
+            defaultValue: 'draft'
         },
         isActive: {
             type: DataTypes.BOOLEAN,
@@ -28,12 +29,6 @@ export default (sequelize, DataTypes) => {
     }, {});
 
     ObjectMapping.associate = function(models) {
-        // Belongs to a project
-        ObjectMapping.belongsTo(models.Project, {
-            foreignKey: 'projectId',
-            as: 'project'
-        });
-
         // Has a source object
         ObjectMapping.belongsTo(models.SfObjectMetadata, {
             foreignKey: 'sourceObjectId',

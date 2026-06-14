@@ -7,7 +7,8 @@
    - To start the server manually for the provided config: 
       - Windows: `pg_ctl.exe start -D ..\data -U postgres`
 
-5. Navigate to SERVER folder and
+
+5.TODO UPDATE BASED ON NEW npm run AVAILABLE COMMANS Navigate to SERVER folder and
     - Migrate the tables: `npm run migrate`
     - Seed the db: `npm run seed `
 

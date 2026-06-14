@@ -196,7 +196,7 @@ function onAnalyzeOrg() {
     <div class="card flex items-center gap-3 pt-1"
          style="
          height:3rem;
-         padding:0.25rem;
+         padding:2rem;
          margin-top: 0px;
          margin-bottom: 0px;
          min-width:450px;
@@ -222,18 +222,6 @@ function onAnalyzeOrg() {
                 :pt="{ root: { style: 'border:none; box-shadow:none; border-radius:0' } }"
             />
         </div>
-    </div>
-    <div class="card flex items-center gap-3 pt-1"
-         style="
-         height:3rem;
-         padding-left: 0.25rem;
-         padding-right: 0.25rem;
-         padding-top: 0.25rem;
-         margin-bottom: 1rem;
-         min-width:450px;
-         background:var(--surface-card);
-         border-color:var(--surface-border);"
-    >
 
         <div class="flex items-center gap-1">
             <Button

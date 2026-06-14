@@ -5,7 +5,7 @@
  * DB operations are delegated to metadataRepository.
  */
 
-import metadataRepo from '../repositories/metadataRepository.js';
+import mdtRepo from '../repositories/metadataRepository.js';
 import sfService from './salesforceService.js';
 import logger from '../lib/logger.js';
 const log = logger.create('metadataService');
@@ -16,7 +16,6 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
         objectsToAnalyze = null,
         includeCustomOnly = false,
     } = options;
-    return null;
     try {
         const objects = await sfService.describeGlobal(sfOrgId);
         log.debug('Retrieved global object describes', { orgId: sfOrgId, "objects count": objects.length });

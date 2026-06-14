@@ -15,21 +15,156 @@
             </div>
         </div>
 
-        <div v-if="mapping" class="mapping-controls">
-            <div class="status-section">
-                <Tag :value="mapping.mappingStatus" :severity="getStatusSeverity(mapping.mappingStatus)" />
+        <div v-if="mapping" class="mapper-layout">
+            <div class="mapper-panel side-panel">
+                <h2>Source</h2>
+                <div class="panel-group">
+                    <label>Source Object</label>
+                    <Dropdown
+                        v-model="selectedSourceObject"
+                        :options="sourceObjects"
+                        optionLabel="label"
+                        placeholder="Search and select source object"
+                        filter
+                        class="w-full"
+                    />
+                    <div class="details-card" v-if="selectedSourceObject">
+                        <div class="details-title">Object Details</div>
+                        <div><strong>Label:</strong> {{ selectedSourceObject.label }}</div>
+                        <div><strong>API Name:</strong> {{ selectedSourceObject.name }}</div>
+                        <div><strong>Custom:</strong> {{ selectedSourceObject.isCustom ? 'Yes' : 'No' }}</div>
+                    </div>
+                </div>
+
+                <div class="panel-group">
+                    <label>Source Field</label>
+                    <Dropdown
+                        v-model="selectedSourceField"
+                        :options="sourceFields"
+                        optionLabel="label"
+                        placeholder="Search and select source field"
+                        filter
+                        class="w-full"
+                        :disabled="!selectedSourceObject"
+                    >
+                        <template #option="slotProps">
+                            <div>
+                                <div>{{ slotProps.option.label }}</div>
+                                <small>{{ slotProps.option.name }} ({{ slotProps.option.type }})</small>
+                            </div>
+                        </template>
+                    </Dropdown>
+                    <div class="details-card" v-if="selectedSourceField">
+                        <div class="details-title">Field Details</div>
+                        <div><strong>Label:</strong> {{ selectedSourceField.label }}</div>
+                        <div><strong>API Name:</strong> {{ selectedSourceField.name }}</div>
+                        <div><strong>Type:</strong> {{ selectedSourceField.type }}</div>
+                    </div>
+                </div>
             </div>
-            <div class="action-buttons">
+
+            <div class="mapper-panel center-panel">
+                <h2>Mapping Options</h2>
+                <div class="status-section">
+                    <span>Mapping Status:</span>
+                    <Tag :value="mapping.mappingStatus" :severity="getStatusSeverity(mapping.mappingStatus)" />
+                </div>
+
+                <div class="panel-group">
+                    <label>Mapping Type</label>
+                    <Dropdown
+                        v-model="newFieldMapping.mappingType"
+                        :options="mappingTypes"
+                        optionLabel="label"
+                        optionValue="value"
+                        placeholder="Select Mapping Type"
+                        class="w-full"
+                        @change="onMappingTypeChange"
+                    />
+                </div>
+
+                <div v-if="newFieldMapping.mappingType === 'expression'" class="panel-group">
+                    <label>Transformation Rule</label>
+                    <Textarea
+                        v-model="newFieldMapping.transformationRule"
+                        rows="4"
+                        placeholder="Enter transformation rule"
+                        class="w-full"
+                    />
+                </div>
+
+                <div v-if="newFieldMapping.mappingType === 'constant'" class="panel-group">
+                    <label>Constant Value</label>
+                    <InputText
+                        v-model="newFieldMapping.constantValue"
+                        placeholder="Enter constant value"
+                        class="w-full"
+                    />
+                </div>
+
+                <div class="mapping-preview">
+                    <div class="preview-item">{{ selectedSourceField?.label || 'Select source field' }}</div>
+                    <i class="pi pi-arrow-right"></i>
+                    <div class="preview-item">{{ selectedTargetField?.label || 'Select target field' }}</div>
+                </div>
+
                 <Button
-                    label="Add Field Mapping"
+                    label="Create Field Mapping"
                     icon="pi pi-plus"
-                    @click="showAddMappingDialog = true"
-                    size="small"
+                    @click="createFieldMapping"
+                    :loading="mappingStore.loading"
+                    class="w-full"
                 />
+            </div>
+
+            <div class="mapper-panel side-panel">
+                <h2>Target</h2>
+                <div class="panel-group">
+                    <label>Target Object</label>
+                    <Dropdown
+                        v-model="selectedTargetObject"
+                        :options="targetObjects"
+                        optionLabel="label"
+                        placeholder="Search and select target object"
+                        filter
+                        class="w-full"
+                    />
+                    <div class="details-card" v-if="selectedTargetObject">
+                        <div class="details-title">Object Details</div>
+                        <div><strong>Label:</strong> {{ selectedTargetObject.label }}</div>
+                        <div><strong>API Name:</strong> {{ selectedTargetObject.name }}</div>
+                        <div><strong>Custom:</strong> {{ selectedTargetObject.isCustom ? 'Yes' : 'No' }}</div>
+                    </div>
+                </div>
+
+                <div class="panel-group">
+                    <label>Target Field</label>
+                    <Dropdown
+                        v-model="selectedTargetField"
+                        :options="targetFields"
+                        optionLabel="label"
+                        placeholder="Search and select target field"
+                        filter
+                        class="w-full"
+                        :disabled="!selectedTargetObject"
+                    >
+                        <template #option="slotProps">
+                            <div>
+                                <div>{{ slotProps.option.label }}</div>
+                                <small>{{ slotProps.option.name }} ({{ slotProps.option.type }})</small>
+                            </div>
+                        </template>
+                    </Dropdown>
+                    <div class="details-card" v-if="selectedTargetField">
+                        <div class="details-title">Field Details</div>
+                        <div><strong>Label:</strong> {{ selectedTargetField.label }}</div>
+                        <div><strong>API Name:</strong> {{ selectedTargetField.name }}</div>
+                        <div><strong>Type:</strong> {{ selectedTargetField.type }}</div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Field Mappings Table -->
         <DataTable
             :value="mappingStore.fieldMappings"
             :loading="mappingStore.loading"
@@ -90,91 +225,6 @@
             </Column>
         </DataTable>
 
-        <!-- Add Field Mapping Dialog -->
-        <Dialog
-            v-model:visible="showAddMappingDialog"
-            header="Add Field Mapping"
-            :modal="true"
-            style="width: 600px"
-        >
-            <div class="dialog-content">
-                <div class="field">
-                    <label>Mapping Type</label>
-                    <Dropdown
-                        v-model="newFieldMapping.mappingType"
-                        :options="mappingTypes"
-                        optionLabel="label"
-                        optionValue="value"
-                        placeholder="Select Mapping Type"
-                        class="w-full"
-                        @change="onMappingTypeChange"
-                    />
-                </div>
-
-                <div v-if="newFieldMapping.mappingType !== 'constant'" class="field">
-                    <label>Source Field</label>
-                    <Dropdown
-                        v-model="newFieldMapping.sourceField"
-                        :options="sourceFields"
-                        optionLabel="label"
-                        placeholder="Select Source Field"
-                        filter
-                        class="w-full"
-                    >
-                        <template #option="slotProps">
-                            <div>
-                                <div>{{ slotProps.option.label }}</div>
-                                <small>{{ slotProps.option.name }} ({{ slotProps.option.type }})</small>
-                            </div>
-                        </template>
-                    </Dropdown>
-                </div>
-
-                <div class="field">
-                    <label>Target Field</label>
-                    <Dropdown
-                        v-model="newFieldMapping.targetField"
-                        :options="targetFields"
-                        optionLabel="label"
-                        placeholder="Select Target Field"
-                        filter
-                        class="w-full"
-                    >
-                        <template #option="slotProps">
-                            <div>
-                                <div>{{ slotProps.option.label }}</div>
-                                <small>{{ slotProps.option.name }} ({{ slotProps.option.type }})</small>
-                            </div>
-                        </template>
-                    </Dropdown>
-                </div>
-
-                <div v-if="newFieldMapping.mappingType === 'expression'" class="field">
-                    <label>Transformation Rule</label>
-                    <Textarea
-                        v-model="newFieldMapping.transformationRule"
-                        rows="3"
-                        placeholder="Enter transformation rule"
-                        class="w-full"
-                    />
-                </div>
-
-                <div v-if="newFieldMapping.mappingType === 'constant'" class="field">
-                    <label>Constant Value</label>
-                    <InputText
-                        v-model="newFieldMapping.constantValue"
-                        placeholder="Enter constant value"
-                        class="w-full"
-                    />
-                </div>
-            </div>
-            <template #footer>
-                <Button label="Cancel" icon="pi pi-times" @click="closeAddDialog" text />
-                <Button label="Create" icon="pi pi-check" @click="createFieldMapping" :loading="mappingStore.loading" />
-            </template>
-        </Dialog>
-
-        <!-- Delete Confirmation Dialog -->
         <Dialog
             v-model:visible="showDeleteDialog"
             header="Confirm Delete"
@@ -191,7 +241,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMappingStore } from '@/stores/mappingStore';
 import { useToast } from 'primevue/usetoast';
@@ -202,17 +252,19 @@ const router = useRouter();
 const mappingStore = useMappingStore();
 const toast = useToast();
 
-// State
 const mapping = ref(null);
+const sourceObjects = ref([]);
+const targetObjects = ref([]);
 const sourceFields = ref([]);
 const targetFields = ref([]);
-const showAddMappingDialog = ref(false);
+const selectedSourceObject = ref(null);
+const selectedTargetObject = ref(null);
+const selectedSourceField = ref(null);
+const selectedTargetField = ref(null);
 const showDeleteDialog = ref(false);
 const fieldMappingToDelete = ref(null);
 const newFieldMapping = ref({
     mappingType: 'as-is',
-    sourceField: null,
-    targetField: null,
     transformationRule: null,
     constantValue: null
 });
@@ -223,11 +275,8 @@ const mappingTypes = [
     { label: 'Constant Value', value: 'constant' }
 ];
 
-// Methods
 async function loadMapping() {
     const mappingId = route.params.mappingId;
-
-    // Check if mapping is in store
     mapping.value = mappingStore.getMappingById.value(mappingId);
 
     if (!mapping.value) {
@@ -236,47 +285,88 @@ async function loadMapping() {
         return;
     }
 
-    // Load field mappings
+    selectedSourceObject.value = mapping.value.sourceObject || null;
+    selectedTargetObject.value = mapping.value.targetObject || null;
+
+    await loadObjectsForMappingOrgs();
     await mappingStore.loadFieldMappings(mappingId);
 
-    // Load source and target fields
-    await loadSourceFields();
-    await loadTargetFields();
+    if (selectedSourceObject.value?.id) {
+        await loadSourceFields(selectedSourceObject.value.id);
+    }
+    if (selectedTargetObject.value?.id) {
+        await loadTargetFields(selectedTargetObject.value.id);
+    }
 }
 
-async function loadSourceFields() {
+async function loadObjectsForMappingOrgs() {
+    try {
+        const sourceOrgId = mapping.value?.sourceObject?.sfOrgId;
+        const targetOrgId = mapping.value?.targetObject?.sfOrgId;
+
+        if (sourceOrgId) {
+            const sourceResponse = await axiosInstance.get('/api', {
+                headers: {
+                    action: 'get-objects',
+                    orgId: sourceOrgId
+                }
+            });
+            sourceObjects.value = sourceResponse.data.data || [];
+            if (selectedSourceObject.value?.id) {
+                selectedSourceObject.value = sourceObjects.value.find(obj => obj.id === selectedSourceObject.value.id) || selectedSourceObject.value;
+            }
+        }
+
+        if (targetOrgId) {
+            const targetResponse = await axiosInstance.get('/api', {
+                headers: {
+                    action: 'get-objects',
+                    orgId: targetOrgId
+                }
+            });
+            targetObjects.value = targetResponse.data.data || [];
+            if (selectedTargetObject.value?.id) {
+                selectedTargetObject.value = targetObjects.value.find(obj => obj.id === selectedTargetObject.value.id) || selectedTargetObject.value;
+            }
+        }
+    } catch (error) {
+        toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load mapping objects', life: 3000 });
+    }
+}
+
+async function loadSourceFields(objectId) {
     try {
         const response = await axiosInstance.get('/api', {
             headers: {
                 action: 'get-fields',
-                objectId: mapping.value.sourceObjectId
+                objectId
             }
         });
         sourceFields.value = response.data.data || [];
+        selectedSourceField.value = null;
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load source fields', life: 3000 });
     }
 }
 
-async function loadTargetFields() {
+async function loadTargetFields(objectId) {
     try {
         const response = await axiosInstance.get('/api', {
             headers: {
                 action: 'get-fields',
-                objectId: mapping.value.targetObjectId
+                objectId
             }
         });
         targetFields.value = response.data.data || [];
+        selectedTargetField.value = null;
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load target fields', life: 3000 });
     }
 }
 
-
 function onMappingTypeChange() {
-    // Clear fields based on mapping type
     if (newFieldMapping.value.mappingType === 'constant') {
-        newFieldMapping.value.sourceField = null;
+        selectedSourceField.value = null;
         newFieldMapping.value.transformationRule = null;
     } else if (newFieldMapping.value.mappingType === 'as-is') {
         newFieldMapping.value.transformationRule = null;
@@ -287,14 +377,48 @@ function onMappingTypeChange() {
 }
 
 async function createFieldMapping() {
+    if (!selectedTargetField.value) {
+        toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please select a target field', life: 3000 });
+        return;
+    }
+
+    if (newFieldMapping.value.mappingType !== 'constant' && !selectedSourceField.value) {
+        toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please select a source field', life: 3000 });
+        return;
+    }
+
+    if (!selectedSourceObject.value || !selectedTargetObject.value) {
+        toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please select source and target objects', life: 3000 });
+        return;
+    }
+
+    if (
+        mapping.value.sourceObjectId !== selectedSourceObject.value.id
+        || mapping.value.targetObjectId !== selectedTargetObject.value.id
+    ) {
+        try {
+            const selectedMapping = await mappingStore.createMapping(
+                selectedSourceObject.value.id,
+                selectedTargetObject.value.id
+            );
+            mapping.value = selectedMapping;
+            mappingStore.setCurrentMapping(selectedMapping);
+            await router.replace({ name: 'field-mapping', params: { mappingId: selectedMapping.id } });
+            await mappingStore.loadFieldMappings(selectedMapping.id);
+        } catch (error) {
+            toast.add({ severity: 'error', summary: 'Error', detail: error.message || 'Failed to use selected object mapping', life: 3000 });
+            return;
+        }
+    }
+
     const data = {
         objectMappingId: mapping.value.id,
-        targetFieldId: newFieldMapping.value.targetField?.id,
+        targetFieldId: selectedTargetField.value?.id,
         mappingType: newFieldMapping.value.mappingType
     };
 
     if (newFieldMapping.value.mappingType !== 'constant') {
-        data.sourceFieldId = newFieldMapping.value.sourceField?.id;
+        data.sourceFieldId = selectedSourceField.value?.id;
     }
 
     if (newFieldMapping.value.mappingType === 'expression') {
@@ -308,25 +432,25 @@ async function createFieldMapping() {
     try {
         await mappingStore.createFieldMapping(data);
         toast.add({ severity: 'success', summary: 'Success', detail: 'Field mapping created', life: 3000 });
-        closeAddDialog();
+        resetFieldSelection();
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Error', detail: error.message || 'Failed to create field mapping', life: 3000 });
     }
 }
 
-function closeAddDialog() {
-    showAddMappingDialog.value = false;
+function resetFieldSelection() {
+    if (newFieldMapping.value.mappingType !== 'constant') {
+        selectedSourceField.value = null;
+    }
+    selectedTargetField.value = null;
     newFieldMapping.value = {
         mappingType: 'as-is',
-        sourceField: null,
-        targetField: null,
         transformationRule: null,
         constantValue: null
     };
 }
 
-function editFieldMapping(fieldMapping) {
-    // TODO: Implement edit functionality
+function editFieldMapping() {
     toast.add({ severity: 'info', summary: 'Info', detail: 'Edit functionality coming soon', life: 3000 });
 }
 
@@ -348,12 +472,12 @@ async function deleteFieldMapping() {
 
 function getStatusSeverity(status) {
     const severityMap = {
-        'draft': 'secondary',
-        'validated': 'info',
-        'ready': 'success',
-        'in_progress': 'warning',
-        'complete': 'success',
-        'failed': 'danger'
+        draft: 'secondary',
+        validated: 'info',
+        ready: 'success',
+        in_progress: 'warning',
+        complete: 'success',
+        failed: 'danger'
     };
     return severityMap[status] || 'secondary';
 }
@@ -361,22 +485,35 @@ function getStatusSeverity(status) {
 function getMappingTypeSeverity(type) {
     const severityMap = {
         'as-is': 'success',
-        'expression': 'warning',
-        'constant': 'info'
+        expression: 'warning',
+        constant: 'info'
     };
     return severityMap[type] || 'secondary';
 }
 
-// Lifecycle
 onMounted(async () => {
     await loadMapping();
+});
+
+watch(() => selectedSourceObject.value?.id, async (newValue, oldValue) => {
+    if (!newValue || newValue === oldValue) {
+        return;
+    }
+    await loadSourceFields(newValue);
+});
+
+watch(() => selectedTargetObject.value?.id, async (newValue, oldValue) => {
+    if (!newValue || newValue === oldValue) {
+        return;
+    }
+    await loadTargetFields(newValue);
 });
 </script>
 
 <style scoped>
 .field-mapping-workspace {
     padding: 2rem;
-    max-width: 1400px;
+    max-width: 1600px;
     margin: 0 auto;
 }
 
@@ -395,25 +532,81 @@ onMounted(async () => {
     font-weight: 600;
 }
 
-.mapping-controls {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
+.mapper-layout {
+    display: grid;
+    grid-template-columns: 1fr 0.85fr 1fr;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.mapper-panel {
     background: var(--surface-card);
     border-radius: 8px;
-    margin-bottom: 2rem;
+    padding: 1rem;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mapper-panel h2 {
+    margin: 0 0 1rem;
+    font-size: 1.1rem;
+}
+
+.panel-group {
+    margin-bottom: 1rem;
+}
+
+.panel-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.details-card {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 6px;
+    background: var(--surface-ground);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.details-title {
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+}
+
+.center-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
 .status-section {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--surface-ground);
+    border-radius: 6px;
 }
 
-.action-buttons {
+.mapping-preview {
     display: flex;
-    gap: 1rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--surface-ground);
+    border-radius: 6px;
+}
+
+.preview-item {
+    flex: 1;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.9rem;
 }
 
 .field-mapping-table {
@@ -442,17 +635,9 @@ onMounted(async () => {
     color: var(--text-color-secondary);
 }
 
-.dialog-content {
-    padding: 1rem 0;
-}
-
-.field {
-    margin-bottom: 1.5rem;
-}
-
-.field label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
+@media (max-width: 1200px) {
+    .mapper-layout {
+        grid-template-columns: 1fr;
+    }
 }
 </style>

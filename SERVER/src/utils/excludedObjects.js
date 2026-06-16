@@ -1,20 +1,21 @@
 const standardObjectFilters = {
     'patternList': [
-        new RegExp('^ExtlClntApp'),
-        new RegExp('^Flow'),
-        new RegExp('^Oath'),
-        new RegExp('^PermissionSet'),
-        new RegExp('__mdt$'),
-        new RegExp('ChangeEvent$'),
-        new RegExp('Config$'),
-        new RegExp('Feed$'),
-        new RegExp('Feedback$'),
-        new RegExp('History$'),
-        new RegExp('Instance$'),
-        new RegExp('Metric$'),
-        new RegExp('Metrics$'),
-        new RegExp('Settings$'),
-        new RegExp('View$'),
+        new RegExp('^ExtlClntApp'),     // ExternalClientApplication and related objects
+        new RegExp('^Flow'),            // Flow and related objects
+        new RegExp('^Oath'),            // Auth and related objects
+        new RegExp('^PermissionSet'),   // Permission sets and related objects
+        new RegExp('__mdt$'),           // Custom Metadata Types
+        new RegExp('ChangeEvent$'),     // Change Data Capture event objects
+        new RegExp('SharingRule$'),     // Sharing rules (access related entity)
+        new RegExp('Config$'),          // Configuration objects
+        new RegExp('Feed$'),            // Chatter feed objects
+        new RegExp('Feedback$'),        // Feedback and related objects
+        new RegExp('History$'),         // Field history tracking objects
+        new RegExp('Instance$'),        // Objects related to specific instances of features
+        new RegExp('Metric$'),          // Performance and other metrics objects
+        new RegExp('Metrics$'),         // Performance and other metrics objects
+        new RegExp('Settings$'),        // Various settings (mainly from Setup menu, which can't be migrated)
+        new RegExp('View$'),            // List views and related objects
     ],
     'hardcodedList':[
         'ActorReactiveAskRespEvent',

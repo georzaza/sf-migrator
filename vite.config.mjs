@@ -26,7 +26,8 @@ export default defineConfig({
         allowedHosts: [
             'sf-migrator-frontend.georgezazanis.org',
             'sf-migrator-backend.georgezazanis.org',
-            'localhost'
+            'http://localhost:7153',
+            'http://localhost:3000'
         ]
     }
 });

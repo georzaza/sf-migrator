@@ -44,7 +44,7 @@
                         <template #messageicon>
                             <i class="pi pi-exclamation-triangle"></i>
                         </template>
-                        This org needs to be analyzed first. Go to Dashboard to analyze the org.
+                        This org needs to be analyzed first. Select the org in the top bar, click on Analyze and wait for completion.
                         <div class="status-badge">
                             <Tag :value="getStatusLabel(selectedTargetOrg.analysisStatus)" :severity="getStatusSeverity(selectedTargetOrg.analysisStatus)" />
                         </div>

@@ -9,14 +9,35 @@ import http from 'http';
 function probeUrl(rawUrl, timeoutMs = 6000) {
     return new Promise((resolve) => {
         let parsed;
-        try { parsed = new URL(rawUrl); } catch { return resolve(false); }
+
+        try { parsed = new URL(rawUrl); }
+        catch { return resolve(false); }
+
         const lib = parsed.protocol === 'https:' ? https : http;
+
         const req = lib.request(
-            { hostname: parsed.hostname, port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80), path: '/', method: 'HEAD', timeout: timeoutMs },
-            () => { req.destroy(); resolve(true); }
+            {
+                hostname: parsed.hostname,
+                port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+                path: '/',
+                method: 'HEAD',
+                timeout: timeoutMs
+            },
+            () => {
+                req.destroy();
+                resolve(true);
+            }
         );
-        req.on('timeout', () => { req.destroy(); resolve(false); });
-        req.on('error', () => resolve(false));
+
+        req.on('timeout', () => {
+            req.destroy();
+            resolve(false);
+        });
+
+        req.on('error', () => {
+            resolve(false);
+        });
+
         req.end();
     });
 }

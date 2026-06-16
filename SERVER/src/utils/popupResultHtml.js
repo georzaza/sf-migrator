@@ -1,5 +1,5 @@
 /**
- * Build a tiny HTML page that postMessages a result to the opener window.
+ * Tiny HTML page, part of the Salesforce org authorization redirection.
  * Falls back to a plain redirect if not opened as a popup.
  *
  * @param {object} messageObj  - Payload for postMessage (e.g. { type, message })

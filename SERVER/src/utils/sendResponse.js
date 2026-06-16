@@ -1,3 +1,4 @@
+// Response wrapper
 export default function sendResponse(res, status, success, message, data = undefined) {
     const response = { success, message };
     if (data !== undefined) response.data = data;

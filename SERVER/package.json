@@ -1,5 +1,5 @@
 {
-
+    "type": "module",
     "scripts": {
         "start:dev": "cross-env NODE_ENV=development nodemon --watch src --exec \"node src/server.js\"",
         "migrate:dev": "cross-env NODE_ENV=development npx sequelize-cli db:migrate --env development --migrations-path migrations --config config/config.cjs",

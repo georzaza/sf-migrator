@@ -15,7 +15,7 @@
                     optionLabel="name"
                     placeholder="Select Source Org"
                     @change="onSourceOrgChange"
-                    class="w-full"
+                    :style="{ width: 'max-content' }"
                 />
                 <div v-if="selectedSourceOrg && selectedSourceOrg.analysisStatus !== 'complete'" class="org-status-message">
                     <Message severity="warn" :closable="false">
@@ -37,7 +37,7 @@
                     optionLabel="name"
                     placeholder="Select Target Org"
                     @change="onTargetOrgChange"
-                    class="w-full"
+                    :style="{ width: 'max-content' }"
                 />
                 <div v-if="selectedTargetOrg && selectedTargetOrg.analysisStatus !== 'complete'" class="org-status-message">
                     <Message severity="warn" :closable="false">
@@ -148,7 +148,7 @@
                     <Textarea
                         v-model="transformationRule"
                         rows="4"
-                        placeholder="Enter transformation expression"
+                        placeholder="Use {Object.Field}, {Object.Field1 || Object.Field2}, {SUBSTR(Object.Field, 2, 5)}"
                         class="w-full"
                     />
                 </div>
@@ -716,9 +716,15 @@ const sortedFieldMappings = computed(() => {
 
 const canCreateMapping = computed(() => {
     if (!selectedTargetField.value) return false;
+
+    if (mappingType.value === 'expression') {
+        return !!transformationRule.value;
+    }
+
     if (mappingType.value === 'constant') {
         return !!constantValue.value;
     }
+
     return !!selectedSourceField.value;
 });
 
@@ -917,8 +923,13 @@ async function createFieldMapping() {
         return;
     }
 
-    if (mappingType.value !== 'constant' && !selectedSourceField.value) {
+    if (mappingType.value === 'as-is' && !selectedSourceField.value) {
         toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please select a source field', life: 3000 });
+        return;
+    }
+
+    if (mappingType.value === 'expression' && !transformationRule.value) {
+        toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please provide a transformation rule', life: 3000 });
         return;
     }
 
@@ -933,12 +944,13 @@ async function createFieldMapping() {
 
         // Create field mapping
         const data = {
-            objectMappingId: currentObjectMapping.value.id,
+            sourceObjectId: selectedSourceObject.value.id,
+            targetObjectId: selectedTargetObject.value.id,
             targetFieldId: selectedTargetField.value.id,
             mappingType: mappingType.value
         };
 
-        if (mappingType.value !== 'constant') {
+        if (mappingType.value === 'as-is') {
             data.sourceFieldId = selectedSourceField.value.id;
         }
 

@@ -10,11 +10,12 @@ import express from 'express';
 import authMiddleware from '../middleware/authMiddleware.js';
 import orgRepo from '../repositories/orgRepository.js';
 import mdtRepo from '../repositories/metadataRepository.js';
-import mappingRepo from '../repositories/mappingRepository.js';
+//import mappingRepo from '../repositories/mappingRepository.js';
 import orgStatsService from '../services/orgStatsService.js';
 import mdtService from '../services/metadataService.js';
 import sfService from '../services/salesforceService.js';
 import mappingService from '../services/mappingService.js';
+import extractionService from '../services/extractionService.js';
 import probeUrl from '../utils/probeUrl.js';
 import sendResponse from '../utils/sendResponse.js';
 import logger from '../lib/logger.js';
@@ -33,6 +34,7 @@ router.get('/', authMiddleware, async (req, res) => {
             sfOrgs.forEach(org => {
                 org.clientId = org.clientId ? '*'.repeat(10) : null;
                 org.clientSecret = org.clientSecret ? '*'.repeat(10) : null;
+                org.accessToken = org.accessToken ? '*'.repeat(10) : null;
             });
             sendResponse(res, 200, true, 'Salesforce Orgs retrieved successfully', sfOrgs);
         } catch (error) {
@@ -229,13 +231,14 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     else if (action === 'create-field-mapping') {
-        const { objectMappingId, sourceFieldId, targetFieldId, mappingType, transformationRule, constantValue } = req.body;
-        if (!objectMappingId || !targetFieldId) {
-            return sendResponse(res, 400, false, 'Object mapping ID and target field ID are required');
+        const { sourceObjectId, targetObjectId, sourceFieldId, targetFieldId, mappingType, transformationRule, constantValue } = req.body;
+        if (!sourceObjectId || !targetObjectId || !targetFieldId) {
+            return sendResponse(res, 400, false, 'Source object ID, target object ID, and target field ID are required');
         }
         try {
             const mapping = await mappingService.createFieldMapping({
-                objectMappingId,
+                sourceObjectId,
+                targetObjectId,
                 sourceFieldId,
                 targetFieldId,
                 mappingType: mappingType || 'as-is',
@@ -244,8 +247,41 @@ router.post('/', authMiddleware, async (req, res) => {
             });
             sendResponse(res, 201, true, 'Field mapping created successfully', mapping);
         } catch (error) {
-            log.error('Failed to create field mapping', error, { objectMappingId });
+            log.error('Failed to create field mapping', error, { sourceObjectId, targetObjectId });
             sendResponse(res, 500, false, error.message || 'Failed to create field mapping');
+        }
+    }
+
+    else if (action === 'start-extraction') {
+        const { sourceOrgId, targetOrgId } = req.body;
+        if (!sourceOrgId && !targetOrgId) {
+            return sendResponse(res, 400, false, 'sourceOrgId or targetOrgId is required');
+        }
+
+        const extractionMode = sourceOrgId ? 'source-org' : 'target-org';
+        log.info('Extraction request received', { extractionMode, sourceOrgId, targetOrgId });
+
+        try {
+            const summary = sourceOrgId
+                ? await extractionService.runExtraction({ sourceOrgId, targetOrgId: targetOrgId || null })
+                : await extractionService.runExtractionForTargetOrg({ targetOrgId });
+
+            log.info('Extraction completed', {
+                extractionMode,
+                sourceOrgId,
+                targetOrgId,
+                totalObjects: summary.totalObjects,
+                successCount: summary.successCount,
+                failedCount: summary.failedCount,
+            });
+            sendResponse(res, 200, true, 'Extraction completed', summary);
+        } catch (error) {
+            if (error.name === 'OAuthRequiredError') {
+                log.warn('Extraction blocked: OAuth required', { extractionMode, sourceOrgId, targetOrgId });
+                return res.status(401).json({ authUrl: error.authUrl });
+            }
+            log.error('Failed to run extraction', error, { extractionMode, sourceOrgId, targetOrgId });
+            sendResponse(res, 500, false, error.message || 'Failed to run extraction');
         }
     }
 

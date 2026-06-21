@@ -16,11 +16,21 @@ module.exports = {
                 primaryKey: true,
                 allowNull: false
             },
-            objectMappingId: {
+            sourceObjectId: {
                 type: Sequelize.UUID,
                 allowNull: false,
                 references: {
-                    model: 'ObjectMappings',
+                    model: 'SfObjectMetadata',
+                    key: 'id'
+                },
+                onUpdate: 'CASCADE',
+                onDelete: 'CASCADE'
+            },
+            targetObjectId: {
+                type: Sequelize.UUID,
+                allowNull: false,
+                references: {
+                    model: 'SfObjectMetadata',
                     key: 'id'
                 },
                 onUpdate: 'CASCADE',
@@ -56,17 +66,12 @@ module.exports = {
             transformationRule: {
                 type: Sequelize.TEXT,
                 allowNull: true,
-                comment: 'JSON-encoded transformation rule (type, params, etc.)'
+                comment: 'Transformation DSL in braces with field refs, || concatenation, and SUBSTR(expr,start,end)'
             },
             constantValue: {
                 type: Sequelize.STRING,
                 allowNull: true,
                 comment: 'Static value for constant mapping type'
-            },
-            isActive: {
-                type: Sequelize.BOOLEAN,
-                allowNull: false,
-                defaultValue: true
             },
             createdAt: {
                 allowNull: false,
@@ -78,17 +83,16 @@ module.exports = {
             }
         });
 
-        // Unique constraint: within an object mapping, each source field can be mapped to a target field only once
-        // This allows the same source field to be mapped to different targets in different object mappings (different org pairs)
+        // Unique constraint per object pair and field pair.
         await queryInterface.sequelize.query(`
-            CREATE UNIQUE INDEX IF NOT EXISTS "unique_object_source_target_field"
-            ON "FieldMappings" ("objectMappingId", "sourceFieldId", "targetFieldId");
+            CREATE UNIQUE INDEX IF NOT EXISTS "unique_source_target_object_field_mapping"
+            ON "FieldMappings" ("sourceObjectId", "targetObjectId", "sourceFieldId", "targetFieldId");
         `);
 
-        // Index for querying by object mapping
+        // Index for querying by source-target object pair.
         await queryInterface.sequelize.query(`
-            CREATE INDEX IF NOT EXISTS "idx_field_mappings_objectMappingId"
-            ON "FieldMappings" ("objectMappingId");
+            CREATE INDEX IF NOT EXISTS "idx_field_mappings_source_target_object"
+            ON "FieldMappings" ("sourceObjectId", "targetObjectId");
         `);
 
         // Index for querying by source field
@@ -105,8 +109,8 @@ module.exports = {
     },
 
     async down(queryInterface, Sequelize) {
-        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "unique_object_source_target_field";');
-        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_field_mappings_objectMappingId";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "unique_source_target_object_field_mapping";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_field_mappings_source_target_object";');
         await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_field_mappings_sourceFieldId";');
         await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_field_mappings_targetFieldId";');
         await queryInterface.dropTable('FieldMappings');

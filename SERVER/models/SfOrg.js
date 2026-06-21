@@ -30,6 +30,18 @@ export default (sequelize, DataTypes) => {
         clientSecret: {
             type: DataTypes.STRING,
         },
+        accessToken: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+        },
+        refreshToken: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+        },
+        instanceUrl: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
         userId: {
             type: DataTypes.UUID,
             allowNull: false,

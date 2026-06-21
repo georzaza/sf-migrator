@@ -8,7 +8,11 @@ export default (sequelize, DataTypes) => {
             primaryKey: true,
             allowNull: false
         },
-        objectMappingId: {
+        sourceObjectId: {
+            type: DataTypes.UUID,
+            allowNull: false
+        },
+        targetObjectId: {
             type: DataTypes.UUID,
             allowNull: false
         },
@@ -52,10 +56,14 @@ export default (sequelize, DataTypes) => {
     }, {});
 
     MigrationJob.associate = function(models) {
-        // Belongs to an object mapping
-        MigrationJob.belongsTo(models.ObjectMapping, {
-            foreignKey: 'objectMappingId',
-            as: 'objectMapping'
+        MigrationJob.belongsTo(models.SfObjectMetadata, {
+            foreignKey: 'sourceObjectId',
+            as: 'sourceObject'
+        });
+
+        MigrationJob.belongsTo(models.SfObjectMetadata, {
+            foreignKey: 'targetObjectId',
+            as: 'targetObject'
         });
     };
 

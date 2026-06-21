@@ -4,7 +4,7 @@
 2. Navigate to folder SERVER and run `npm install` 
 3. Navigate back to root folder and run `npm install`
 4. Ensure postgres server is running.
-   - To start the server manually for the provided config: 
+   - To start the server manually for the provided config, navigate to the Postgres installation `bin` directory and run
       - Windows: `pg_ctl.exe start -D ..\data -U postgres`
 
 
@@ -12,6 +12,6 @@
     - Migrate the tables: `npm run migrate`
     - Seed the db: `npm run seed `
 
-6. Start the server by navigating to SERVER/src/ and running `node server.js`
-7. Start the VUe frontend by navigating to root folder/src and running `npm run dev`
-8. Visit localhost:5173 on the browser.
+6. TODO UPDATE Start the server by navigating to SERVER/src/ and running `node server.js`
+7. TODO UPDATE Start the VUe frontend by navigating to root folder/src and running `npm run dev`
+8. TODO UPDATE Visit localhost:5173 on the browser.

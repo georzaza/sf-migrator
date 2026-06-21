@@ -66,8 +66,8 @@
             <div class="mapper-panel center-panel">
                 <h2>Mapping Options</h2>
                 <div class="status-section">
-                    <span>Mapping Status:</span>
-                    <Tag :value="mapping.mappingStatus" :severity="getStatusSeverity(mapping.mappingStatus)" />
+                    <span>Object Pair:</span>
+                    <Tag :value="`${mapping.sourceObject?.label || 'Source'} → ${mapping.targetObject?.label || 'Target'}`" severity="info" />
                 </div>
 
                 <div class="panel-group">
@@ -88,7 +88,7 @@
                     <Textarea
                         v-model="newFieldMapping.transformationRule"
                         rows="4"
-                        placeholder="Enter transformation rule"
+                        placeholder="Use {Object.Field}, {Object.Field1 || Object.Field2}, {SUBSTR(Object.Field, 2, 5)}"
                         class="w-full"
                     />
                 </div>
@@ -382,8 +382,13 @@ async function createFieldMapping() {
         return;
     }
 
-    if (newFieldMapping.value.mappingType !== 'constant' && !selectedSourceField.value) {
+    if (newFieldMapping.value.mappingType === 'as-is' && !selectedSourceField.value) {
         toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please select a source field', life: 3000 });
+        return;
+    }
+
+    if (newFieldMapping.value.mappingType === 'expression' && !newFieldMapping.value.transformationRule) {
+        toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please provide a transformation rule', life: 3000 });
         return;
     }
 
@@ -412,12 +417,13 @@ async function createFieldMapping() {
     }
 
     const data = {
-        objectMappingId: mapping.value.id,
+        sourceObjectId: selectedSourceObject.value.id,
+        targetObjectId: selectedTargetObject.value.id,
         targetFieldId: selectedTargetField.value?.id,
         mappingType: newFieldMapping.value.mappingType
     };
 
-    if (newFieldMapping.value.mappingType !== 'constant') {
+    if (newFieldMapping.value.mappingType === 'as-is') {
         data.sourceFieldId = selectedSourceField.value?.id;
     }
 
@@ -468,18 +474,6 @@ async function deleteFieldMapping() {
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Error', detail: error.message || 'Failed to delete field mapping', life: 3000 });
     }
-}
-
-function getStatusSeverity(status) {
-    const severityMap = {
-        draft: 'secondary',
-        validated: 'info',
-        ready: 'success',
-        in_progress: 'warning',
-        complete: 'success',
-        failed: 'danger'
-    };
-    return severityMap[status] || 'secondary';
 }
 
 function getMappingTypeSeverity(type) {

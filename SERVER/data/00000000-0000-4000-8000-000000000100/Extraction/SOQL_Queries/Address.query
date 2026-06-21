@@ -1,0 +1,1 @@
+SELECT Address, AddressType, City, Country, CreatedById, CreatedDate, Description, DrivingDirections, GeocodeAccuracy, Id, IsDeleted, LastModifiedById, LastModifiedDate, LastReferencedDate, LastViewedDate, Latitude, LocationType, Longitude, Name, ParentId, PostalCode, State, Street, SystemModstamp, TimeZone FROM Address

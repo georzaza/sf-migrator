@@ -7,6 +7,7 @@
 
 import mdtRepo from '../repositories/metadataRepository.js';
 import sfService from './salesforceService.js';
+import fsService from './filesystemService.js';
 import logger from '../lib/logger.js';
 const log = logger.create('metadataService');
 import standardObjectFilters from './config/objectsToExclude.js';
@@ -41,7 +42,18 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
             sfOrgId,
             objectsToProcess.map(obj => obj.name)
         );
-        log.toFile('sobjectDescribes', sobjectDescribes);
+
+        // Extract all fields from object describes
+        const allFields = sobjectDescribes.flatMap(describe =>
+            describe.fields.map(field => ({
+                objectName: describe.name,
+                ...field,
+            }))
+        );
+
+        // Save complete describes to JSON files
+        await fsService.saveObjectDescribes(sfOrgId, sobjectDescribes);
+        await fsService.saveFieldDescribes(sfOrgId, allFields);
 
         // write both objects & fields to db
         const savedObjects = await mdtRepo.bulkUpsertObjects(sfOrgId, sobjectDescribes);
@@ -58,7 +70,6 @@ async function analyzeAndSaveOrg(sfOrgId, options = {}) {
             describedObjects: sobjectDescribes.length,
             describedFields: fields.length,
         });
-        log.toFile('sobjectDescribes_savedObjects', savedObjects);
         return {
             objectsAnalyzed: sobjectDescribes.length
         }

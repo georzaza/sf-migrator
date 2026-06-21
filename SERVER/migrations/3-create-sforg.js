@@ -46,6 +46,18 @@ module.exports = {
                 type: Sequelize.STRING,
                 allowNull: true
             },
+            accessToken: {
+                type: Sequelize.TEXT,
+                allowNull: true
+            },
+            refreshToken: {
+                type: Sequelize.TEXT,
+                allowNull: true
+            },
+            instanceUrl: {
+                type: Sequelize.STRING,
+                allowNull: true
+            },
             userId: {
                 type: Sequelize.UUID,
                 allowNull: false,

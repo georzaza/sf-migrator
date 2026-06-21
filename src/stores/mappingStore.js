@@ -20,7 +20,7 @@ export const useMappingStore = defineStore('mapping', () => {
     });
 
     const fieldMappingsByObjectMapping = computed(() => {
-        return (objectMappingId) => fieldMappings.value.filter(m => m.objectMappingId === objectMappingId);
+        return (mappingId) => fieldMappings.value.filter(m => `${m.sourceObjectId}:${m.targetObjectId}` === mappingId);
     });
 
     // ==================== Actions ====================
@@ -55,14 +55,14 @@ export const useMappingStore = defineStore('mapping', () => {
     /**
      * Load field mappings for an object mapping
      */
-    async function loadFieldMappings(objectMappingId) {
+    async function loadFieldMappings(mappingId) {
         loading.value = true;
         error.value = null;
         try {
             const response = await axiosInstance.get('/api', {
                 headers: {
                     action: 'get-field-mappings',
-                    mappingId: objectMappingId
+                    mappingId
                 }
             });
             fieldMappings.value = response.data.data || [];

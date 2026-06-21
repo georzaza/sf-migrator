@@ -81,6 +81,11 @@ async function completeOAuth(sfOrgId, code) {
         const userInfo = await conn.authorize(code);
         connectionPool.set(sfOrgId, conn);
         oauth2Map.delete(sfOrgId);
+        await orgRepo.update(sfOrgId, {
+            accessToken: conn.accessToken,
+            refreshToken: conn.refreshToken,
+            instanceUrl: conn.instanceUrl
+        }).catch(() => {});
         await orgRepo.updateAnalysisStatus(sfOrgId, 'idle').catch(() => {});
         log.info('OAuth2 authorized', { sfOrgId, userId: userInfo.id, organizationId: userInfo.organizationId });
         return userInfo;
@@ -89,6 +94,7 @@ async function completeOAuth(sfOrgId, code) {
         throw err;
     }
 }
+
 
 /**
  * Discard a pending OAuth session without completing it (e.g. on probe failure before redirect).

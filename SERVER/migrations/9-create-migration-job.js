@@ -16,11 +16,21 @@ module.exports = {
                 primaryKey: true,
                 allowNull: false
             },
-            objectMappingId: {
+            sourceObjectId: {
                 type: Sequelize.UUID,
                 allowNull: false,
                 references: {
-                    model: 'ObjectMappings',
+                    model: 'SfObjectMetadata',
+                    key: 'id'
+                },
+                onUpdate: 'CASCADE',
+                onDelete: 'CASCADE'
+            },
+            targetObjectId: {
+                type: Sequelize.UUID,
+                allowNull: false,
+                references: {
+                    model: 'SfObjectMetadata',
                     key: 'id'
                 },
                 onUpdate: 'CASCADE',
@@ -83,14 +93,14 @@ module.exports = {
             ON "MigrationJobs" ("status");
         `);
         await queryInterface.sequelize.query(`
-            CREATE INDEX IF NOT EXISTS "idx_migration_jobs_objectMappingId"
-            ON "MigrationJobs" ("objectMappingId");
+            CREATE INDEX IF NOT EXISTS "idx_migration_jobs_source_target_object"
+            ON "MigrationJobs" ("sourceObjectId", "targetObjectId");
         `);
     },
 
     async down(queryInterface, Sequelize) {
         await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_migration_jobs_status";');
-        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_migration_jobs_objectMappingId";');
+        await queryInterface.sequelize.query('DROP INDEX IF EXISTS "idx_migration_jobs_source_target_object";');
         await queryInterface.dropTable('MigrationJobs');
         await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_MigrationJobs_status";');
     }

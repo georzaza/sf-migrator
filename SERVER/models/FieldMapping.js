@@ -8,7 +8,11 @@ export default (sequelize, DataTypes) => {
             primaryKey: true,
             allowNull: false
         },
-        objectMappingId: {
+        sourceObjectId: {
+            type: DataTypes.UUID,
+            allowNull: false
+        },
+        targetObjectId: {
             type: DataTypes.UUID,
             allowNull: false
         },
@@ -28,17 +32,12 @@ export default (sequelize, DataTypes) => {
         transformationRule: {
             type: DataTypes.TEXT,
             allowNull: true,
-            comment: 'JSON-encoded transformation rule (type, params, etc.)'
+            comment: 'Transformation DSL in braces. Supports field references, concatenation with ||, and SUBSTR(expr,start,end).'
         },
         constantValue: {
             type: DataTypes.STRING,
             allowNull: true
         },
-        isActive: {
-            type: DataTypes.BOOLEAN,
-            allowNull: false,
-            defaultValue: true
-        }
     }, {
         validate: {
             mappingTypeValidation() {
@@ -59,10 +58,16 @@ export default (sequelize, DataTypes) => {
     });
 
     FieldMapping.associate = function(models) {
-        // Belongs to an object mapping
-        FieldMapping.belongsTo(models.ObjectMapping, {
-            foreignKey: 'objectMappingId',
-            as: 'objectMapping'
+        // Belongs to a source object
+        FieldMapping.belongsTo(models.SfObjectMetadata, {
+            foreignKey: 'sourceObjectId',
+            as: 'sourceObject'
+        });
+
+        // Belongs to a target object
+        FieldMapping.belongsTo(models.SfObjectMetadata, {
+            foreignKey: 'targetObjectId',
+            as: 'targetObject'
         });
 
         // Has a source field (optional for constant mappings)

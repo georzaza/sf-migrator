@@ -1,5 +1,6 @@
 {
     "type": "module",
+    "name": "sf-migrator-server",
     "scripts": {
         "start:dev": "cross-env NODE_ENV=development nodemon --watch src --exec \"node src/server.js\"",
         "migrate:dev": "cross-env NODE_ENV=development npx sequelize-cli db:migrate --env development --migrations-path migrations --config config/config.cjs",
@@ -10,6 +11,7 @@
         "fresh:dev": "echo First remove type module from package.json && npm run seed:dev:undo && npm run migrate:dev:undo && npm run migrate:dev && npm run seed:dev"
     },
     "dependencies": {
+        "@salesforce/cli": "^2.139.6",
         "bcrypt": "^6.0.0",
         "cors": "^2.8.5",
         "dotenv": "^16.4.7",

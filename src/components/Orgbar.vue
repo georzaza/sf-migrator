@@ -1,5 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
+import axiosInstance from '@/api/axiosInstance';
 import { useOrgStore } from '@/stores/orgStore';
 import { useToast } from 'primevue/usetoast';
 import { useConfirm } from 'primevue/useconfirm';
@@ -8,6 +10,7 @@ import OAuthRedirectOverlay from '@/components/OAuthRedirectOverlay.vue';
 import OrgFormDialog from '@/components/dashboard/OrgFormDialog.vue';
 
 const orgStore = useOrgStore();
+const router = useRouter();
 const toast = useToast();
 const confirm = useConfirm();
 
@@ -185,6 +188,45 @@ function onAnalyzeOrg() {
         },
     });
 }
+
+function onExtractOrg() {
+    const org = orgStore.selectedOrg;
+    if (!org) return;
+
+    confirm.require({
+        message: 'Start extraction for this target org across all mapped source orgs?',
+        header: 'Confirm Extraction',
+        icon: 'pi pi-exclamation-triangle',
+        acceptLabel: 'Start',
+        rejectLabel: 'Cancel',
+        acceptClass: 'p-button-primary',
+        accept: async () => {
+            try {
+                const response = await axiosInstance.post('/api', {
+                    targetOrgId: org.id,
+                }, {
+                    headers: { action: 'start-extraction' },
+                });
+
+                const summary = response?.data?.data || {};
+                toast.add({
+                    severity: 'success',
+                    summary: 'Extraction Completed',
+                    detail: `Source orgs: ${summary.totalSourceOrgs ?? 0}, objects: ${summary.totalObjects ?? 0}, success: ${summary.successCount ?? 0}, failed: ${summary.failedCount ?? 0}`,
+                    life: 7000,
+                });
+                router.push({ name: 'migration-workspace' });
+            } catch (error) {
+                toast.add({
+                    severity: 'error',
+                    summary: 'Extraction Failed',
+                    detail: error?.response?.data?.message || error.message || 'Failed to start extraction',
+                    life: 7000,
+                });
+            }
+        },
+    });
+}
 </script>
 
 <template>
@@ -193,13 +235,12 @@ function onAnalyzeOrg() {
         :orgName="oauthOrgName"
     />
 
-    <div class="card flex items-center gap-3 pt-1"
+        <div class="card flex flex-wrap items-center gap-2"
          style="
-         height:3rem;
-         padding:2rem;
+            padding:0.75rem 1rem;
          margin-top: 0px;
          margin-bottom: 0px;
-         min-width:450px;
+            width:100%;
          background:var(--surface-card);
          border-color:var(--surface-border);
          "
@@ -223,7 +264,7 @@ function onAnalyzeOrg() {
             />
         </div>
 
-        <div class="flex items-center gap-1">
+        <div class="flex items-center gap-1 flex-wrap">
             <Button
                 icon="pi pi-plus"
                 rounded
@@ -286,6 +327,15 @@ function onAnalyzeOrg() {
                 raised
                 v-tooltip.bottom="'Run org analysis'"
                 @click="onAnalyzeOrg"
+                style="min-width:68px"
+            />
+            <Button
+                label="Extract"
+                icon="pi pi-download"
+                size="small"
+                raised
+                v-tooltip.bottom="'Starts the extraction for this org.'"
+                @click="onExtractOrg"
                 style="min-width:68px"
             />
             <span v-if="analyzedDate" class="flex items-center gap-1 text-xs whitespace-nowrap" style="color:var(--text-color-secondary)">

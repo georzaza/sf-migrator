@@ -30,11 +30,16 @@ router.get('/', authMiddleware, async (req, res) => {
 
     if (action === 'get-orgs') {
         try {
-            const sfOrgs = await orgRepo.findByUserId(req.user.id);
-            sfOrgs.forEach(org => {
-                org.clientId = org.clientId ? '*'.repeat(10) : null;
-                org.clientSecret = org.clientSecret ? '*'.repeat(10) : null;
-                org.accessToken = org.accessToken ? '*'.repeat(10) : null;
+            const sfOrgsRaw = await orgRepo.findByUserId(req.user.id);
+            // Convert Sequelize instances to plain objects FIRST — otherwise dynamically
+            // added fields (hasAccessToken) are silently stripped by toJSON() during serialization.
+            const sfOrgs = sfOrgsRaw.map(org => {
+                const plain = org.get ? org.get({ plain: true }) : { ...org };
+                plain.hasAccessToken = !!(plain.accessToken);
+                plain.clientId = plain.clientId ? '*'.repeat(10) : null;
+                plain.clientSecret = plain.clientSecret ? '*'.repeat(10) : null;
+                plain.accessToken = plain.accessToken ? '*'.repeat(10) : null;
+                return plain;
             });
             sendResponse(res, 200, true, 'Salesforce Orgs retrieved successfully', sfOrgs);
         } catch (error) {
@@ -91,6 +96,26 @@ router.get('/', authMiddleware, async (req, res) => {
         } catch (error) {
             log.error('Failed to retrieve org status', error, { orgId });
             sendResponse(res, 500, false, 'Failed to retrieve org status');
+        }
+    }
+
+    else if (action === 'get-extraction-status') {
+        const orgId = req.headers.orgid;
+        if (!orgId) {
+            return sendResponse(res, 400, false, 'Org ID is required');
+        }
+        try {
+            const sfOrg = await orgRepo.findById(orgId);
+            if (!sfOrg) return sendResponse(res, 404, false, 'Org not found');
+            const data = {
+                extractionStatus: sfOrg.extractionStatus || 'idle',
+                summary: sfOrg.extractionSummary || null,
+                error: sfOrg.extractionError || null,
+            };
+            sendResponse(res, 200, true, 'Extraction status retrieved', data);
+        } catch (error) {
+            log.error('Failed to retrieve extraction status', error, { orgId });
+            sendResponse(res, 500, false, 'Failed to retrieve extraction status');
         }
     }
 
@@ -262,26 +287,60 @@ router.post('/', authMiddleware, async (req, res) => {
         log.info('Extraction request received', { extractionMode, sourceOrgId, targetOrgId });
 
         try {
-            const summary = sourceOrgId
-                ? await extractionService.runExtraction({ sourceOrgId, targetOrgId: targetOrgId || null })
-                : await extractionService.runExtractionForTargetOrg({ targetOrgId });
-
-            log.info('Extraction completed', {
-                extractionMode,
-                sourceOrgId,
-                targetOrgId,
-                totalObjects: summary.totalObjects,
-                successCount: summary.successCount,
-                failedCount: summary.failedCount,
+            // Set extraction status to running
+            const orgId = sourceOrgId || targetOrgId;
+            await orgRepo.update(orgId, {
+                extractionStatus: 'running',
+                extractionSummary: null,
+                extractionError: null,
             });
-            sendResponse(res, 200, true, 'Extraction completed', summary);
+
+            // Return 202 immediately
+            sendResponse(res, 202, true, 'Extraction started', { extractionStatus: 'running' });
+
+            // Run extraction in background
+            const extractionPromise = sourceOrgId
+                ? extractionService.runExtraction({ sourceOrgId, targetOrgId: targetOrgId || null })
+                : extractionService.runExtractionForTargetOrg({ targetOrgId });
+
+            extractionPromise
+                .then(async (summary) => {
+                    log.info('Extraction completed', {
+                        extractionMode,
+                        sourceOrgId,
+                        targetOrgId,
+                        totalObjects: summary.totalObjects,
+                        successCount: summary.successCount,
+                        failedCount: summary.failedCount,
+                    });
+                    await orgRepo.update(orgId, {
+                        extractionStatus: 'complete',
+                        extractionSummary: summary,
+                        extractionError: null,
+                    });
+                })
+                .catch(async (error) => {
+                    log.error('Extraction failed', error, { extractionMode, sourceOrgId, targetOrgId });
+
+                    // Check if it's an auth error
+                    const isAuthError = error.message?.includes('Authentication failed') ||
+                                      error.message?.includes('access token') ||
+                                      error.name === 'OAuthRequiredError';
+
+                    await orgRepo.update(orgId, {
+                        extractionStatus: isAuthError ? 'auth_failed' : 'failed',
+                        extractionSummary: null,
+                        extractionError: error.message || 'Extraction failed',
+                    });
+                });
         } catch (error) {
-            if (error.name === 'OAuthRequiredError') {
-                log.warn('Extraction blocked: OAuth required', { extractionMode, sourceOrgId, targetOrgId });
-                return res.status(401).json({ authUrl: error.authUrl });
-            }
-            log.error('Failed to run extraction', error, { extractionMode, sourceOrgId, targetOrgId });
-            sendResponse(res, 500, false, error.message || 'Failed to run extraction');
+            const orgId = sourceOrgId || targetOrgId;
+            log.error('Failed to start extraction', error, { extractionMode, sourceOrgId, targetOrgId });
+            await orgRepo.update(orgId, {
+                extractionStatus: 'failed',
+                extractionError: error.message || 'Failed to start extraction',
+            }).catch(() => {});
+            sendResponse(res, 500, false, error.message || 'Failed to start extraction');
         }
     }
 

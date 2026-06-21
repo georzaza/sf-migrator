@@ -33,6 +33,13 @@ export const useOrgStore = defineStore('orgs', {
             });
             if (response.data.success) {
                 this.orgs = response.data.data;
+                // Keep selectedOrg in sync with the refreshed data
+                if (this.selectedOrg) {
+                    const refreshedOrg = this.orgs.find(o => o.id === this.selectedOrg.id);
+                    if (refreshedOrg) {
+                        this.selectedOrg = { ...refreshedOrg };
+                    }
+                }
                 return true;
             }
             else {

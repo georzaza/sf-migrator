@@ -13,6 +13,8 @@ export function useOrgAnalysis() {
 
     // ─── State ──────────────────────────────────────────
     const analyzingOrgId = ref(null);
+    const extractingOrgId = ref(null);
+    const loggingInOrgId = ref(null);
     const objects = ref([]);
     const selectedObject = ref(null);
     const fields = ref([]);
@@ -22,6 +24,7 @@ export function useOrgAnalysis() {
 
     // Keyed by orgId so switching orgs never cancels an in-flight background analysis.
     const statusPollTimers = new Map();
+    const extractionPollTimers = new Map();
 
     // ─── OAuth overlay state (consumed by OAuthRedirectOverlay.vue via Teleport) ─
     const showingOAuthOverlay = ref(false);
@@ -52,7 +55,8 @@ export function useOrgAnalysis() {
     // The callback page sends a postMessage on success/error and closes itself.
     // If the popup is closed without a message (e.g. redirect_uri_mismatch error on Salesforce's page)
     // we detect it via polling and show a helpful toast.
-    async function triggerOAuthRedirect(authUrl, orgId) {
+    // onSuccess callback is called after successful OAuth (defaults to doAnalysis)
+    async function triggerOAuthRedirect(authUrl, orgId, onSuccess = null) {
         if (oauthPopupActive) {
             console.log('[oauthRedirect] Already handling an OAuth popup — ignoring duplicate call.');
             return;
@@ -103,7 +107,13 @@ export function useOrgAnalysis() {
                 const { type, message } = event.data ?? {};
 
                 if (type === 'sf-oauth-success') {
-                    settle(() => doAnalysis());
+                    settle(() => {
+                        if (onSuccess) {
+                            onSuccess();
+                        } else {
+                            doAnalysis();
+                        }
+                    });
                 } else if (type === 'sf-oauth-error') {
                     settle(() => toast.add({ severity: 'error', summary: 'Authorization Failed', detail: message, life: 10000 }));
                 }
@@ -309,11 +319,136 @@ export function useOrgAnalysis() {
         analyzingOrgId.value = null;
     }
 
+    // ─── Login Only (OAuth without analysis) ────────────
+
+    async function beginOAuth() {
+        const orgId = orgStore.selectedOrg?.id;
+        if (!orgId) return;
+
+        loggingInOrgId.value = orgId;
+        const authUrl = `/oauth2/auth?sfOrgId=${orgId}`;
+
+        await triggerOAuthRedirect(authUrl, orgId, async () => {
+            loggingInOrgId.value = null;
+            await orgStore.loadOrgs();
+            toast.add({
+                severity: 'success',
+                summary: 'Login Successful',
+                detail: 'Successfully authenticated with Salesforce',
+                life: 3000
+            });
+        });
+        loggingInOrgId.value = null;
+    }
+
+    // ─── Extraction ─────────────────────────────────────
+
+    async function doExtraction() {
+        const orgId = orgStore.selectedOrg?.id;
+        if (!orgId) return;
+
+        try {
+            const response = await axiosInstance.post('/api', {
+                sourceOrgId: orgId,
+            }, {
+                headers: { action: 'start-extraction' },
+            });
+
+            if (response.status === 202 && response.data.success) {
+                extractingOrgId.value = orgId;
+                startExtractionPolling(orgId);
+            } else if (response.status === 401 && response.data.authUrl) {
+                await triggerOAuthRedirect(response.data.authUrl, orgId);
+            } else {
+                toast.add({
+                    severity: 'error',
+                    summary: 'Error',
+                    detail: response.data.message || 'Failed to start extraction.',
+                    life: 4000
+                });
+            }
+        } catch (error) {
+            if (error.response?.status === 401 && error.response?.data?.authUrl) {
+                await triggerOAuthRedirect(error.response.data.authUrl, orgId);
+            } else {
+                toast.add({
+                    severity: 'error',
+                    summary: 'Error',
+                    detail: error.response?.data?.message || error.message || 'Failed to start extraction.',
+                    life: 4000
+                });
+            }
+        }
+    }
+
+    function startExtractionPolling(orgId) {
+        stopExtractionPolling(orgId);
+        const timer = setInterval(async () => {
+            try {
+                const response = await axiosInstance.get('/api', {
+                    headers: { action: 'get-extraction-status', orgid: orgId },
+                });
+                const status = response.data.data?.extractionStatus;
+                const summary = response.data.data?.summary;
+
+                if (status === 'complete') {
+                    stopExtractionPolling(orgId);
+                    extractingOrgId.value = null;
+                    toast.add({
+                        severity: 'success',
+                        summary: 'Extraction Completed',
+                        detail: `Objects: ${summary?.totalObjects ?? 0}, Success: ${summary?.successCount ?? 0}, Failed: ${summary?.failedCount ?? 0}`,
+                        sticky: true
+                    });
+                } else if (status === 'failed' || status === 'auth_failed') {
+                    stopExtractionPolling(orgId);
+                    extractingOrgId.value = null;
+
+                    if (status === 'auth_failed') {
+                        // Update org to mark it as requiring auth
+                        patchOrgInStore(orgId, { hasAccessToken: false });
+                        toast.add({
+                            severity: 'error',
+                            summary: 'Authentication Required',
+                            detail: 'Your session has expired. Please click the Login button to re-authenticate.',
+                            life: 8000,
+                        });
+                    } else {
+                        toast.add({
+                            severity: 'error',
+                            summary: 'Extraction Failed',
+                            detail: response.data.data?.error || 'An error occurred during extraction',
+                            life: 7000,
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error('Extraction status poll error:', e);
+            }
+        }, 3000);
+        extractionPollTimers.set(orgId, timer);
+    }
+
+    function stopExtractionPolling(orgId) {
+        if (orgId) {
+            const timer = extractionPollTimers.get(orgId);
+            if (timer !== undefined) {
+                clearInterval(timer);
+                extractionPollTimers.delete(orgId);
+            }
+        } else {
+            extractionPollTimers.forEach(timer => clearInterval(timer));
+            extractionPollTimers.clear();
+        }
+    }
+
     // ─── Public API ─────────────────────────────────────
 
     return {
         // State (all refs)
         analyzingOrgId,
+        extractingOrgId,
+        loggingInOrgId,
         showingOAuthOverlay,
         oauthOrgName,
         objects,
@@ -325,7 +460,10 @@ export function useOrgAnalysis() {
         // Functions
         checkOrgAnalysis,
         doAnalysis,
+        beginOAuth,
+        doExtraction,
         stopPolling,
+        stopExtractionPolling,
         resetState,
         onSelectObject,
     };

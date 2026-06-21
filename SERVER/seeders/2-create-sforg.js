@@ -20,7 +20,7 @@ module.exports = {
 
         const sforgs = [];
 
-        // Create 2 orgs per user
+        // Create 3 orgs per user
         let idx = 0;
         for (const user of users) {
 
@@ -57,6 +57,23 @@ module.exports = {
                 createdAt: new Date(),
                 updatedAt: new Date()
             });
+
+            // Third Org: copy of second org with different name
+            apexOrgId = user.id.slice(0, -3) + '2' + user.id.slice(-2);
+
+            sforgs.push({
+                id: apexOrgId,
+                name: 'COPY OF ' + apexOrg.name + ` (User ${idx})`,
+                description: apexOrg.description + ` (User ${idx})`,
+                loginURL: apexOrg.loginURL,
+                connectionType: 'OAuth',
+                clientId: apexOrg.clientId || null,
+                clientSecret: apexOrg.clientSecret || null,
+                userId: user.id,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+
         }
 
         console.log(`Seeding ${sforgs.length} real Salesforce orgs for ${users.length} user(s) in ${env} environment.`);

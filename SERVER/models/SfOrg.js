@@ -59,6 +59,19 @@ export default (sequelize, DataTypes) => {
             type: DataTypes.DATE,
             allowNull: true,
         },
+        extractionStatus: {
+            type: DataTypes.ENUM('idle', 'running', 'complete', 'failed', 'auth_failed'),
+            allowNull: false,
+            defaultValue: 'idle',
+        },
+        extractionSummary: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+        },
+        extractionError: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+        },
     });
 
     SfOrg.associate = function(models) {

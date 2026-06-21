@@ -14,6 +14,12 @@ module.exports = {
             EXCEPTION WHEN duplicate_object THEN null;
             END $$;
         `);
+        await queryInterface.sequelize.query(`
+            DO $$ BEGIN
+                CREATE TYPE "enum_SfOrgs_extractionStatus" AS ENUM ('idle', 'running', 'complete', 'failed', 'auth_failed');
+            EXCEPTION WHEN duplicate_object THEN null;
+            END $$;
+        `);
         await queryInterface.createTable('SfOrgs', {
             id: {
                 allowNull: false,
@@ -77,6 +83,19 @@ module.exports = {
                 type: Sequelize.DATE,
                 allowNull: true
             },
+            extractionStatus: {
+                type: Sequelize.ENUM('idle', 'running', 'complete', 'failed', 'auth_failed'),
+                allowNull: false,
+                defaultValue: 'idle'
+            },
+            extractionSummary: {
+                type: Sequelize.JSONB,
+                allowNull: true
+            },
+            extractionError: {
+                type: Sequelize.TEXT,
+                allowNull: true
+            },
             createdAt: {
                 allowNull: false,
                 type: Sequelize.DATE
@@ -92,5 +111,6 @@ module.exports = {
         await queryInterface.dropTable('SfOrgs');
         await queryInterface.sequelize.query(`DROP TYPE IF EXISTS "enum_SfOrgs_connectionType";`);
         await queryInterface.sequelize.query(`DROP TYPE IF EXISTS "enum_SfOrgs_analysisStatus";`);
+        await queryInterface.sequelize.query(`DROP TYPE IF EXISTS "enum_SfOrgs_extractionStatus";`);
     }
 };

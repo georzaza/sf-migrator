@@ -16,13 +16,18 @@ const confirm = useConfirm();
 
 const {
     analyzingOrgId,
+    extractingOrgId,
+    loggingInOrgId,
     showingOAuthOverlay,
     oauthOrgName,
     hasAnalysis,
     checkingAnalysis,
     checkOrgAnalysis,
     doAnalysis,
+    beginOAuth,
+    doExtraction,
     stopPolling,
+    stopExtractionPolling,
     resetState,
 } = useOrgAnalysis();
 
@@ -37,6 +42,9 @@ const selectedOrg = computed({
 });
 
 const isAnalyzing = computed(() => analyzingOrgId.value === orgStore.selectedOrg?.id);
+const isExtracting = computed(() => extractingOrgId.value === orgStore.selectedOrg?.id);
+const isLoggingIn = computed(() => loggingInOrgId.value === orgStore.selectedOrg?.id);
+const hasAccessToken = computed(() => orgStore.selectedOrg?.hasAccessToken === true);
 
 const analyzedDate = computed(() => {
     const org = orgStore.selectedOrg;
@@ -189,41 +197,25 @@ function onAnalyzeOrg() {
     });
 }
 
+function onLoginOrg() {
+    const org = orgStore.selectedOrg;
+    if (!org) return;
+    beginOAuth();
+}
+
 function onExtractOrg() {
     const org = orgStore.selectedOrg;
     if (!org) return;
 
     confirm.require({
-        message: 'Start extraction for this target org across all mapped source orgs?',
+        message: 'Start extraction for this org?',
         header: 'Confirm Extraction',
         icon: 'pi pi-exclamation-triangle',
         acceptLabel: 'Start',
         rejectLabel: 'Cancel',
         acceptClass: 'p-button-primary',
-        accept: async () => {
-            try {
-                const response = await axiosInstance.post('/api', {
-                    targetOrgId: org.id,
-                }, {
-                    headers: { action: 'start-extraction' },
-                });
-
-                const summary = response?.data?.data || {};
-                toast.add({
-                    severity: 'success',
-                    summary: 'Extraction Completed',
-                    detail: `Source orgs: ${summary.totalSourceOrgs ?? 0}, objects: ${summary.totalObjects ?? 0}, success: ${summary.successCount ?? 0}, failed: ${summary.failedCount ?? 0}`,
-                    life: 7000,
-                });
-                router.push({ name: 'migration-workspace' });
-            } catch (error) {
-                toast.add({
-                    severity: 'error',
-                    summary: 'Extraction Failed',
-                    detail: error?.response?.data?.message || error.message || 'Failed to start extraction',
-                    life: 7000,
-                });
-            }
+        accept: () => {
+            doExtraction();
         },
     });
 }
@@ -329,13 +321,41 @@ function onExtractOrg() {
                 @click="onAnalyzeOrg"
                 style="min-width:68px"
             />
-            <Button
+
+            <span v-if="isLoggingIn" class="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                <ProgressSpinner
+                    style="width:2rem;height:2rem"
+                    strokeWidth="6"
+                />
+                Logging in…
+            </span>
+
+            <Button v-else
+                label="Login"
+                icon="pi pi-sign-in"
+                size="small"
+                raised
+                v-tooltip.bottom="'Authenticate with Salesforce'"
+                @click="onLoginOrg"
+                style="min-width:68px"
+            />
+
+            <span v-if="isExtracting" class="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                <ProgressSpinner
+                    style="width:2rem;height:2rem"
+                    strokeWidth="6"
+                />
+                Extracting…
+            </span>
+
+            <Button v-else
                 label="Extract"
                 icon="pi pi-download"
                 size="small"
                 raised
-                v-tooltip.bottom="'Starts the extraction for this org.'"
+                v-tooltip.bottom="hasAccessToken ? 'Start extraction for this org' : 'Login required to extract'"
                 @click="onExtractOrg"
+                :disabled="!hasAccessToken"
                 style="min-width:68px"
             />
             <span v-if="analyzedDate" class="flex items-center gap-1 text-xs whitespace-nowrap" style="color:var(--text-color-secondary)">

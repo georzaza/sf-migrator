@@ -1,10 +1,19 @@
+SELECT * FROM public."Users";
 SELECT * FROM public."SfOrgs";
-
 SELECT * FROM public."SfObjectMetadata";
+SELECT * FROM public."SfFieldMetadata"  where name = 'ContactId';
 
-SELECT * FROM public."SfFieldMetadata" where name = 'BillingStreet';
+SELECT objects.sfOrgId, extractionstats.id, runid, objectname, status, recordsexported, errormessage, startedat, stg1tablename, sourceobjectid, queryfilepath, csvfilepath, fieldsexported
+FROM public.ext_00000000_0000_4000_8000_000000000100_extraction_stats extractionstats
+JOIN public."SfObjectMetadata" objects
+  ON (extractionstats.sourceobjectid = objects.id)
+JOIN public."SfOrgs" orgs
+  ON (objects."sfOrgId" = orgs.id)
+ORDER BY extractionstats.objectname;
 
-SELECT * FROM public."stg1_00000000_0000_4000_8000_000000000100_Account";
+
+SELECT * FROM public.stg1_00000000_0000_4000_8000_000000000100_Account;
+SELECT * FROM public.stg1_00000000_0000_4000_8000_000000000100_Asset;
 
 SELECT fields."id", fields."objectMetadataId", fields."name", fields."type", fields."idLookup", fields."relationshipName", fields."referenceTo"
 FROM public."SfFieldMetadata" fields

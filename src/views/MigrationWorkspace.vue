@@ -11,7 +11,7 @@
                 <label>Source Org</label>
                 <Dropdown
                     v-model="selectedSourceOrg"
-                    :options="orgs"
+                    :options="availableSourceOrgs"
                     optionLabel="name"
                     placeholder="Select Source Org"
                     @change="onSourceOrgChange"
@@ -33,7 +33,7 @@
                 <label>Target Org</label>
                 <Dropdown
                     v-model="selectedTargetOrg"
-                    :options="orgs"
+                    :options="availableTargetOrgs"
                     optionLabel="name"
                     placeholder="Select Target Org"
                     @change="onTargetOrgChange"
@@ -63,13 +63,14 @@
                 <div class="panel-group">
                     <label>Source Object</label>
                     <div class="selector-with-button">
-                        <Dropdown
+                        <AutoComplete
                             v-model="selectedSourceObject"
-                            :options="sourceObjects"
+                            :suggestions="filteredSourceObjects"
+                            @complete="searchSourceObjects"
                             optionLabel="label"
-                            placeholder="Search by label or API name"
-                            filter
-                            :filterFields="['label', 'name']"
+                            placeholder="Type to search objects..."
+                            forceSelection
+                            dropdown
                             class="w-full"
                             @change="onSourceObjectChange"
                         >
@@ -79,7 +80,17 @@
                                     <small>{{ slotProps.option.name }}</small>
                                 </div>
                             </template>
-                        </Dropdown>
+                        </AutoComplete>
+                        <Button
+                            v-if="selectedSourceObject"
+                            icon="pi pi-times"
+                            severity="secondary"
+                            text
+                            rounded
+                            @click="clearSourceObject"
+                            v-tooltip.top="'Clear selection'"
+                            class="clear-button"
+                        />
                         <Button
                             v-if="selectedSourceObject"
                             icon="pi pi-info-circle"
@@ -96,13 +107,14 @@
                 <div class="panel-group">
                     <label>Source Field</label>
                     <div class="selector-with-button">
-                        <Dropdown
+                        <AutoComplete
                             v-model="selectedSourceField"
-                            :options="sourceFields"
+                            :suggestions="filteredSourceFields"
+                            @complete="searchSourceFields"
                             optionLabel="label"
-                            placeholder="Search by label, API name, or type"
-                            filter
-                            :filterFields="['label', 'name', 'type']"
+                            placeholder="Type to search fields..."
+                            forceSelection
+                            dropdown
                             class="w-full"
                             :disabled="!selectedSourceObject"
                         >
@@ -112,7 +124,17 @@
                                     <small>{{ slotProps.option.name }} ({{ slotProps.option.type }})</small>
                                 </div>
                             </template>
-                        </Dropdown>
+                        </AutoComplete>
+                        <Button
+                            v-if="selectedSourceField"
+                            icon="pi pi-times"
+                            severity="secondary"
+                            text
+                            rounded
+                            @click="clearSourceField"
+                            v-tooltip.top="'Clear selection'"
+                            class="clear-button"
+                        />
                         <Button
                             v-if="selectedSourceField"
                             icon="pi pi-info-circle"
@@ -181,8 +203,13 @@
                     class="w-full"
                 />
 
+                <!-- Same Org Warning -->
+                <Message v-if="sameOrgSelected" severity="error" :closable="false" class="mt-2">
+                    Source and target org are the same. Mappings cannot be created between an org and itself.
+                </Message>
+
                 <!-- Existing Mapping Warning -->
-                <Message v-if="existingTargetFieldMapping" severity="warn" :closable="false" class="mt-2">
+                <Message v-if="!sameOrgSelected && existingTargetFieldMapping" severity="warn" :closable="false" class="mt-2">
                     This target field is already mapped
                 </Message>
             </div>
@@ -195,13 +222,14 @@
                 <div class="panel-group">
                     <label>Target Object</label>
                     <div class="selector-with-button">
-                        <Dropdown
+                        <AutoComplete
                             v-model="selectedTargetObject"
-                            :options="targetObjects"
+                            :suggestions="filteredTargetObjects"
+                            @complete="searchTargetObjects"
                             optionLabel="label"
-                            placeholder="Search by label or API name"
-                            filter
-                            :filterFields="['label', 'name']"
+                            placeholder="Type to search objects..."
+                            forceSelection
+                            dropdown
                             class="w-full"
                             @change="onTargetObjectChange"
                         >
@@ -211,7 +239,17 @@
                                     <small>{{ slotProps.option.name }}</small>
                                 </div>
                             </template>
-                        </Dropdown>
+                        </AutoComplete>
+                        <Button
+                            v-if="selectedTargetObject"
+                            icon="pi pi-times"
+                            severity="secondary"
+                            text
+                            rounded
+                            @click="clearTargetObject"
+                            v-tooltip.top="'Clear selection'"
+                            class="clear-button"
+                        />
                         <Button
                             v-if="selectedTargetObject"
                             icon="pi pi-info-circle"
@@ -228,13 +266,14 @@
                 <div class="panel-group">
                     <label>Target Field</label>
                     <div class="selector-with-button">
-                        <Dropdown
+                        <AutoComplete
                             v-model="selectedTargetField"
-                            :options="targetFields"
+                            :suggestions="filteredTargetFields"
+                            @complete="searchTargetFields"
                             optionLabel="label"
-                            placeholder="Search by label, API name, or type"
-                            filter
-                            :filterFields="['label', 'name', 'type']"
+                            placeholder="Type to search fields..."
+                            forceSelection
+                            dropdown
                             class="w-full"
                             :disabled="!selectedTargetObject"
                         >
@@ -244,7 +283,17 @@
                                     <small>{{ slotProps.option.name }} ({{ slotProps.option.type }})</small>
                                 </div>
                             </template>
-                        </Dropdown>
+                        </AutoComplete>
+                        <Button
+                            v-if="selectedTargetField"
+                            icon="pi pi-times"
+                            severity="secondary"
+                            text
+                            rounded
+                            @click="clearTargetField"
+                            v-tooltip.top="'Clear selection'"
+                            class="clear-button"
+                        />
                         <Button
                             v-if="selectedTargetField"
                             icon="pi pi-info-circle"
@@ -597,7 +646,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useOrgStore } from '@/stores/orgStore';
 import { useMappingStore } from '@/stores/mappingStore';
@@ -616,10 +665,14 @@ const selectedSourceOrg = ref(null);
 const selectedTargetOrg = ref(null);
 const sourceObjects = ref([]);
 const targetObjects = ref([]);
+const filteredSourceObjects = ref([]);
+const filteredTargetObjects = ref([]);
 const selectedSourceObject = ref(null);
 const selectedTargetObject = ref(null);
 const sourceFields = ref([]);
 const targetFields = ref([]);
+const filteredSourceFields = ref([]);
+const filteredTargetFields = ref([]);
 const selectedSourceField = ref(null);
 const selectedTargetField = ref(null);
 const mappingType = ref('as-is');
@@ -662,6 +715,14 @@ const mappingTypes = [
 
 // Computed
 const orgs = computed(() => orgStore.orgs || []);
+
+const availableSourceOrgs = computed(() => orgs.value);
+
+const availableTargetOrgs = computed(() => orgs.value);
+
+const sameOrgSelected = computed(() => {
+    return !!(selectedSourceOrg.value && selectedTargetOrg.value && selectedSourceOrg.value.id === selectedTargetOrg.value.id);
+});
 
 const bothOrgsAnalyzed = computed(() => {
     return selectedSourceOrg.value
@@ -715,6 +776,7 @@ const sortedFieldMappings = computed(() => {
 });
 
 const canCreateMapping = computed(() => {
+    if (sameOrgSelected.value) return false;
     if (!selectedTargetField.value) return false;
 
     if (mappingType.value === 'expression') {
@@ -744,6 +806,8 @@ async function onSourceOrgChange() {
     selectedSourceField.value = null;
     sourceObjects.value = [];
     sourceFields.value = [];
+    filteredSourceObjects.value = [];
+    filteredSourceFields.value = [];
 
     if (selectedSourceOrg.value) {
         await loadSourceObjects();
@@ -758,6 +822,8 @@ async function onTargetOrgChange() {
     selectedTargetField.value = null;
     targetObjects.value = [];
     targetFields.value = [];
+    filteredTargetObjects.value = [];
+    filteredTargetFields.value = [];
 
     if (selectedTargetOrg.value) {
         await loadTargetObjects();
@@ -770,6 +836,7 @@ async function onTargetOrgChange() {
 async function onSourceObjectChange() {
     selectedSourceField.value = null;
     sourceFields.value = [];
+    filteredSourceFields.value = [];
 
     if (selectedSourceObject.value) {
         await loadSourceFields();
@@ -781,6 +848,7 @@ async function onSourceObjectChange() {
 async function onTargetObjectChange() {
     selectedTargetField.value = null;
     targetFields.value = [];
+    filteredTargetFields.value = [];
 
     if (selectedTargetObject.value) {
         await loadTargetFields();
@@ -792,6 +860,7 @@ async function onTargetObjectChange() {
 async function loadSourceObjects() {
     try {
         sourceObjects.value = await metadataStore.loadObjects(selectedSourceOrg.value.id);
+        filteredSourceObjects.value = sourceObjects.value;
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load source objects', life: 3000 });
     }
@@ -800,6 +869,7 @@ async function loadSourceObjects() {
 async function loadTargetObjects() {
     try {
         targetObjects.value = await metadataStore.loadObjects(selectedTargetOrg.value.id);
+        filteredTargetObjects.value = targetObjects.value;
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load target objects', life: 3000 });
     }
@@ -808,6 +878,7 @@ async function loadTargetObjects() {
 async function loadSourceFields() {
     try {
         sourceFields.value = await metadataStore.loadFields(selectedSourceObject.value.id);
+        filteredSourceFields.value = sourceFields.value;
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load source fields', life: 3000 });
     }
@@ -816,9 +887,80 @@ async function loadSourceFields() {
 async function loadTargetFields() {
     try {
         targetFields.value = await metadataStore.loadFields(selectedTargetObject.value.id);
+        filteredTargetFields.value = targetFields.value;
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to load target fields', life: 3000 });
     }
+}
+
+// AutoComplete search methods
+function searchSourceObjects(event) {
+    const query = event.query.toLowerCase();
+    if (!query) {
+        filteredSourceObjects.value = [...sourceObjects.value];
+    } else {
+        filteredSourceObjects.value = sourceObjects.value.filter(obj =>
+            obj.label.toLowerCase().includes(query) ||
+            obj.name.toLowerCase().includes(query)
+        );
+    }
+}
+
+function searchTargetObjects(event) {
+    const query = event.query.toLowerCase();
+    if (!query) {
+        filteredTargetObjects.value = [...targetObjects.value];
+    } else {
+        filteredTargetObjects.value = targetObjects.value.filter(obj =>
+            obj.label.toLowerCase().includes(query) ||
+            obj.name.toLowerCase().includes(query)
+        );
+    }
+}
+
+function searchSourceFields(event) {
+    const query = event.query.toLowerCase();
+    if (!query) {
+        filteredSourceFields.value = [...sourceFields.value];
+    } else {
+        filteredSourceFields.value = sourceFields.value.filter(field =>
+            field.label.toLowerCase().includes(query) ||
+            field.name.toLowerCase().includes(query) ||
+            field.type.toLowerCase().includes(query)
+        );
+    }
+}
+
+function searchTargetFields(event) {
+    const query = event.query.toLowerCase();
+    if (!query) {
+        filteredTargetFields.value = [...targetFields.value];
+    } else {
+        filteredTargetFields.value = targetFields.value.filter(field =>
+            field.label.toLowerCase().includes(query) ||
+            field.name.toLowerCase().includes(query) ||
+            field.type.toLowerCase().includes(query)
+        );
+    }
+}
+
+// Clear methods
+function clearSourceObject() {
+    selectedSourceObject.value = null;
+    onSourceObjectChange();
+}
+
+function clearTargetObject() {
+    selectedTargetObject.value = null;
+    onTargetObjectChange();
+}
+
+function clearSourceField() {
+    selectedSourceField.value = null;
+}
+
+function clearTargetField() {
+    selectedTargetField.value = null;
 }
 
 async function loadObjectMappingIfBothSelected() {
@@ -1235,6 +1377,10 @@ onMounted(async () => {
 }
 
 .details-button {
+    flex-shrink: 0;
+}
+
+.clear-button {
     flex-shrink: 0;
 }
 

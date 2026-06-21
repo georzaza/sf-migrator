@@ -95,8 +95,8 @@
     {
       "Name": "DailyApiRequests",
       "Max": 15000,
-      "Remaining": 13509,
-      "PercentUsed": 9.94
+      "Remaining": 12528,
+      "PercentUsed": 16.48
     },
     {
       "Name": "DailyAsyncApexExecutions",

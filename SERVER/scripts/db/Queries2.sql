@@ -1,8 +1,10 @@
-SELECT * FROM public."SfOrgs"
-ORDER BY id ASC;
+SELECT * FROM public."SfOrgs";
 
-SELECT *
-FROM public."SfObjectMetadata";
+SELECT * FROM public."SfObjectMetadata";
+
+SELECT * FROM public."SfFieldMetadata" where name = 'BillingStreet';
+
+SELECT * FROM public."stg1_00000000_0000_4000_8000_000000000100_Account";
 
 SELECT fields."id", fields."objectMetadataId", fields."name", fields."type", fields."idLookup", fields."relationshipName", fields."referenceTo"
 FROM public."SfFieldMetadata" fields

@@ -21,7 +21,7 @@ const FIELD_MAPPING_INCLUDES = [
     {
         model: SfFieldMetadata,
         as: 'sourceField',
-        attributes: ['id', 'name', 'label', 'type', 'objectMetadataId'],
+        attributes: ['id', 'name', 'label', 'type', 'objectMetadataId', 'referenceTo', 'relationshipName'],
         required: false,
     },
     {
@@ -60,7 +60,7 @@ async function findFieldMappingsBySourceOrg(sourceOrgId) {
             {
                 model: SfFieldMetadata,
                 as: 'sourceField',
-                attributes: ['id', 'name', 'label', 'type', 'objectMetadataId'],
+                attributes: ['id', 'name', 'label', 'type', 'objectMetadataId', 'referenceTo', 'relationshipName'],
                 required: false,
             },
             {
@@ -91,7 +91,7 @@ async function findFieldMappingsByOrgPair(sourceOrgId, targetOrgId) {
             {
                 model: SfFieldMetadata,
                 as: 'sourceField',
-                attributes: ['id', 'name', 'label', 'type', 'objectMetadataId'],
+                attributes: ['id', 'name', 'label', 'type', 'objectMetadataId', 'referenceTo', 'relationshipName'],
                 required: false,
             },
             {
@@ -121,7 +121,7 @@ async function findFieldMappingsByTargetOrg(targetOrgId) {
             {
                 model: SfFieldMetadata,
                 as: 'sourceField',
-                attributes: ['id', 'name', 'label', 'type', 'objectMetadataId'],
+                attributes: ['id', 'name', 'label', 'type', 'objectMetadataId', 'referenceTo', 'relationshipName'],
                 required: false,
             },
             {

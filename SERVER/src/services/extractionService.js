@@ -82,11 +82,7 @@ async function runExtraction({ sourceOrgId, targetOrgId = null }) {
         ? await mappingService.getObjectMappingsByOrgPair(sourceOrgId, targetOrgId)
         : await mappingService.getObjectMappingsBySourceOrg(sourceOrgId);
 
-    const fieldMappings = targetOrgId
-        ? await mappingService.getFieldMappingsByOrgPair(sourceOrgId, targetOrgId)
-        : await mappingService.getFieldMappingsBySourceOrg(sourceOrgId);
-
-    const sourceObjects = collectUniqueSourceObjects(objectMappings, fieldMappings);
+    const sourceObjects = await collectObjectsForExtraction(sourceOrgId, objectMappings);
     log.info('Source objects resolved for extraction', {
         runId,
         sourceOrgId,
@@ -134,13 +130,24 @@ async function runExtraction({ sourceOrgId, targetOrgId = null }) {
                 throw new Error(`No fields found in metadata for source object ${objectName}`);
             }
 
-            fields = dedupeFieldNames(objectFields.map(f => f.name));
+            // Identify compound parent fields (fields that are referenced by other fields' compoundFieldName)
+            const compoundParentNames = new Set(
+                objectFields
+                    .map(f => f.compoundFieldName)
+                    .filter(Boolean)
+            );
+
+            // Filter out compound parent fields (e.g., BillingAddress, MailingAddress)
+            // Keep component fields (e.g., BillingStreet, BillingCity which reference the parent)
+            const extractableFields = objectFields.filter(f => !compoundParentNames.has(f.name));
+            fields = dedupeFieldNames(extractableFields.map(f => f.name));
             if (!fields.includes('Id')) {
                 fields.unshift('Id');
             }
             log.info('Fields resolved for object', { objectName, fieldCount: fields.length });
 
             const soql = `SELECT ${fields.join(', ')} FROM ${objectName}`;
+            console.log('Generated SOQL:', soql);
             queryFilePath = path.join(soqlQueriesDir, `${safeObjectFileName}.query`);
             await fs.writeFile(queryFilePath, soql, 'utf8');
             log.info('SOQL query file written', { queryFilePath });
@@ -315,58 +322,158 @@ async function runExtractionForTargetOrg({ targetOrgId }) {
     };
 }
 
-function collectUniqueSourceObjects(objectMappings, fieldMappings = []) {
-    const map = new Map();
-    const targetObjectNameToSourceObjects = new Map();
+/**
+ * Collect all objects to extract following this logic:
+ * 1. Start with all source objects from mappings
+ * 2. For each object, get ALL its fields from the database
+ * 3. Filter out compound parent fields (e.g., BillingAddress)
+ * 4. Check each field - if it's a reference field, add referenced objects to extraction list
+ * 5. Repeat process for newly added objects (transitive references)
+ */
+async function collectObjectsForExtraction(sourceOrgId, objectMappings) {
+    log.info('Starting object collection for extraction', {
+        sourceOrgId,
+        objectMappingCount: objectMappings.length
+    });
 
+    const objectsToExtract = new Map(); // objectId -> {id, name, label}
+    const processedObjectIds = new Set(); // Track which objects we've already scanned
+    const objectsToProcess = []; // Queue of objects to scan for references
+
+    // Step 1: Add all explicitly mapped source objects
     for (const mapping of objectMappings) {
-        if (!mapping.sourceObjectId) continue;
+        if (!mapping.sourceObjectId || !mapping.sourceObject?.name) continue;
 
         const sourceObject = {
             id: mapping.sourceObjectId,
-            name: mapping.sourceObject?.name || null,
-            label: mapping.sourceObject?.label || null,
+            name: mapping.sourceObject.name,
+            label: mapping.sourceObject.label || null,
         };
 
-        if (!map.has(mapping.sourceObjectId)) {
-            map.set(mapping.sourceObjectId, sourceObject);
-        }
-
-        const targetObjectName = mapping.targetObject?.name;
-        if (targetObjectName) {
-            const existing = targetObjectNameToSourceObjects.get(targetObjectName) || [];
-            existing.push(sourceObject);
-            targetObjectNameToSourceObjects.set(targetObjectName, existing);
-        }
+        objectsToExtract.set(sourceObject.id, sourceObject);
+        objectsToProcess.push(sourceObject);
+        log.info('Added explicitly mapped object', {
+            objectName: sourceObject.name,
+            objectId: sourceObject.id
+        });
     }
 
-    for (const fieldMapping of fieldMappings) {
-        const targetField = fieldMapping.targetField;
-        if (!targetField) continue;
-        if (targetField.type !== 'reference') continue;
+    // Load ALL source org metadata once for lookups
+    log.info('Loading source org metadata for reference resolution', { sourceOrgId });
+    const allSourceOrgObjects = await metadataRepo.findObjectsByOrgId(sourceOrgId);
+    const sourceOrgObjectsByName = new Map(
+        allSourceOrgObjects.map(obj => [obj.name, {
+            id: obj.id,
+            name: obj.name,
+            label: obj.label,
+        }])
+    );
+    log.info('Source org metadata loaded', {
+        sourceOrgId,
+        totalObjectsInMetadata: allSourceOrgObjects.length
+    });
 
-        const firstReferenceTargetNames = extractTopReferenceTargetNames(targetField.referenceTo, 3);
-        if (firstReferenceTargetNames.length === 0) continue;
+    // Step 2-4: Process each object to find reference fields
+    let referencedObjectsAdded = 0;
 
-        log.info('Reference field expansion: adding implied source objects', { targetField: targetField.name, referencedTargetObjects: firstReferenceTargetNames });
+    while (objectsToProcess.length > 0) {
+        const currentObject = objectsToProcess.shift();
 
-        // TODO: Handle additional referenceTo targets after extraction by:
-        // 1) extracting data for this reference field,
-        // 2) computing distinct keyprefixes from the extracted reference values,
-        // 3) comparing that keyprefix set with SfObjectMetadata for the same org,
-        // 4) adding matching objects to the overall extraction object set.
-        for (const referenceTargetName of firstReferenceTargetNames) {
-            const referencedSourceObjects = targetObjectNameToSourceObjects.get(referenceTargetName) || [];
-            for (const sourceObject of referencedSourceObjects) {
-                if (!sourceObject?.id) continue;
-                if (!map.has(sourceObject.id)) {
-                    map.set(sourceObject.id, sourceObject);
+        if (processedObjectIds.has(currentObject.id)) {
+            continue; // Already processed this object
+        }
+        processedObjectIds.add(currentObject.id);
+
+        log.info('Scanning object for reference fields', {
+            objectName: currentObject.name,
+            objectId: currentObject.id
+        });
+
+        // Step 2: Get ALL fields for this object
+        const allFields = await metadataRepo.findFieldsByObjectId(currentObject.id);
+        if (!allFields || allFields.length === 0) {
+            log.warn('No fields found for object', { objectName: currentObject.name });
+            continue;
+        }
+
+        // Step 3: Filter out compound parent fields
+        const compoundParentNames = new Set(
+            allFields
+                .map(f => f.compoundFieldName)
+                .filter(Boolean)
+        );
+        const extractableFields = allFields.filter(f => !compoundParentNames.has(f.name));
+
+        log.info('Fields loaded for object', {
+            objectName: currentObject.name,
+            totalFields: allFields.length,
+            extractableFields: extractableFields.length,
+            compoundParentsFiltered: compoundParentNames.size
+        });
+
+        // Step 4: Check each field for references
+        for (const field of extractableFields) {
+            const isReferenceField = field.type === 'reference' ||
+                                   field.type === 'lookup' ||
+                                   field.type === 'masterdetail' ||
+                                   (field.referenceTo && Array.isArray(field.referenceTo) && field.referenceTo.length > 0);
+
+            if (!isReferenceField) continue;
+
+            // Extract referenced object names
+            const referencedObjectNames = extractTopReferenceTargetNames(field.referenceTo, 10);
+
+            if (referencedObjectNames.length === 0) continue;
+
+            log.info('Found reference field', {
+                objectName: currentObject.name,
+                fieldName: field.name,
+                fieldType: field.type,
+                referencedObjects: referencedObjectNames
+            });
+
+            // Add each referenced object to extraction list
+            for (const refObjectName of referencedObjectNames) {
+                const refObject = sourceOrgObjectsByName.get(refObjectName);
+
+                if (!refObject) {
+                    log.warn('Referenced object not found in source org metadata', {
+                        referencedObjectName: refObjectName,
+                        referencedBy: `${currentObject.name}.${field.name}`
+                    });
+                    continue;
                 }
+
+                if (objectsToExtract.has(refObject.id)) {
+                    // Already in extraction list
+                    continue;
+                }
+
+                // Add to extraction list and queue for processing
+                objectsToExtract.set(refObject.id, refObject);
+                objectsToProcess.push(refObject);
+                referencedObjectsAdded++;
+
+                log.info('✓ Added referenced object to extraction list', {
+                    referencedObjectName: refObjectName,
+                    objectId: refObject.id,
+                    referencedBy: `${currentObject.name}.${field.name}`
+                });
             }
         }
     }
 
-    return Array.from(map.values()).filter(x => !!x.name);
+    const finalObjects = Array.from(objectsToExtract.values()).filter(x => !!x.name);
+
+    log.info('Object collection complete', {
+        sourceOrgId,
+        totalObjectsToExtract: finalObjects.length,
+        explicitlyMapped: objectMappings.length,
+        addedViaReferences: referencedObjectsAdded,
+        allObjectsToExtract: finalObjects.map(o => o.name).sort()
+    });
+
+    return finalObjects;
 }
 
 function dedupeFieldNames(fieldNames) {
@@ -412,7 +519,6 @@ async function runBulk2Export({ conn, soql, outputCsvPath }) {
         recordStream.stream().pipe(writeStream);
         recordStream.on('error', reject);
     });
-    log.info('jsforce Bulk V2: query stream finished', { outputCsvPath });
 }
 
 async function parseCsvFile(csvPath) {
@@ -529,7 +635,6 @@ async function ensureDynamicTable(tableName, columns) {
     for (const col of columns) {
         await db.sequelize.query(`ALTER TABLE ${quotedTableName} ADD COLUMN IF NOT EXISTS ${quoteIdentifier(col)} TEXT;`);
     }
-    log.info('DB: staging table schema ensured', { tableName });
 }
 
 async function truncateTable(tableName) {
@@ -571,7 +676,6 @@ async function validateLoadedTable(tableName, expectedRows) {
         throw new Error(`Staging table row-count mismatch for ${tableName}: expected ${expectedRows}, got ${count}`);
     }
 
-    log.info('DB: staging table row count validated', { tableName, count });
     return count;
 }
 

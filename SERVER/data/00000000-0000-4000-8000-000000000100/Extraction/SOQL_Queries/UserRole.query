@@ -1,0 +1,1 @@
+SELECT CaseAccessForAccountOwner, ContactAccessForAccountOwner, DeveloperName, ForecastUserId, Id, LastModifiedById, LastModifiedDate, MayForecastManagerShare, Name, OpportunityAccessForAccountOwner, ParentRoleId, PortalAccountId, PortalAccountOwnerId, PortalType, RollupDescription, SystemModstamp FROM UserRole

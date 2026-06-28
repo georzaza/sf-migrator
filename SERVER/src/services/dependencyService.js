@@ -8,7 +8,6 @@
  */
 
 import mappingService from './mappingService.js';
-import metadataRepo from '../repositories/metadataRepository.js';
 import logger from '../lib/logger.js';
 
 const log = logger.create('dependencyService');
@@ -39,6 +38,12 @@ function isReferenceField(field) {
         (Array.isArray(field.referenceTo) && field.referenceTo.length > 0);
 }
 
+function isMappedReferenceField(mapping) {
+    return mapping.mappingType === 'as-is' &&
+        mapping.sourceField &&
+        isReferenceField(mapping.sourceField);
+}
+
 /**
  * Build the load plan for an org pair.
  * @returns {Promise<{loadOrder: Array, deferredFields: Array}>}
@@ -46,19 +51,19 @@ function isReferenceField(field) {
 async function getLoadPlan(sourceOrgId, targetOrgId) {
     log.info('Building load plan', { sourceOrgId, targetOrgId });
 
-    const pairs = await mappingService.getObjectMappingsByOrgPair(sourceOrgId, targetOrgId);
+    const fieldMappings = await mappingService.getFieldMappingsByOrgPair(sourceOrgId, targetOrgId);
 
     // Nodes = mapped source objects (deduped). nameToId maps source object API name -> id.
     const nodes = new Map();
     const nameToId = new Map();
-    for (const pair of pairs) {
-        if (!pair.sourceObjectId || !pair.sourceObject?.name) continue;
-        if (nodes.has(pair.sourceObjectId)) continue;
+    for (const mapping of fieldMappings) {
+        if (!mapping.sourceObjectId || !mapping.sourceObject?.name) continue;
+        if (nodes.has(mapping.sourceObjectId)) continue;
         const node = {
-            sourceObjectId: pair.sourceObjectId,
-            sourceObjectName: pair.sourceObject.name,
-            targetObjectId: pair.targetObjectId,
-            targetObjectName: pair.targetObject?.name || null,
+            sourceObjectId: mapping.sourceObjectId,
+            sourceObjectName: mapping.sourceObject.name,
+            targetObjectId: mapping.targetObjectId,
+            targetObjectName: mapping.targetObject?.name || null,
         };
         nodes.set(node.sourceObjectId, node);
         nameToId.set(node.sourceObjectName, node.sourceObjectId);
@@ -76,15 +81,13 @@ async function getLoadPlan(sourceOrgId, targetOrgId) {
     }
 
     for (const node of nodes.values()) {
-        const allFields = await metadataRepo.findFieldsByObjectId(node.sourceObjectId);
-        if (!allFields || allFields.length === 0) continue;
+        const mappedReferenceFields = fieldMappings.filter((mapping) =>
+            mapping.sourceObjectId === node.sourceObjectId &&
+            isMappedReferenceField(mapping)
+        );
 
-        // Filter out compound parent fields (e.g. BillingAddress) - they are not loadable references.
-        const compoundParentNames = new Set(allFields.map(f => f.compoundFieldName).filter(Boolean));
-        const fields = allFields.filter(f => !compoundParentNames.has(f.name));
-
-        for (const field of fields) {
-            if (!isReferenceField(field)) continue;
+        for (const mapping of mappedReferenceFields) {
+            const field = mapping.sourceField;
             const refNames = extractReferenceTargetNames(field.referenceTo);
             for (const refName of refNames) {
                 const parentId = nameToId.get(refName);

@@ -9,13 +9,14 @@
  *    self-referential lookups are cut ("deferredFields") and filled in a 2nd pass.
  *  - stg3 is built per target object from the LATEST stg2 run, success rows only.
  *    One stg2 row -> one stg3 row. Lookup columns are remapped from the SOURCE
- *    parent Id to the TARGET parent Id via RecordIdMap (parents already loaded).
+ *    parent Id to the TARGET parent Id by resolving the parent target record via
+ *    its selected External Id field (which stores the SOURCE record Id).
  *  - Correlation: the user-selected External Id field (per object pair) is written
  *    with the SOURCE record Id. Bulk echoes it back next to sf__Id / sf__Error, so
  *    each result row maps back to its source record (Bulk result order is not
- *    guaranteed). Captured target Ids are written to RecordIdMap.
- *  - Operation is insert-only with a skip-already-loaded guard (records already in
- *    RecordIdMap with a target Id are not re-loaded).
+ *    guaranteed). Captured target Ids are optionally cached in RecordIdMap.
+ *  - Operation is upsert by the selected External Id field, making load reruns
+ *    idempotent and allowing previously-created target records to be matched.
  *  - Cascade: if a parent record was not loaded, the child row is NOT loaded and the
  *    reason is recorded (stg3 __status/__error + an error CSV).
  *
@@ -108,7 +109,8 @@ async function runLoad({ sourceOrgId, targetOrgId }) {
         targetOrgId,
         conn,
         loadDir,
-        idMaps: new Map(), // objectName -> Map(sourceId -> targetId)
+        idMaps: new Map(), // source object name -> Map(sourceId -> targetId)
+        nodesBySourceObjectName: new Map(loadOrder.map((node) => [node.sourceObjectName, node])),
     };
 
     const results = [];
@@ -198,7 +200,8 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
 
             // as-is lookup mapping: source field references a parent object -> remap target column.
             if (m.mappingType === 'as-is' && Array.isArray(m.sourceField?.referenceTo) && m.sourceField.referenceTo.length > 0) {
-                lookupRemap.set(col, m.sourceField.referenceTo[0]);
+                const referencedObjectName = getFirstReferenceTargetName(m.sourceField.referenceTo);
+                if (referencedObjectName) lookupRemap.set(col, referencedObjectName);
             }
         }
         // Deferred (cut/self-ref) source fields -> their target columns are filled in pass 2.
@@ -229,12 +232,16 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
         }
         const stg2Rows = await readSuccessRows(stg2Table, runId);
         result.total = stg2Rows.length;
+        const ownSourceIds = stg2Rows.map((row) => row.__srcId).filter(Boolean);
+        const existingOwnMap = await getIdMap(ctx, sourceObjectName, ownSourceIds, true);
 
-        // Preload the id-maps for parent objects referenced by lookups (for remap) and
-        // this object's own map (for the skip-already-loaded guard).
-        const parentObjects = new Set([...lookupRemap.values()]);
-        for (const parent of parentObjects) await getIdMap(ctx, parent);
-        const ownMap = await getIdMap(ctx, sourceObjectName);
+        // Preload the target Ids for parent objects referenced by lookups. Parent
+        // records are resolved in the target org through their selected External Id
+        // field, whose value is the original source record Id.
+        const lookupSourceIdsByParent = collectLookupSourceIds(stg2Rows, targetColumns, lookupRemap);
+        for (const [parent, sourceIds] of lookupSourceIdsByParent) {
+            await getIdMap(ctx, parent, sourceIds);
+        }
 
         // stg3 columns = target field columns + the traceback External Id column.
         const stg3Columns = [...targetColumns];
@@ -246,14 +253,19 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
 
         const stg3Rows = [];   // every stg3 row (ready + skipped) for audit
         const readyRecords = []; // { srcId, values } sent to Bulk
-        const readyBySrcId = new Map();
-
         for (const row of stg2Rows) {
             const srcId = row.__srcId;
 
-            // Skip already-loaded source records (safe re-runs).
-            if (srcId && ownMap.has(String(srcId))) {
-                stg3Rows.push(makeStg3Row(srcId, sourceObjectName, 'skipped-already-loaded', 'Already loaded in a previous run', ownMap.get(String(srcId)), ctx.runId, {}));
+            if (srcId && existingOwnMap.has(String(srcId))) {
+                stg3Rows.push(makeStg3Row(
+                    srcId,
+                    sourceObjectName,
+                    'skipped-already-loaded',
+                    'Already exists in the target org by External Id',
+                    existingOwnMap.get(String(srcId)),
+                    ctx.runId,
+                    {},
+                ));
                 result.skipped += 1;
                 continue;
             }
@@ -261,12 +273,10 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
             const values = {};
             let rowError = null;
             for (const col of targetColumns) {
-                if (deferredColumns.has(col)) { values[col] = null; continue; }
-
                 const raw = row[col];
                 if (lookupRemap.has(col) && raw !== null && raw !== undefined && String(raw) !== '') {
                     const parentObj = lookupRemap.get(col);
-                    const parentMap = await getIdMap(ctx, parentObj);
+                    const parentMap = await getIdMap(ctx, parentObj, [raw]);
                     const targetParentId = parentMap.get(String(raw));
                     if (targetParentId) {
                         values[col] = targetParentId;
@@ -274,6 +284,8 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
                         rowError = `Lookup ${col}: parent ${parentObj} record ${raw} was not loaded`;
                         break;
                     }
+                } else if (deferredColumns.has(col)) {
+                    values[col] = null;
                 } else {
                     values[col] = raw ?? null;
                 }
@@ -287,17 +299,17 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
 
             values[extIdColumn] = srcId; // correlation token
             readyRecords.push({ srcId, values });
-            if (srcId) readyBySrcId.set(String(srcId), { srcId, values });
             result.ready += 1;
         }
 
-        // Bulk insert the ready records.
+        // Bulk upsert the ready records by the selected External Id field.
         let bulkResults = { successfulResults: [], failedResults: [], unprocessedRecords: [] };
         if (readyRecords.length > 0) {
             bulkResults = await bulkIngestService.ingestRecords({
                 conn: ctx.conn,
                 objectName: targetObjectName,
-                operation: 'insert',
+                operation: 'upsert',
+                externalIdFieldName: extIdColumn,
                 records: readyRecords.map((r) => r.values),
             });
         }
@@ -305,18 +317,29 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
         // Correlate results back to source records via the echoed External Id column.
         const idMapRows = [];
         const successById = new Map();
+        const successfulSourceIds = [];
         for (const s of bulkResults.successfulResults) {
             const srcId = s[extIdColumn];
             const targetId = s.sf__Id;
             if (srcId && targetId) {
                 successById.set(String(srcId), targetId);
+            }
+            if (srcId) successfulSourceIds.push(srcId);
+        }
+        if (successfulSourceIds.length > 0) {
+            const resolved = await getIdMap(ctx, sourceObjectName, successfulSourceIds, true);
+            for (const srcId of successfulSourceIds) {
+                const key = String(srcId);
+                const targetId = successById.get(key) || resolved.get(key);
+                if (!targetId) continue;
+                successById.set(key, targetId);
                 idMapRows.push({
                     sourceOrgId: ctx.sourceOrgId,
                     targetOrgId: ctx.targetOrgId,
                     objectName: sourceObjectName,
-                    sourceRecordId: String(srcId),
+                    sourceRecordId: key,
                     targetRecordId: targetId,
-                    migrationJobId: ctx.runId,
+                    migrationJobId: null,
                 });
             }
         }
@@ -351,8 +374,14 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
         await insertStg3Rows(stg3Table, stg3Columns, stg3Rows);
 
         if (idMapRows.length > 0) {
-            await recordIdMapRepository.setTargetIds(idMapRows);
-            invalidateIdMap(ctx, sourceObjectName);
+            try {
+                await recordIdMapRepository.setTargetIds(idMapRows);
+            } catch (cacheError) {
+                log.warn('RecordIdMap cache update failed; continuing because External Id is the load source of truth', cacheError, {
+                    targetObjectName,
+                    rowCount: idMapRows.length,
+                });
+            }
         }
 
         // Per-object success / error CSVs.
@@ -394,9 +423,13 @@ async function loadObjectPass2({ ctx, node, mappings, deferredForObject, result 
         if (!runId) return;
         const stg2Rows = await readSuccessRows(stg2Table, runId);
 
-        const ownMap = await getIdMap(ctx, sourceObjectName, true);
+        const ownSourceIds = stg2Rows.map((row) => row.__srcId).filter(Boolean);
+        const ownMap = await getIdMap(ctx, sourceObjectName, ownSourceIds, true);
         const parentObjects = new Set([...deferredColumns.values()]);
-        for (const parent of parentObjects) await getIdMap(ctx, parent, true);
+        const deferredSourceIdsByParent = collectLookupSourceIds(stg2Rows, [...deferredColumns.keys()], deferredColumns);
+        for (const parent of parentObjects) {
+            await getIdMap(ctx, parent, deferredSourceIdsByParent.get(parent) || [], true);
+        }
 
         const updateRecords = [];
         for (const row of stg2Rows) {
@@ -408,7 +441,7 @@ async function loadObjectPass2({ ctx, node, mappings, deferredForObject, result 
             for (const [col, parentObj] of deferredColumns) {
                 const sourceParentId = row[col];
                 if (sourceParentId === null || sourceParentId === undefined || String(sourceParentId) === '') continue;
-                const parentMap = await getIdMap(ctx, parentObj);
+                const parentMap = await getIdMap(ctx, parentObj, [sourceParentId]);
                 const resolved = parentMap.get(String(sourceParentId));
                 if (resolved) { update[col] = resolved; hasValue = true; }
             }
@@ -447,25 +480,146 @@ async function loadObjectPass2({ ctx, node, mappings, deferredForObject, result 
  * id-map context
  * ------------------------------------------------------------------ */
 
-async function getIdMap(ctx, objectName, refresh = false) {
-    if (refresh) ctx.idMaps.delete(objectName);
-    if (ctx.idMaps.has(objectName)) return ctx.idMaps.get(objectName);
-
-    const rows = await recordIdMapRepository.findByObject({
-        sourceOrgId: ctx.sourceOrgId,
-        targetOrgId: ctx.targetOrgId,
-        objectName,
-    });
-    const map = new Map();
-    for (const r of rows) {
-        if (r.targetRecordId) map.set(String(r.sourceRecordId), r.targetRecordId);
+function collectLookupSourceIds(rows, columns, lookupRemap) {
+    const byParent = new Map();
+    for (const row of rows) {
+        for (const col of columns) {
+            if (!lookupRemap.has(col)) continue;
+            const raw = row[col];
+            if (raw === null || raw === undefined || String(raw) === '') continue;
+            const parent = lookupRemap.get(col);
+            if (!byParent.has(parent)) byParent.set(parent, new Set());
+            byParent.get(parent).add(String(raw));
+        }
     }
-    ctx.idMaps.set(objectName, map);
+    return byParent;
+}
+
+function getFirstReferenceTargetName(referenceTo) {
+    if (!Array.isArray(referenceTo) || referenceTo.length === 0) return null;
+    const ref = referenceTo[0];
+    if (typeof ref === 'string') return ref;
+    if (ref && typeof ref === 'object') {
+        return ref.objectApiName || ref.name || ref.sobject || ref.targetObjectName || null;
+    }
+    return null;
+}
+
+async function getIdMap(ctx, sourceObjectName, sourceRecordIds = [], refresh = false) {
+    if (refresh) ctx.idMaps.delete(sourceObjectName);
+    if (!ctx.idMaps.has(sourceObjectName)) ctx.idMaps.set(sourceObjectName, new Map());
+
+    const map = ctx.idMaps.get(sourceObjectName);
+    const requestedIds = uniqueStrings(sourceRecordIds);
+    const missingIds = requestedIds.filter((id) => !map.has(id));
+    if (missingIds.length === 0) return map;
+
+    const node = ctx.nodesBySourceObjectName.get(sourceObjectName);
+    const targetObjectName = node?.targetObjectName || sourceObjectName;
+
+    if (node?.sourceObjectId && node?.targetObjectId) {
+        const externalIdField = await tracebackService.getSelectedExternalIdField(node.sourceObjectId, node.targetObjectId);
+        if (externalIdField?.name) {
+            const resolved = await queryTargetIdsByExternalId(ctx.conn, {
+                objectName: targetObjectName,
+                externalIdFieldName: externalIdField.name,
+                externalIdValues: missingIds,
+            });
+            mergeIntoMap(map, resolved);
+        } else {
+            log.warn('Cannot resolve lookup by External Id because no field is selected', {
+                sourceObjectName,
+                targetObjectName,
+            });
+        }
+    } else {
+        log.warn('Cannot resolve lookup by External Id because parent object is not in the load plan', {
+            sourceObjectName,
+            targetObjectName,
+        });
+    }
+
+    const unresolvedIds = missingIds.filter((id) => !map.has(id));
+    if (unresolvedIds.length > 0) {
+        const existingTargetIds = await queryExistingTargetIds(ctx.conn, {
+            objectName: targetObjectName,
+            ids: unresolvedIds,
+        });
+        mergeIntoMap(map, existingTargetIds);
+    }
+
     return map;
 }
 
-function invalidateIdMap(ctx, objectName) {
-    ctx.idMaps.delete(objectName);
+async function queryTargetIdsByExternalId(conn, { objectName, externalIdFieldName, externalIdValues }) {
+    const values = uniqueStrings(externalIdValues);
+    const resolved = new Map();
+    if (values.length === 0) return resolved;
+
+    const safeObjectName = assertSalesforceApiName(objectName, 'objectName');
+    const safeExternalIdFieldName = assertSalesforceApiName(externalIdFieldName, 'externalIdFieldName');
+
+    for (const chunk of chunkArray(values, 200)) {
+        const literals = chunk.map((value) => `'${escapeSoqlLiteral(value)}'`).join(', ');
+        const soql = `SELECT Id, ${safeExternalIdFieldName} FROM ${safeObjectName} WHERE ${safeExternalIdFieldName} IN (${literals})`;
+        const result = await conn.query(soql);
+        for (const record of result.records || []) {
+            const sourceId = record[safeExternalIdFieldName];
+            if (sourceId && record.Id) resolved.set(String(sourceId), record.Id);
+        }
+    }
+    return resolved;
+}
+
+async function queryExistingTargetIds(conn, { objectName, ids }) {
+    const values = uniqueStrings(ids);
+    const resolved = new Map();
+    if (values.length === 0) return resolved;
+
+    const safeObjectName = assertSalesforceApiName(objectName, 'objectName');
+    for (const chunk of chunkArray(values, 200)) {
+        const literals = chunk.map((value) => `'${escapeSoqlLiteral(value)}'`).join(', ');
+        const soql = `SELECT Id FROM ${safeObjectName} WHERE Id IN (${literals})`;
+        const result = await conn.query(soql);
+        for (const record of result.records || []) {
+            if (record.Id) resolved.set(String(record.Id), record.Id);
+        }
+    }
+    return resolved;
+}
+
+function uniqueStrings(values) {
+    const list = values === null || values === undefined
+        ? []
+        : (typeof values === 'string' || typeof values[Symbol.iterator] !== 'function')
+            ? [values]
+            : Array.from(values);
+
+    return [...new Set(list
+        .filter((value) => value !== null && value !== undefined && String(value) !== '')
+        .map((value) => String(value)))];
+}
+
+function mergeIntoMap(target, source) {
+    for (const [key, value] of source) target.set(key, value);
+}
+
+function chunkArray(values, size) {
+    const chunks = [];
+    for (let i = 0; i < values.length; i += size) chunks.push(values.slice(i, i + size));
+    return chunks;
+}
+
+function assertSalesforceApiName(name, label) {
+    const value = String(name || '');
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+        throw new Error(`Invalid Salesforce ${label}: ${value}`);
+    }
+    return value;
+}
+
+function escapeSoqlLiteral(value) {
+    return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 /* ------------------------------------------------------------------ *

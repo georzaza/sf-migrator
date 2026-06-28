@@ -16,9 +16,6 @@ const confirm = useConfirm();
 
 const {
     analyzingOrgId,
-    extractingOrgId,
-    extractionCurrentObject,
-    extractionObjectsRemaining,
     loggingInOrgId,
     showingOAuthOverlay,
     oauthOrgName,
@@ -27,9 +24,7 @@ const {
     checkOrgAnalysis,
     doAnalysis,
     beginOAuth,
-    doExtraction,
     stopPolling,
-    stopExtractionPolling,
     resetState,
 } = useOrgAnalysis();
 
@@ -44,9 +39,7 @@ const selectedOrg = computed({
 });
 
 const isAnalyzing = computed(() => analyzingOrgId.value === orgStore.selectedOrg?.id);
-const isExtracting = computed(() => extractingOrgId.value === orgStore.selectedOrg?.id);
 const isLoggingIn = computed(() => loggingInOrgId.value === orgStore.selectedOrg?.id);
-const hasAccessToken = computed(() => orgStore.selectedOrg?.hasAccessToken === true);
 
 const analyzedDate = computed(() => {
     const org = orgStore.selectedOrg;
@@ -204,23 +197,6 @@ function onLoginOrg() {
     if (!org) return;
     beginOAuth();
 }
-
-function onExtractOrg() {
-    const org = orgStore.selectedOrg;
-    if (!org) return;
-
-    confirm.require({
-        message: 'Start extraction for this org?',
-        header: 'Confirm Extraction',
-        icon: 'pi pi-exclamation-triangle',
-        acceptLabel: 'Start',
-        rejectLabel: 'Cancel',
-        acceptClass: 'p-button-primary',
-        accept: () => {
-            doExtraction();
-        },
-    });
-}
 </script>
 
 <template>
@@ -342,26 +318,6 @@ function onExtractOrg() {
                 style="min-width:68px"
             />
 
-            <span v-if="isExtracting" class="flex items-center gap-1.5 text-xs whitespace-nowrap">
-                <ProgressSpinner
-                    style="width:2rem;height:2rem"
-                    strokeWidth="6"
-                />
-                {{ extractionCurrentObject
-                    ? `Extracting ${extractionCurrentObject}… ${ extractionObjectsRemaining !== null ? extractionObjectsRemaining + ' objects remain.' : '' }`
-                    : 'Extracting…' }}
-            </span>
-
-            <Button v-else
-                label="Extract"
-                icon="pi pi-download"
-                size="small"
-                raised
-                v-tooltip.bottom="hasAccessToken ? 'Start extraction for this org' : 'Login required to extract'"
-                @click="onExtractOrg"
-                :disabled="!hasAccessToken"
-                style="min-width:68px"
-            />
             <span v-if="analyzedDate" class="flex items-center gap-1 text-xs whitespace-nowrap" style="color:var(--text-color-secondary)">
                 Last analyzed on {{ analyzedDate }}
             </span>

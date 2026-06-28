@@ -3,12 +3,6 @@
         <!-- Header -->
         <div class="pipeline-header">
             <div class="header-left">
-                <Button
-                    icon="pi pi-arrow-left"
-                    label="Workspace"
-                    text
-                    @click="goToWorkspace"
-                />
                 <div class="header-titles">
                     <h1>Migration Pipeline</h1>
                     <p class="subtitle">Extract, transform and load records from source to target</p>
@@ -289,16 +283,16 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import { useOrgStore } from '@/stores/orgStore';
 import { usePipelineStore } from '@/stores/pipelineStore';
 import { usePipeline } from '@/composables/usePipeline';
+import { findOrgById, loadMigrationSelection, saveMigrationSelection } from '@/utils/migrationSelection';
 import TracebackFieldSelect from '@/components/pipeline/TracebackFieldSelect.vue';
 import LoadErrorDialog from '@/components/pipeline/LoadErrorDialog.vue';
 
 const route = useRoute();
-const router = useRouter();
 const toast = useToast();
 const orgStore = useOrgStore();
 const pipeline = usePipelineStore();
@@ -388,6 +382,7 @@ async function onOrgsReady() {
 }
 
 function onOrgChange() {
+    saveMigrationSelection({ sourceOrgId: sourceOrgId.value, targetOrgId: targetOrgId.value });
     stopPolling();
     onOrgsReady();
 }
@@ -420,15 +415,13 @@ function viewErrors(objectName) {
     showErrorDialog.value = true;
 }
 
-function goToWorkspace() {
-    router.push('/migration-workspace');
-}
-
 onMounted(async () => {
     await orgStore.loadOrgs();
     const { source, target } = route.query;
-    if (source) selectedSourceOrg.value = orgs.value.find((o) => String(o.id) === String(source)) || null;
-    if (target) selectedTargetOrg.value = orgs.value.find((o) => String(o.id) === String(target)) || null;
+    const saved = loadMigrationSelection();
+    selectedSourceOrg.value = findOrgById(orgs.value, source || saved.sourceOrgId);
+    selectedTargetOrg.value = findOrgById(orgs.value, target || saved.targetOrgId);
+    saveMigrationSelection({ sourceOrgId: sourceOrgId.value, targetOrgId: targetOrgId.value });
     if (bothOrgsAnalyzed.value) await onOrgsReady();
 });
 

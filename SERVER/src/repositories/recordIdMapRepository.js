@@ -28,11 +28,11 @@ async function upsertSourceKeys(rows) {
 async function setTargetId({ sourceOrgId, targetOrgId, objectName, sourceRecordId, targetRecordId, migrationJobId = null }) {
     const [row, created] = await RecordIdMap.findOrCreate({
         where: { sourceOrgId, targetOrgId, objectName, sourceRecordId },
-        defaults: { sourceOrgId, targetOrgId, objectName, sourceRecordId, targetRecordId, migrationJobId },
+        defaults: { sourceOrgId, targetOrgId, objectName, sourceRecordId, targetRecordId, migrationJobId: null },
     });
 
     if (!created) {
-        await row.update({ targetRecordId, migrationJobId });
+        await row.update({ targetRecordId, migrationJobId: null });
     }
     return row;
 }
@@ -66,7 +66,8 @@ async function findByObject({ sourceOrgId, targetOrgId, objectName }) {
  */
 async function setTargetIds(rows) {
     if (!rows || rows.length === 0) return [];
-    const result = await RecordIdMap.bulkCreate(rows, {
+    const cacheRows = rows.map((row) => ({ ...row, migrationJobId: null }));
+    const result = await RecordIdMap.bulkCreate(cacheRows, {
         updateOnDuplicate: ['targetRecordId', 'migrationJobId'],
         conflictAttributes: ['sourceOrgId', 'targetOrgId', 'objectName', 'sourceRecordId'],
     });

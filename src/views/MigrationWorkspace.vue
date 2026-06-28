@@ -695,6 +695,7 @@ import { useMappingStore } from '@/stores/mappingStore';
 import { useMetadataStore } from '@/stores/metadataStore';
 import { useToast } from 'primevue/usetoast';
 import { FilterMatchMode } from '@primevue/core/api';
+import { findOrgById, loadMigrationSelection, saveMigrationSelection } from '@/utils/migrationSelection';
 import ObjectMigrationSettingsDialog from '@/components/mapping/ObjectMigrationSettingsDialog.vue';
 import ValidationMessages from '@/components/common/ValidationMessages.vue';
 
@@ -874,6 +875,7 @@ function goToPipeline() {
 }
 
 async function onSourceOrgChange() {
+    saveCurrentOrgSelection();
     selectedSourceObject.value = null;
     selectedSourceField.value = null;
     sourceObjects.value = [];
@@ -890,6 +892,7 @@ async function onSourceOrgChange() {
 }
 
 async function onTargetOrgChange() {
+    saveCurrentOrgSelection();
     selectedTargetObject.value = null;
     selectedTargetField.value = null;
     targetObjects.value = [];
@@ -903,6 +906,13 @@ async function onTargetOrgChange() {
 
     await loadObjectMappingIfBothSelected();
     await loadAllFieldMappings();
+}
+
+function saveCurrentOrgSelection() {
+    saveMigrationSelection({
+        sourceOrgId: selectedSourceOrg.value?.id ?? null,
+        targetOrgId: selectedTargetOrg.value?.id ?? null,
+    });
 }
 
 async function onSourceObjectChange() {
@@ -1384,6 +1394,19 @@ function formatJsonArray(value, prop = null) {
 onMounted(async () => {
     await orgStore.loadOrgs();
     mappingStore.clearMappings();
+
+    const saved = loadMigrationSelection();
+    selectedSourceOrg.value = findOrgById(orgs.value, saved.sourceOrgId);
+    selectedTargetOrg.value = findOrgById(orgs.value, saved.targetOrgId);
+
+    if (selectedSourceOrg.value) {
+        await loadSourceObjects();
+    }
+    if (selectedTargetOrg.value) {
+        await loadTargetObjects();
+    }
+    await loadObjectMappingIfBothSelected();
+    await loadAllFieldMappings();
 });
 </script>
 

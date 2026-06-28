@@ -16,6 +16,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const INSERT_BATCH_SIZE = 500;
 
+// Tracks the object currently being extracted per source org (in-memory, for live UI feedback)
+const extractionProgress = new Map(); // sourceOrgId -> currentObjectName | null
+
+function getProgress(sourceOrgId) {
+    const entry = extractionProgress.get(sourceOrgId);
+    return entry ?? null;
+}
+
 async function runExtraction({ sourceOrgId, targetOrgId = null }) {
     if (!sourceOrgId) {
         throw new Error('sourceOrgId is required');
@@ -107,11 +115,13 @@ async function runExtraction({ sourceOrgId, targetOrgId = null }) {
 
     const results = [];
 
-    for (const sourceObject of sourceObjects) {
+    for (let i = 0; i < sourceObjects.length; i++) {
+        const sourceObject = sourceObjects[i];
         const startedAt = new Date();
         const objectName = sourceObject.name;
         const sourceObjectId = sourceObject.id;
         const safeObjectFileName = sanitizeForFileName(objectName);
+        extractionProgress.set(sourceOrgId, { objectName, remaining: sourceObjects.length - i - 1 });
 
         log.info('Starting object extraction', { runId, sourceOrgId, objectName, sourceObjectId });
 
@@ -216,6 +226,7 @@ async function runExtraction({ sourceOrgId, targetOrgId = null }) {
     const successCount = results.filter(x => x.status === 'success').length;
     const failedCount = results.length - successCount;
 
+    extractionProgress.delete(sourceOrgId);
     log.info('Extraction completed', { runId, sourceOrgId, targetOrgId, totalObjects: results.length, successCount, failedCount });
 
     return {
@@ -768,4 +779,6 @@ function quoteIdentifier(identifier) {
 export default {
     runExtraction,
     runExtractionForTargetOrg,
+    getStageTableName,
+    getProgress,
 };

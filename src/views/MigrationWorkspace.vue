@@ -1,8 +1,17 @@
 <template>
     <div class="migration-workspace">
         <div class="workspace-header">
-            <h1>Migration Workspace</h1>
-            <p class="subtitle">Map objects and fields between Salesforce orgs</p>
+            <div class="workspace-header-text">
+                <h1>Migration Workspace</h1>
+                <p class="subtitle">Map objects and fields between Salesforce orgs</p>
+            </div>
+            <Button
+                label="Open Pipeline"
+                icon="pi pi-play"
+                iconPos="right"
+                :disabled="!bothOrgsAnalyzed"
+                @click="goToPipeline"
+            />
         </div>
 
         <!-- Org Selection -->
@@ -13,6 +22,7 @@
                     v-model="selectedSourceOrg"
                     :options="availableSourceOrgs"
                     optionLabel="name"
+                    :optionDisabled="isSourceOrgDisabled"
                     placeholder="Select Source Org"
                     @change="onSourceOrgChange"
                     :style="{ width: 'max-content' }"
@@ -35,6 +45,7 @@
                     v-model="selectedTargetOrg"
                     :options="availableTargetOrgs"
                     optionLabel="name"
+                    :optionDisabled="isTargetOrgDisabled"
                     placeholder="Select Target Org"
                     @change="onTargetOrgChange"
                     :style="{ width: 'max-content' }"
@@ -152,6 +163,17 @@
             <div class="mapper-panel center-panel">
                 <h2>Mapping Options</h2>
 
+                <div v-if="selectedSourceObject && selectedTargetObject" class="panel-group">
+                    <Button
+                        label="Migration Settings"
+                        icon="pi pi-cog"
+                        severity="secondary"
+                        outlined
+                        class="w-full"
+                        @click="openSettingsDialog"
+                    />
+                </div>
+
                 <div class="panel-group">
                     <label>Mapping Type</label>
                     <Dropdown
@@ -212,6 +234,17 @@
                 <Message v-if="!sameOrgSelected && existingTargetFieldMapping" severity="warn" :closable="false" class="mt-2">
                     This target field is already mapped
                 </Message>
+
+                <!-- Read-only Target Field Warning -->
+                <Message v-if="targetFieldNotWritable" severity="error" :closable="false" class="mt-2">
+                    This target field is read-only and cannot be migrated.
+                </Message>
+
+                <!-- Field-level validation warnings from the last created mapping -->
+                <ValidationMessages :warnings="fieldWarnings" severity="warn" class="mt-2" />
+
+                <!-- Object-level advisory warnings (e.g. unmapped required fields) -->
+                <ValidationMessages :warnings="objectWarnings" severity="info" class="mt-2" />
             </div>
 
             <!-- RIGHT PANEL - Target -->
@@ -642,6 +675,15 @@
                 <Button label="Close" icon="pi pi-times" @click="showFieldDetailsDialog = false" />
             </template>
         </Dialog>
+
+        <!-- Migration Settings Dialog -->
+        <ObjectMigrationSettingsDialog
+            v-model:visible="showSettingsDialog"
+            :sourceObjectId="selectedSourceObject?.id"
+            :targetObjectId="selectedTargetObject?.id"
+            :sourceObjectLabel="selectedSourceObject?.label"
+            :targetObjectLabel="selectedTargetObject?.label"
+        />
     </div>
 </template>
 
@@ -653,6 +695,8 @@ import { useMappingStore } from '@/stores/mappingStore';
 import { useMetadataStore } from '@/stores/metadataStore';
 import { useToast } from 'primevue/usetoast';
 import { FilterMatchMode } from '@primevue/core/api';
+import ObjectMigrationSettingsDialog from '@/components/mapping/ObjectMigrationSettingsDialog.vue';
+import ValidationMessages from '@/components/common/ValidationMessages.vue';
 
 const router = useRouter();
 const orgStore = useOrgStore();
@@ -682,6 +726,11 @@ const showDeleteDialog = ref(false);
 const fieldMappingToDelete = ref(null);
 const currentObjectMapping = ref(null);
 const allFieldMappings = ref([]);
+
+// Migration settings dialog + validation warnings
+const showSettingsDialog = ref(false);
+const fieldWarnings = ref([]);
+const objectWarnings = ref([]);
 
 // Table filtering and pagination
 const filters = ref({
@@ -722,6 +771,21 @@ const availableTargetOrgs = computed(() => orgs.value);
 
 const sameOrgSelected = computed(() => {
     return !!(selectedSourceOrg.value && selectedTargetOrg.value && selectedSourceOrg.value.id === selectedTargetOrg.value.id);
+});
+
+// Disable the option already chosen in the opposite dropdown so the same org
+// cannot be selected as both source and target.
+function isSourceOrgDisabled(org) {
+    return !!(selectedTargetOrg.value && org.id === selectedTargetOrg.value.id);
+}
+
+function isTargetOrgDisabled(org) {
+    return !!(selectedSourceOrg.value && org.id === selectedSourceOrg.value.id);
+}
+
+// A target field that is not updateable is read-only and cannot be migrated.
+const targetFieldNotWritable = computed(() => {
+    return !!(selectedTargetField.value && selectedTargetField.value.updateable === false);
 });
 
 const bothOrgsAnalyzed = computed(() => {
@@ -778,6 +842,7 @@ const sortedFieldMappings = computed(() => {
 const canCreateMapping = computed(() => {
     if (sameOrgSelected.value) return false;
     if (!selectedTargetField.value) return false;
+    if (targetFieldNotWritable.value) return false;
 
     if (mappingType.value === 'expression') {
         return !!transformationRule.value;
@@ -801,6 +866,13 @@ const existingTargetFieldMapping = computed(() => {
 });
 
 // Methods
+function goToPipeline() {
+    const query = {};
+    if (selectedSourceOrg.value) query.source = selectedSourceOrg.value.id;
+    if (selectedTargetOrg.value) query.target = selectedTargetOrg.value.id;
+    router.push({ path: '/pipeline', query });
+}
+
 async function onSourceOrgChange() {
     selectedSourceObject.value = null;
     selectedSourceField.value = null;
@@ -966,6 +1038,7 @@ function clearTargetField() {
 async function loadObjectMappingIfBothSelected() {
     if (!selectedSourceObject.value || !selectedTargetObject.value) {
         currentObjectMapping.value = null;
+        objectWarnings.value = [];
         return;
     }
 
@@ -986,6 +1059,29 @@ async function loadObjectMappingIfBothSelected() {
     } catch (error) {
         console.error('Error loading object mapping:', error);
     }
+
+    await refreshObjectWarnings();
+}
+
+// Refresh the object-level advisory warnings (e.g. unmapped required fields).
+async function refreshObjectWarnings() {
+    if (!selectedSourceObject.value || !selectedTargetObject.value) {
+        objectWarnings.value = [];
+        return;
+    }
+    objectWarnings.value = await mappingStore.validateObjectMapping(
+        selectedSourceObject.value.id,
+        selectedTargetObject.value.id
+    );
+}
+
+// Open the per-pair migration settings dialog.
+function openSettingsDialog() {
+    if (!selectedSourceObject.value || !selectedTargetObject.value) {
+        toast.add({ severity: 'warn', summary: 'Warning', detail: 'Select source and target objects first', life: 3000 });
+        return;
+    }
+    showSettingsDialog.value = true;
 }
 
 async function loadAllFieldMappings() {
@@ -1104,12 +1200,27 @@ async function createFieldMapping() {
             data.constantValue = constantValue.value;
         }
 
-        await mappingStore.createFieldMapping(data);
+        const newMapping = await mappingStore.createFieldMapping(data);
+
+        // Surface any advisory validation warnings returned by the backend.
+        fieldWarnings.value = newMapping?.warnings || [];
 
         toast.add({ severity: 'success', summary: 'Success', detail: 'Field mapping created successfully', life: 3000 });
 
+        if (fieldWarnings.value.length > 0) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Mapping created with warnings',
+                detail: `${fieldWarnings.value.length} validation warning(s). See details below.`,
+                life: 4000,
+            });
+        }
+
         // Reload all field mappings to show the new one
         await loadAllFieldMappings();
+
+        // Refresh object-level required-field coverage warnings
+        await refreshObjectWarnings();
 
         // Reset field selections
         resetFieldSelection();
@@ -1141,6 +1252,9 @@ async function deleteFieldMapping() {
 
         // Reload all field mappings
         await loadAllFieldMappings();
+
+        // Refresh object-level required-field coverage warnings
+        await refreshObjectWarnings();
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Error', detail: error.message || 'Failed to delete field mapping', life: 3000 });
     }
@@ -1282,6 +1396,10 @@ onMounted(async () => {
 
 .workspace-header {
     margin-bottom: 2rem;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
 }
 
 .workspace-header h1 {

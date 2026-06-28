@@ -4,6 +4,7 @@
 
 import mappingRepo from '../repositories/mappingRepository.js';
 import metadataRepo from '../repositories/metadataRepository.js';
+import validationService from './validationService.js';
 import logger from '../lib/logger.js';
 import { parseTransformationRule } from '../utils/transformationRule.js';
 
@@ -142,6 +143,16 @@ async function createFieldMapping(data) {
         throw new Error('Constant value is required for constant mapping');
     }
 
+    // Run mapping validation (throws on blocking rules, returns advisory warnings)
+    const { warnings } = await validationService.validateFieldMapping({
+        sourceObjectId,
+        targetObjectId,
+        sourceFieldId,
+        targetFieldId,
+        mappingType,
+        transformationRule,
+    });
+
     // Create the field mapping
     const mapping = await mappingRepo.createFieldMapping({
         sourceObjectId,
@@ -155,7 +166,9 @@ async function createFieldMapping(data) {
 
     log.info('Field mapping created', { mappingId: mapping.id, sourceObjectId, targetObjectId });
 
-    return mapping;
+    const result = mapping.toJSON();
+    result.warnings = warnings;
+    return result;
 }
 
 /**
@@ -185,7 +198,22 @@ async function updateFieldMapping(mappingId, updates) {
         parseTransformationRule(filteredUpdates.transformationRule || existing.transformationRule);
     }
 
-    return await mappingRepo.updateFieldMapping(mappingId, filteredUpdates);
+    // Run mapping validation against the effective (post-update) values.
+    const effective = {
+        sourceObjectId: filteredUpdates.sourceObjectId ?? existing.sourceObjectId,
+        targetObjectId: filteredUpdates.targetObjectId ?? existing.targetObjectId,
+        sourceFieldId: filteredUpdates.sourceFieldId ?? existing.sourceFieldId,
+        targetFieldId: filteredUpdates.targetFieldId ?? existing.targetFieldId,
+        mappingType: filteredUpdates.mappingType ?? existing.mappingType,
+        transformationRule: filteredUpdates.transformationRule ?? existing.transformationRule,
+        excludeMappingId: mappingId,
+    };
+    const { warnings } = await validationService.validateFieldMapping(effective);
+
+    const mapping = await mappingRepo.updateFieldMapping(mappingId, filteredUpdates);
+    const result = mapping.toJSON();
+    result.warnings = warnings;
+    return result;
 }
 
 /**

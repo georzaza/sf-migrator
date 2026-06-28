@@ -63,7 +63,7 @@ async function beginOAuth(sfOrgId, returnTo) {
     const state = JSON.stringify({ sfOrgId, returnTo: returnTo || '' });
     return {
         loginURL: sfOrg.loginURL,
-        authorizationUrl: oauth2.getAuthorizationUrl({ scope: 'full', state }),
+        authorizationUrl: oauth2.getAuthorizationUrl({ scope: 'full refresh_token', state }),
     };
 }
 
@@ -81,12 +81,21 @@ async function completeOAuth(sfOrgId, code) {
         const userInfo = await conn.authorize(code);
         connectionPool.set(sfOrgId, conn);
         oauth2Map.delete(sfOrgId);
+
+        // Preserve an existing completed analysis across re-login. Only reset to
+        // 'idle' for orgs that have not been analyzed yet, so re-authenticating
+        // (e.g. to refresh tokens) does not force a full re-analysis.
+        const existingOrg = await orgRepo.findById(sfOrgId).catch(() => null);
+        const shouldResetAnalysisStatus = existingOrg?.analysisStatus !== 'complete';
+
         await orgRepo.update(sfOrgId, {
             accessToken: conn.accessToken,
             refreshToken: conn.refreshToken,
             instanceUrl: conn.instanceUrl
         }).catch(() => {});
-        await orgRepo.updateAnalysisStatus(sfOrgId, 'idle').catch(() => {});
+        if (shouldResetAnalysisStatus) {
+            await orgRepo.updateAnalysisStatus(sfOrgId, 'idle').catch(() => {});
+        }
         log.info('OAuth2 authorized', { sfOrgId, userId: userInfo.id, organizationId: userInfo.organizationId });
         return userInfo;
     } catch (err) {

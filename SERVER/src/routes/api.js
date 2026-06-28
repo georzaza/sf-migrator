@@ -16,6 +16,12 @@ import mdtService from '../services/metadataService.js';
 import sfService from '../services/salesforceService.js';
 import mappingService from '../services/mappingService.js';
 import extractionService from '../services/extractionService.js';
+import transformService from '../services/transformService.js';
+import dependencyService from '../services/dependencyService.js';
+import migrationSettingService from '../services/migrationSettingService.js';
+import tracebackService from '../services/tracebackService.js';
+import loadService from '../services/loadService.js';
+import validationService from '../services/validationService.js';
 import probeUrl from '../utils/probeUrl.js';
 import sendResponse from '../utils/sendResponse.js';
 import logger from '../lib/logger.js';
@@ -111,11 +117,43 @@ router.get('/', authMiddleware, async (req, res) => {
                 extractionStatus: sfOrg.extractionStatus || 'idle',
                 summary: sfOrg.extractionSummary || null,
                 error: sfOrg.extractionError || null,
+                currentObject: extractionService.getProgress(orgId)?.objectName ?? null,
+                objectsRemaining: extractionService.getProgress(orgId)?.remaining ?? null,
             };
             sendResponse(res, 200, true, 'Extraction status retrieved', data);
         } catch (error) {
             log.error('Failed to retrieve extraction status', error, { orgId });
             sendResponse(res, 500, false, 'Failed to retrieve extraction status');
+        }
+    }
+
+    else if (action === 'get-transform-status') {
+        const sourceOrgId = req.headers.sourceorgid;
+        const targetOrgId = req.headers.targetorgid;
+        if (!sourceOrgId || !targetOrgId) {
+            return sendResponse(res, 400, false, 'sourceOrgId and targetOrgId are required');
+        }
+        try {
+            const status = transformService.getTransformStatus(sourceOrgId, targetOrgId);
+            sendResponse(res, 200, true, 'Transform status retrieved', status);
+        } catch (error) {
+            log.error('Failed to retrieve transform status', error, { sourceOrgId, targetOrgId });
+            sendResponse(res, 500, false, 'Failed to retrieve transform status');
+        }
+    }
+
+    else if (action === 'get-load-status') {
+        const sourceOrgId = req.headers.sourceorgid;
+        const targetOrgId = req.headers.targetorgid;
+        if (!sourceOrgId || !targetOrgId) {
+            return sendResponse(res, 400, false, 'sourceOrgId and targetOrgId are required');
+        }
+        try {
+            const status = loadService.getLoadStatus(sourceOrgId, targetOrgId);
+            sendResponse(res, 200, true, 'Load status retrieved', status);
+        } catch (error) {
+            log.error('Failed to retrieve load status', error, { sourceOrgId, targetOrgId });
+            sendResponse(res, 500, false, 'Failed to retrieve load status');
         }
     }
 
@@ -168,6 +206,108 @@ router.get('/', authMiddleware, async (req, res) => {
         } catch (error) {
             log.error('Failed to retrieve field mappings', error, { mappingId });
             sendResponse(res, 500, false, 'Failed to retrieve field mappings');
+        }
+    }
+
+    else if (action === 'get-load-plan') {
+        const sourceOrgId = req.headers.sourceorgid;
+        const targetOrgId = req.headers.targetorgid;
+        if (!sourceOrgId || !targetOrgId) {
+            return sendResponse(res, 400, false, 'Source and target Org IDs are required');
+        }
+        try {
+            const loadPlan = await dependencyService.getLoadPlan(sourceOrgId, targetOrgId);
+            sendResponse(res, 200, true, 'Load plan retrieved successfully', loadPlan);
+        } catch (error) {
+            log.error('Failed to build load plan', error, { sourceOrgId, targetOrgId });
+            sendResponse(res, 500, false, 'Failed to build load plan');
+        }
+    }
+
+    else if (action === 'get-migration-setting') {
+        const sourceObjectId = req.headers.sourceobjectid;
+        const targetObjectId = req.headers.targetobjectid;
+        if (!sourceObjectId || !targetObjectId) {
+            return sendResponse(res, 400, false, 'Source and target object IDs are required');
+        }
+        try {
+            const setting = await migrationSettingService.getSetting(sourceObjectId, targetObjectId);
+            sendResponse(res, 200, true, 'Migration setting retrieved successfully', setting);
+        } catch (error) {
+            log.error('Failed to retrieve migration setting', error, { sourceObjectId, targetObjectId });
+            sendResponse(res, 500, false, 'Failed to retrieve migration setting');
+        }
+    }
+
+    else if (action === 'validate-object-mapping') {
+        const sourceObjectId = req.headers.sourceobjectid;
+        const targetObjectId = req.headers.targetobjectid;
+        if (!sourceObjectId || !targetObjectId) {
+            return sendResponse(res, 400, false, 'Source and target object IDs are required');
+        }
+        try {
+            const result = await validationService.validateObjectMapping(sourceObjectId, targetObjectId);
+            sendResponse(res, 200, true, 'Object mapping validated successfully', result);
+        } catch (error) {
+            log.error('Failed to validate object mapping', error, { sourceObjectId, targetObjectId });
+            sendResponse(res, 500, false, 'Failed to validate object mapping');
+        }
+    }
+
+    else if (action === 'get-traceback-candidates') {
+        const targetObjectId = req.headers.targetobjectid;
+        if (!targetObjectId) {
+            return sendResponse(res, 400, false, 'Target object ID is required');
+        }
+        try {
+            const candidates = await tracebackService.listExternalIdCandidates(targetObjectId);
+            sendResponse(res, 200, true, 'Traceback candidates retrieved successfully', candidates);
+        } catch (error) {
+            log.error('Failed to retrieve traceback candidates', error, { targetObjectId });
+            sendResponse(res, 500, false, error.message || 'Failed to retrieve traceback candidates');
+        }
+    }
+
+    else if (action === 'get-load-records') {
+        const targetOrgId = req.headers.targetorgid;
+        const targetObjectName = req.headers.targetobjectname;
+        const status = req.headers.status;
+        const limit = req.headers.limit;
+        if (!targetOrgId || !targetObjectName) {
+            return sendResponse(res, 400, false, 'targetOrgId and targetObjectName are required');
+        }
+        try {
+            const records = await loadService.getLoadRecords({
+                targetOrgId,
+                targetObjectName,
+                status: status || 'all',
+                limit: limit ? Number(limit) : 500,
+            });
+            sendResponse(res, 200, true, 'Load records retrieved successfully', records);
+        } catch (error) {
+            log.error('Failed to retrieve load records', error, { targetOrgId, targetObjectName });
+            sendResponse(res, 500, false, error.message || 'Failed to retrieve load records');
+        }
+    }
+
+    else if (action === 'download-load-csv') {
+        const targetOrgId = req.headers.targetorgid;
+        const runId = req.headers.runid;
+        const objectName = req.headers.objectname;
+        const type = req.headers.type === 'success' ? 'success' : 'error';
+        if (!targetOrgId || !runId || !objectName) {
+            return sendResponse(res, 400, false, 'targetOrgId, runId and objectName are required');
+        }
+        try {
+            const filePath = await loadService.resolveLoadCsvPath({ targetOrgId, runId, objectName, type });
+            if (!filePath) {
+                return sendResponse(res, 404, false, 'CSV file not found');
+            }
+            const downloadName = `${objectName}_${type === 'success' ? 'success' : 'errors'}.csv`;
+            res.download(filePath, downloadName);
+        } catch (error) {
+            log.error('Failed to download load CSV', error, { targetOrgId, runId, objectName });
+            sendResponse(res, 400, false, error.message || 'Failed to download load CSV');
         }
     }
 
@@ -344,6 +484,76 @@ router.post('/', authMiddleware, async (req, res) => {
         }
     }
 
+    else if (action === 'start-transform') {
+        const { sourceOrgId, targetOrgId } = req.body;
+        if (!sourceOrgId || !targetOrgId) {
+            return sendResponse(res, 400, false, 'sourceOrgId and targetOrgId are required');
+        }
+
+        log.info('Transform request received', { sourceOrgId, targetOrgId });
+
+        try {
+            transformService.setTransformStatus(sourceOrgId, targetOrgId, { status: 'running', summary: null, error: null });
+
+            // Return 202 immediately; run the transform in the background.
+            sendResponse(res, 202, true, 'Transform started', { transformStatus: 'running' });
+
+            transformService.runTransform({ sourceOrgId, targetOrgId })
+                .then((summary) => {
+                    log.info('Transform completed', {
+                        sourceOrgId,
+                        targetOrgId,
+                        targetObjectCount: summary.targetObjectCount,
+                        successCount: summary.successCount,
+                        failedCount: summary.failedCount,
+                    });
+                    transformService.setTransformStatus(sourceOrgId, targetOrgId, { status: 'complete', summary, error: null });
+                })
+                .catch((error) => {
+                    log.error('Transform failed', error, { sourceOrgId, targetOrgId });
+                    transformService.setTransformStatus(sourceOrgId, targetOrgId, { status: 'failed', summary: null, error: error.message || 'Transform failed' });
+                });
+        } catch (error) {
+            log.error('Failed to start transform', error, { sourceOrgId, targetOrgId });
+            transformService.setTransformStatus(sourceOrgId, targetOrgId, { status: 'failed', summary: null, error: error.message || 'Failed to start transform' });
+            sendResponse(res, 500, false, error.message || 'Failed to start transform');
+        }
+    }
+
+    else if (action === 'start-load') {
+        const { sourceOrgId, targetOrgId } = req.body;
+        if (!sourceOrgId || !targetOrgId) {
+            return sendResponse(res, 400, false, 'sourceOrgId and targetOrgId are required');
+        }
+
+        log.info('Load request received', { sourceOrgId, targetOrgId });
+
+        try {
+            loadService.setLoadStatus(sourceOrgId, targetOrgId, { status: 'running', summary: null, error: null });
+
+            // Return 202 immediately; run the load in the background.
+            sendResponse(res, 202, true, 'Load started', { loadStatus: 'running' });
+
+            loadService.runLoad({ sourceOrgId, targetOrgId })
+                .then((summary) => {
+                    log.info('Load completed', {
+                        sourceOrgId,
+                        targetOrgId,
+                        objectCount: summary.objectCount,
+                    });
+                    loadService.setLoadStatus(sourceOrgId, targetOrgId, { status: 'complete', summary, error: null });
+                })
+                .catch((error) => {
+                    log.error('Load failed', error, { sourceOrgId, targetOrgId });
+                    loadService.setLoadStatus(sourceOrgId, targetOrgId, { status: 'failed', summary: null, error: error.message || 'Load failed' });
+                });
+        } catch (error) {
+            log.error('Failed to start load', error, { sourceOrgId, targetOrgId });
+            loadService.setLoadStatus(sourceOrgId, targetOrgId, { status: 'failed', summary: null, error: error.message || 'Failed to start load' });
+            sendResponse(res, 500, false, error.message || 'Failed to start load');
+        }
+    }
+
     else {
         sendResponse(res, 400, false, 'Unknown POST action');
     }
@@ -426,6 +636,34 @@ router.put('/', authMiddleware, async (req, res) => {
         } catch (error) {
             log.error('Failed to update field mapping', error, { mappingId });
             sendResponse(res, 500, false, error.message || 'Failed to update field mapping');
+        }
+    }
+
+    else if (action === 'upsert-migration-setting') {
+        const { sourceObjectId, targetObjectId, ...updates } = req.body;
+        if (!sourceObjectId || !targetObjectId) {
+            return sendResponse(res, 400, false, 'Source and target object IDs are required');
+        }
+        try {
+            const setting = await migrationSettingService.upsertSetting(sourceObjectId, targetObjectId, updates);
+            sendResponse(res, 200, true, 'Migration setting saved successfully', setting);
+        } catch (error) {
+            log.error('Failed to save migration setting', error, { sourceObjectId, targetObjectId });
+            sendResponse(res, 500, false, error.message || 'Failed to save migration setting');
+        }
+    }
+
+    else if (action === 'set-traceback-field') {
+        const { sourceObjectId, targetObjectId, fieldId } = req.body;
+        if (!sourceObjectId || !targetObjectId) {
+            return sendResponse(res, 400, false, 'Source and target object IDs are required');
+        }
+        try {
+            const selection = await tracebackService.setExternalIdField(sourceObjectId, targetObjectId, fieldId || null);
+            sendResponse(res, 200, true, 'Traceback External Id field saved successfully', selection);
+        } catch (error) {
+            log.error('Failed to save traceback External Id field', error, { sourceObjectId, targetObjectId });
+            sendResponse(res, 500, false, error.message || 'Failed to save traceback External Id field');
         }
     }
 

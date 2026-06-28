@@ -14,6 +14,8 @@ export function useOrgAnalysis() {
     // ─── State ──────────────────────────────────────────
     const analyzingOrgId = ref(null);
     const extractingOrgId = ref(null);
+    const extractionCurrentObject = ref(null);
+    const extractionObjectsRemaining = ref(null);
     const loggingInOrgId = ref(null);
     const objects = ref([]);
     const selectedObject = ref(null);
@@ -390,19 +392,31 @@ export function useOrgAnalysis() {
                 });
                 const status = response.data.data?.extractionStatus;
                 const summary = response.data.data?.summary;
+                extractionCurrentObject.value = response.data.data?.currentObject ?? null;
+                extractionObjectsRemaining.value = response.data.data?.objectsRemaining ?? null;
 
                 if (status === 'complete') {
                     stopExtractionPolling(orgId);
                     extractingOrgId.value = null;
+                    extractionCurrentObject.value = null;
+                    extractionObjectsRemaining.value = null;
+                    const failedCount = summary?.failedCount ?? 0;
+                    const firstError = summary?.results?.find(r => r.status === 'failed')?.errorMessage;
+                    let detail = `Objects: ${summary?.totalObjects ?? 0}, Success: ${summary?.successCount ?? 0}, Failed: ${failedCount}`;
+                    if (firstError) {
+                        detail += `\nFirst error: ${firstError}`;
+                    }
                     toast.add({
-                        severity: 'success',
-                        summary: 'Extraction Completed',
-                        detail: `Objects: ${summary?.totalObjects ?? 0}, Success: ${summary?.successCount ?? 0}, Failed: ${summary?.failedCount ?? 0}`,
+                        severity: failedCount > 0 ? 'warn' : 'success',
+                        summary: failedCount > 0 ? 'Extraction Completed with Errors' : 'Extraction Completed',
+                        detail,
                         sticky: true
                     });
                 } else if (status === 'failed' || status === 'auth_failed') {
                     stopExtractionPolling(orgId);
                     extractingOrgId.value = null;
+                    extractionCurrentObject.value = null;
+                    extractionObjectsRemaining.value = null;
 
                     if (status === 'auth_failed') {
                         // Update org to mark it as requiring auth
@@ -448,6 +462,8 @@ export function useOrgAnalysis() {
         // State (all refs)
         analyzingOrgId,
         extractingOrgId,
+        extractionCurrentObject,
+        extractionObjectsRemaining,
         loggingInOrgId,
         showingOAuthOverlay,
         oauthOrgName,

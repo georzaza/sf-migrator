@@ -2,7 +2,9 @@
  * Transformation rule parser/evaluator for field mapping expressions.
  * Supported syntax:
  *   {Object.Field}
+ *   {Object.Relationship.Field}            (relationship traversal)
  *   {Object.Field1 || Object.Field2}
+ *   {'PREFIX-' || Object.Field || '-SUFFIX'} (string literals)
  *   {SUBSTR(Object.Field, 2, 5)}
  *   nested combinations of the above.
  */
@@ -31,6 +33,17 @@ function tokenize(input) {
             continue;
         }
 
+        // String literal: single- or double-quoted, no escape sequences.
+        if (ch === "'" || ch === '"') {
+            const stringMatch = input.slice(i).match(ch === "'" ? /^'([^']*)'/ : /^"([^"]*)"/);
+            if (!stringMatch) {
+                throw new Error(`Unterminated string literal near: ${input.slice(i, i + 20)}`);
+            }
+            tokens.push({ type: 'STRING', value: stringMatch[1] });
+            i += stringMatch[0].length;
+            continue;
+        }
+
         const substrMatch = input.slice(i).match(/^SUBSTR\b/i);
         if (substrMatch) {
             tokens.push({ type: 'SUBSTR' });
@@ -45,7 +58,8 @@ function tokenize(input) {
             continue;
         }
 
-        const fieldRefMatch = input.slice(i).match(/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*/);
+        // Field reference: Object.Field or Object.Relationship.Field (one or more dotted segments).
+        const fieldRefMatch = input.slice(i).match(/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+/);
         if (fieldRefMatch) {
             tokens.push({ type: 'FIELD_REF', value: fieldRefMatch[0] });
             i += fieldRefMatch[0].length;
@@ -82,6 +96,11 @@ function parsePrimary(tokens, state) {
     if (token.type === 'FIELD_REF') {
         state.index += 1;
         return { type: 'fieldRef', value: token.value };
+    }
+
+    if (token.type === 'STRING') {
+        state.index += 1;
+        return { type: 'literal', value: token.value };
     }
 
     if (token.type === 'SUBSTR') {
@@ -157,14 +176,35 @@ export function extractReferencedFields(ast, fields = new Set()) {
 }
 
 function getFieldValue(sourceRecord, ref) {
-    const [, fieldName] = ref.split('.');
-    const value = sourceRecord?.[fieldName];
-    return value === null || value === undefined ? '' : String(value);
+    // First segment is the object/relationship root; the remainder is the path
+    // into the (possibly nested) source record.
+    const segments = ref.split('.');
+    const path = segments.slice(1);
+
+    let current = sourceRecord;
+    for (const seg of path) {
+        if (current === null || current === undefined) break;
+        current = current[seg];
+    }
+
+    // Fallback for flattened records: try the dotted remainder or the leaf name
+    // as a flat column key (e.g. "Owner.Name" or "Name").
+    if (current === null || current === undefined) {
+        const flatKey = path.join('.');
+        const leafKey = path[path.length - 1];
+        current = sourceRecord?.[flatKey] ?? sourceRecord?.[leafKey];
+    }
+
+    return current === null || current === undefined ? '' : String(current);
 }
 
 function evaluateAst(ast, sourceRecord) {
     if (ast.type === 'fieldRef') {
         return getFieldValue(sourceRecord, ast.value);
+    }
+
+    if (ast.type === 'literal') {
+        return ast.value;
     }
 
     if (ast.type === 'concat') {

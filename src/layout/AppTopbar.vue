@@ -76,6 +76,17 @@ const logout = async () => {
             </router-link>
         </div>
 
+        <nav class="layout-topbar-nav">
+            <router-link to="/migration-workspace" class="layout-topbar-nav-link">
+                <i class="pi pi-sitemap"></i>
+                <span>Workspace</span>
+            </router-link>
+            <router-link to="/pipeline" class="layout-topbar-nav-link">
+                <i class="pi pi-play"></i>
+                <span>Pipeline</span>
+            </router-link>
+        </nav>
+
         <div class="layout-topbar-actions">
             <div class="layout-config-menu">
                 <button type="button" class="layout-topbar-action" @click="toggleDarkMode">
@@ -105,5 +116,46 @@ const logout = async () => {
         </div>
     </div>
 </template>
+
+<style scoped>
+.layout-topbar-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: 2rem;
+}
+
+.layout-topbar-nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.9rem;
+    border-radius: 8px;
+    color: var(--text-color-secondary);
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.layout-topbar-nav-link:hover {
+    background: var(--surface-hover);
+    color: var(--text-color);
+}
+
+.layout-topbar-nav-link.router-link-active {
+    background: var(--highlight-bg, var(--surface-hover));
+    color: var(--primary-color);
+}
+
+@media (max-width: 768px) {
+    .layout-topbar-nav span {
+        display: none;
+    }
+    .layout-topbar-nav {
+        margin-left: 0.75rem;
+    }
+}
+</style>
+
 
 

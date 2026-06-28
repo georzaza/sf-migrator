@@ -3,7 +3,7 @@ SELECT * FROM public."SfOrgs";
 SELECT * FROM public."SfObjectMetadata";
 SELECT * FROM public."SfFieldMetadata"  where name = 'ContactId';
 
-SELECT objects.sfOrgId, extractionstats.id, runid, objectname, status, recordsexported, errormessage, startedat, stg1tablename, sourceobjectid, queryfilepath, csvfilepath, fieldsexported
+SELECT orgs.name org, extractionstats.id, runid, objectname object, status, recordsexported, errormessage, startedat, stg1tablename, sourceobjectid objId, queryfilepath queryFile, csvfilepath csvFile, fieldsexported
 FROM public.ext_00000000_0000_4000_8000_000000000100_extraction_stats extractionstats
 JOIN public."SfObjectMetadata" objects
   ON (extractionstats.sourceobjectid = objects.id)

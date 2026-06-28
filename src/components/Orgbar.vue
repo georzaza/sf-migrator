@@ -17,6 +17,8 @@ const confirm = useConfirm();
 const {
     analyzingOrgId,
     extractingOrgId,
+    extractionCurrentObject,
+    extractionObjectsRemaining,
     loggingInOrgId,
     showingOAuthOverlay,
     oauthOrgName,
@@ -345,7 +347,9 @@ function onExtractOrg() {
                     style="width:2rem;height:2rem"
                     strokeWidth="6"
                 />
-                Extracting…
+                {{ extractionCurrentObject
+                    ? `Extracting ${extractionCurrentObject}… ${ extractionObjectsRemaining !== null ? extractionObjectsRemaining + ' objects remain.' : '' }`
+                    : 'Extracting…' }}
             </span>
 
             <Button v-else

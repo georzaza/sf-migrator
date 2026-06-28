@@ -33,6 +33,11 @@ const router = createRouter({
                     component: () => import('@/views/MigrationWorkspace.vue')
                 },
                 {
+                    path: '/pipeline',
+                    name: 'pipeline',
+                    component: () => import('@/views/PipelineView.vue')
+                },
+                {
                     path: '/field-mapping/:mappingId',
                     name: 'field-mapping',
                     component: () => import('@/views/FieldMapping.vue')

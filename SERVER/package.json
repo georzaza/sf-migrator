@@ -1,4 +1,5 @@
 {
+
     "name": "sf-migrator-server",
     "scripts": {
         "start:dev": "cross-env NODE_ENV=development nodemon --watch src --exec \"node src/server.js\"",

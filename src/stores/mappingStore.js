@@ -251,6 +251,26 @@ export const useMappingStore = defineStore('mapping', () => {
     }
 
     /**
+     * Validate an object pair and return advisory warnings (e.g. required
+     * target fields that are not yet mapped). Returns [] on failure.
+     */
+    async function validateObjectMapping(sourceObjectId, targetObjectId) {
+        try {
+            const response = await axiosInstance.get('/api', {
+                headers: {
+                    action: 'validate-object-mapping',
+                    sourceObjectId,
+                    targetObjectId,
+                },
+            });
+            return response.data.data?.warnings || [];
+        } catch (err) {
+            console.error('Error validating object mapping:', err);
+            return [];
+        }
+    }
+
+    /**
      * Clear all state
      */
     function clearMappings() {
@@ -282,6 +302,7 @@ export const useMappingStore = defineStore('mapping', () => {
         deleteMapping,
         deleteFieldMapping,
         setCurrentMapping,
+        validateObjectMapping,
         clearMappings,
     };
 });

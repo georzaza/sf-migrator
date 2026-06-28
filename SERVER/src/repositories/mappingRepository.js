@@ -141,6 +141,18 @@ async function findFieldMappingByFields(sourceObjectId, targetObjectId, sourceFi
     });
 }
 
+/**
+ * Find all field mappings that target a specific field on a target object,
+ * regardless of the source object they originate from.
+ */
+async function findFieldMappingsByTargetField(targetObjectId, targetFieldId) {
+    return FieldMapping.findAll({
+        where: { targetObjectId, targetFieldId },
+        include: FIELD_MAPPING_INCLUDES,
+        order: [['createdAt', 'ASC']],
+    });
+}
+
 async function createFieldMapping(data) {
     const mapping = await FieldMapping.create(data);
     log.info('Field mapping created', { mappingId: mapping.id });
@@ -175,6 +187,7 @@ export default {
     findFieldMappingById,
     findFieldMappingsByObjectPair,
     findFieldMappingByFields,
+    findFieldMappingsByTargetField,
     createFieldMapping,
     updateFieldMapping,
     deleteFieldMapping,

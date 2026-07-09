@@ -20,6 +20,7 @@ import transformService from '../services/transformService.js';
 import dependencyService from '../services/dependencyService.js';
 import migrationSettingService from '../services/migrationSettingService.js';
 import tracebackService from '../services/tracebackService.js';
+import sourceObjectFilterService from '../services/sourceObjectFilterService.js';
 import loadService from '../services/loadService.js';
 import validationService from '../services/validationService.js';
 import probeUrl from '../utils/probeUrl.js';
@@ -239,6 +240,35 @@ router.get('/', authMiddleware, async (req, res) => {
         }
     }
 
+    else if (action === 'get-extraction-preview') {
+        const sourceOrgId = req.headers.sourceorgid;
+        const targetOrgId = req.headers.targetorgid || null;
+        if (!sourceOrgId) {
+            return sendResponse(res, 400, false, 'sourceOrgId is required');
+        }
+        try {
+            const preview = await extractionService.getExtractionPreview({ sourceOrgId, targetOrgId });
+            sendResponse(res, 200, true, 'Extraction preview retrieved successfully', preview);
+        } catch (error) {
+            log.error('Failed to retrieve extraction preview', error, { sourceOrgId, targetOrgId });
+            sendResponse(res, 500, false, error.message || 'Failed to retrieve extraction preview');
+        }
+    }
+
+    else if (action === 'get-source-extract-filter') {
+        const sourceObjectId = req.headers.sourceobjectid;
+        if (!sourceObjectId) {
+            return sendResponse(res, 400, false, 'sourceObjectId is required');
+        }
+        try {
+            const filter = await sourceObjectFilterService.getExtractFilter(sourceObjectId);
+            sendResponse(res, 200, true, 'Extract filter retrieved', { sourceObjectId, extractFilter: filter });
+        } catch (error) {
+            log.error('Failed to retrieve source extract filter', error, { sourceObjectId });
+            sendResponse(res, 500, false, error.message || 'Failed to retrieve extract filter');
+        }
+    }
+
     else if (action === 'validate-object-mapping') {
         const sourceObjectId = req.headers.sourceobjectid;
         const targetObjectId = req.headers.targetobjectid;
@@ -256,12 +286,23 @@ router.get('/', authMiddleware, async (req, res) => {
 
     else if (action === 'get-traceback-candidates') {
         const targetObjectId = req.headers.targetobjectid;
+        const sourceObjectId = req.headers.sourceobjectid;
         if (!targetObjectId) {
             return sendResponse(res, 400, false, 'Target object ID is required');
         }
         try {
-            const candidates = await tracebackService.listExternalIdCandidates(targetObjectId);
-            sendResponse(res, 200, true, 'Traceback candidates retrieved successfully', candidates);
+            const candidates = await tracebackService.listTracebackCandidates(targetObjectId);
+            // Include the names of fields already user-mapped so the UI can warn
+            // when a tier-1/2/3 selection would override a mapping.
+            let mappedTargetFieldNames = [];
+            if (sourceObjectId) {
+                const names = await tracebackService.getMappedTargetFieldNames(sourceObjectId, targetObjectId);
+                mappedTargetFieldNames = Array.from(names);
+            }
+            sendResponse(res, 200, true, 'Traceback candidates retrieved successfully', {
+                ...candidates,
+                mappedTargetFieldNames,
+            });
         } catch (error) {
             log.error('Failed to retrieve traceback candidates', error, { targetObjectId });
             sendResponse(res, 500, false, error.message || 'Failed to retrieve traceback candidates');
@@ -418,13 +459,14 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     else if (action === 'start-extraction') {
-        const { sourceOrgId, targetOrgId } = req.body;
+        const { sourceOrgId, targetOrgId, sourceObjectIds } = req.body;
         if (!sourceOrgId && !targetOrgId) {
             return sendResponse(res, 400, false, 'sourceOrgId or targetOrgId is required');
         }
 
         const extractionMode = sourceOrgId ? 'source-org' : 'target-org';
-        log.info('Extraction request received', { extractionMode, sourceOrgId, targetOrgId });
+        const isSubset = Array.isArray(sourceObjectIds) && sourceObjectIds.length > 0;
+        log.info('Extraction request received', { extractionMode, sourceOrgId, targetOrgId, subsetSize: isSubset ? sourceObjectIds.length : null });
 
         try {
             // Set extraction status to running
@@ -440,7 +482,11 @@ router.post('/', authMiddleware, async (req, res) => {
 
             // Run extraction in background
             const extractionPromise = sourceOrgId
-                ? extractionService.runExtraction({ sourceOrgId, targetOrgId: targetOrgId || null })
+                ? extractionService.runExtraction({
+                    sourceOrgId,
+                    targetOrgId: targetOrgId || null,
+                    sourceObjectIds: isSubset ? sourceObjectIds : null,
+                })
                 : extractionService.runExtractionForTargetOrg({ targetOrgId });
 
             extractionPromise
@@ -653,17 +699,32 @@ router.put('/', authMiddleware, async (req, res) => {
         }
     }
 
-    else if (action === 'set-traceback-field') {
-        const { sourceObjectId, targetObjectId, fieldId } = req.body;
+    else if (action === 'set-source-extract-filter') {
+        const { sourceObjectId, extractFilter } = req.body;
+        if (!sourceObjectId) {
+            return sendResponse(res, 400, false, 'sourceObjectId is required');
+        }
+        try {
+            const saved = await sourceObjectFilterService.setExtractFilter(sourceObjectId, extractFilter);
+            sendResponse(res, 200, true, 'Extract filter saved', { sourceObjectId, extractFilter: saved });
+        } catch (error) {
+            log.error('Failed to save source extract filter', error, { sourceObjectId });
+            sendResponse(res, 500, false, error.message || 'Failed to save extract filter');
+        }
+    }
+
+    else if (action === 'set-traceback') {
+        const { sourceObjectId, targetObjectId, strategy, fieldIds } = req.body;
         if (!sourceObjectId || !targetObjectId) {
             return sendResponse(res, 400, false, 'Source and target object IDs are required');
         }
         try {
-            const selection = await tracebackService.setExternalIdField(sourceObjectId, targetObjectId, fieldId || null);
-            sendResponse(res, 200, true, 'Traceback External Id field saved successfully', selection);
+            const selection = strategy ? { strategy, fieldIds } : null;
+            const saved = await tracebackService.setTraceback(sourceObjectId, targetObjectId, selection);
+            sendResponse(res, 200, true, 'Traceback configuration saved successfully', saved);
         } catch (error) {
-            log.error('Failed to save traceback External Id field', error, { sourceObjectId, targetObjectId });
-            sendResponse(res, 500, false, error.message || 'Failed to save traceback External Id field');
+            log.error('Failed to save traceback configuration', error, { sourceObjectId, targetObjectId });
+            sendResponse(res, 500, false, error.message || 'Failed to save traceback configuration');
         }
     }
 

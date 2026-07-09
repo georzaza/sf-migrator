@@ -157,11 +157,80 @@
                 Make sure source data has been extracted before running the migration.
             </Message>
 
+            <!-- Extraction plan -->
+            <div class="section-card">
+                <div class="section-head">
+                    <h2><i class="pi pi-cloud-download"></i> Extraction Plan</h2>
+                    <span class="section-sub">
+                        Source objects that will be extracted from the source org. Set per-object SOQL filters and re-extract individual objects on demand.
+                    </span>
+                </div>
+                <DataTable
+                    :value="pipeline.extractionPreview.objects"
+                    :loading="pipeline.loading"
+                    size="small"
+                    class="plan-table"
+                    dataKey="id"
+                    v-model:expandedRows="expandedExtractionRows"
+                >
+                    <template #empty><span>No source objects to extract. Create mappings in the workspace first.</span></template>
+                    <Column expander style="width: 3rem" />
+                    <Column header="Source Object" style="min-width: 14rem">
+                        <template #body="{ data }">
+                            <div class="field-label">{{ data.label }}</div>
+                            <div class="field-name">{{ data.name }}</div>
+                        </template>
+                    </Column>
+                    <Column header="Role" style="width: 10rem">
+                        <template #body="{ data }">
+                            <Tag v-if="data.isDisabled" value="All pairs disabled" severity="secondary" />
+                            <Tag v-else-if="data.isIntermediate" value="Lookup parent" severity="info" v-tooltip.top="'Pulled in to resolve relationship paths in expressions/lookups. Not directly mapped.'" />
+                            <Tag v-else value="Mapped" severity="success" />
+                        </template>
+                    </Column>
+                    <Column header="SOQL Filter (WHERE …)" style="min-width: 24rem">
+                        <template #body="{ data }">
+                            <code v-if="data.extractFilter" class="filter-snippet">{{ data.extractFilter }}</code>
+                            <span v-else class="filter-empty">— no filter — extracts every record —</span>
+                        </template>
+                    </Column>
+                    <Column header="Actions" style="width: 14rem" :exportable="false">
+                        <template #body="{ data }">
+                            <Button
+                                icon="pi pi-pencil"
+                                severity="secondary"
+                                text
+                                rounded
+                                v-tooltip.top="'Edit filter'"
+                                @click="openFilterEditor(data)"
+                            />
+                            <Button
+                                icon="pi pi-refresh"
+                                severity="secondary"
+                                text
+                                rounded
+                                v-tooltip.top="'Re-extract this object only'"
+                                :disabled="extracting || running"
+                                @click="reExtractObject(data)"
+                            />
+                        </template>
+                    </Column>
+                    <template #expansion="{ data }">
+                        <div class="extraction-fields-panel">
+                            <strong>Fields planned for SOQL ({{ data.fields.length }}):</strong>
+                            <div class="extraction-fields-list">
+                                <Chip v-for="f in data.fields" :key="f" :label="f" />
+                            </div>
+                        </div>
+                    </template>
+                </DataTable>
+            </div>
+
             <!-- Load plan readiness -->
             <div class="section-card">
                 <div class="section-head">
                     <h2><i class="pi pi-list"></i> Load Plan</h2>
-                    <span class="section-sub">Objects load in dependency order. Pick the External-Id used to trace records back.</span>
+                    <span class="section-sub">Objects load in dependency order. Configure how each object's records are traced back to the source.</span>
                 </div>
                 <DataTable :value="pipeline.loadPlan.loadOrder" :loading="pipeline.loading" size="small" class="plan-table">
                     <template #empty><span>No load plan available. Map objects in the workspace first.</span></template>
@@ -170,13 +239,25 @@
                     </Column>
                     <Column field="sourceObjectName" header="Source Object" style="min-width: 12rem" />
                     <Column field="targetObjectName" header="Target Object" style="min-width: 12rem" />
-                    <Column header="External-Id Field" style="min-width: 18rem">
+                    <Column header="Traceback" style="min-width: 22rem">
                         <template #body="{ data }">
                             <TracebackFieldSelect
                                 :sourceObjectId="data.sourceObjectId"
                                 :targetObjectId="data.targetObjectId"
                                 :showWarnings="false"
                                 @change="onTracebackChange"
+                            />
+                        </template>
+                    </Column>
+                    <Column header="Settings" style="width: 6rem" :exportable="false">
+                        <template #body="{ data }">
+                            <Button
+                                icon="pi pi-cog"
+                                severity="secondary"
+                                text
+                                rounded
+                                v-tooltip.top="'Migration settings'"
+                                @click="openSettingsDialog(data)"
                             />
                         </template>
                     </Column>
@@ -278,6 +359,38 @@
             :targetObjectName="errorObjectName"
             :objectLabel="errorObjectName"
         />
+
+        <ObjectMigrationSettingsDialog
+            v-model:visible="showSettingsDialog"
+            :sourceObjectId="settingsDialogContext.sourceObjectId"
+            :targetObjectId="settingsDialogContext.targetObjectId"
+            :sourceObjectLabel="settingsDialogContext.sourceObjectLabel"
+            :targetObjectLabel="settingsDialogContext.targetObjectLabel"
+        />
+
+        <Dialog
+            v-model:visible="showFilterDialog"
+            :header="`Extract Filter — ${filterEditorContext.label || ''}`"
+            modal
+            dismissableMask
+            :style="{ width: '560px' }"
+        >
+            <p class="filter-dialog-hint">
+                Raw SOQL <code>WHERE</code> clause for <code>{{ filterEditorContext.name }}</code>. The extractor will run
+                <code>SELECT &hellip; FROM {{ filterEditorContext.name }} WHERE (your filter)</code>. Leave empty to extract every record. Semicolons are rejected.
+            </p>
+            <Textarea
+                v-model="filterEditorValue"
+                rows="4"
+                class="filter-textarea-edit"
+                placeholder="IsActive = true AND CreatedDate >= LAST_N_DAYS:30"
+                autofocus
+            />
+            <template #footer>
+                <Button label="Cancel" icon="pi pi-times" text @click="showFilterDialog = false" />
+                <Button label="Save" icon="pi pi-check" :loading="savingFilter" @click="saveFilter" />
+            </template>
+        </Dialog>
     </div>
 </template>
 
@@ -291,6 +404,7 @@ import { usePipeline } from '@/composables/usePipeline';
 import { findOrgById, loadMigrationSelection, saveMigrationSelection } from '@/utils/migrationSelection';
 import TracebackFieldSelect from '@/components/pipeline/TracebackFieldSelect.vue';
 import LoadErrorDialog from '@/components/pipeline/LoadErrorDialog.vue';
+import ObjectMigrationSettingsDialog from '@/components/mapping/ObjectMigrationSettingsDialog.vue';
 
 const route = useRoute();
 const toast = useToast();
@@ -303,6 +417,64 @@ const selectedTargetOrg = ref(null);
 
 const showErrorDialog = ref(false);
 const errorObjectName = ref(null);
+
+const showSettingsDialog = ref(false);
+const settingsDialogContext = ref({
+    sourceObjectId: null,
+    targetObjectId: null,
+    sourceObjectLabel: '',
+    targetObjectLabel: '',
+});
+
+const expandedExtractionRows = ref([]);
+const showFilterDialog = ref(false);
+const filterEditorContext = ref({ id: null, name: '', label: '' });
+const filterEditorValue = ref('');
+const savingFilter = ref(false);
+
+function openFilterEditor(row) {
+    filterEditorContext.value = { id: row.id, name: row.name, label: row.label };
+    filterEditorValue.value = row.extractFilter || '';
+    showFilterDialog.value = true;
+}
+
+async function saveFilter() {
+    const ctx = filterEditorContext.value;
+    if (!ctx.id) return;
+    savingFilter.value = true;
+    try {
+        await pipeline.saveSourceExtractFilter(ctx.id, filterEditorValue.value);
+        toast.add({ severity: 'success', summary: 'Filter saved', detail: ctx.label, life: 3000 });
+        showFilterDialog.value = false;
+    } catch (err) {
+        toast.add({
+            severity: 'error',
+            summary: 'Save failed',
+            detail: err.response?.data?.message || err.message || 'Failed to save filter',
+            life: 6000,
+        });
+    } finally {
+        savingFilter.value = false;
+    }
+}
+
+async function reExtractObject(row) {
+    if (!sourceOrgId.value) return;
+    await runExtraction(sourceOrgId.value, [row.id]);
+    try {
+        await pipeline.fetchExtractionPreview(sourceOrgId.value, targetOrgId.value);
+    } catch { /* preview is best-effort */ }
+}
+
+function openSettingsDialog(row) {
+    settingsDialogContext.value = {
+        sourceObjectId: row.sourceObjectId,
+        targetObjectId: row.targetObjectId,
+        sourceObjectLabel: row.sourceObjectName,
+        targetObjectLabel: row.targetObjectName,
+    };
+    showSettingsDialog.value = true;
+}
 
 const orgs = computed(() => orgStore.orgs || []);
 const sourceOrgId = computed(() => selectedSourceOrg.value?.id ?? null);
@@ -377,6 +549,11 @@ async function onOrgsReady() {
         await pipeline.fetchLoadPlan(sourceOrgId.value, targetOrgId.value);
     } catch (e) {
         toast.add({ severity: 'error', summary: 'Load plan', detail: pipeline.error || 'Failed to load plan', life: 5000 });
+    }
+    try {
+        await pipeline.fetchExtractionPreview(sourceOrgId.value, targetOrgId.value);
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Extraction preview', detail: e.response?.data?.message || e.message || 'Failed to load extraction preview', life: 5000 });
     }
     await resumeIfRunning(sourceOrgId.value, targetOrgId.value);
 }
@@ -468,6 +645,9 @@ onUnmounted(() => {
 }
 
 .org-selector-section {
+    position: sticky;
+    top: 0;
+    z-index: 20;
     display: flex;
     align-items: center;
     gap: 2rem;
@@ -476,6 +656,7 @@ onUnmounted(() => {
     background: var(--surface-card);
     border-radius: 12px;
     border: 1px solid var(--surface-border);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
 }
 
 .org-selector {
@@ -611,5 +792,57 @@ onUnmounted(() => {
     font-size: 0.85rem;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.field-label {
+    font-weight: 600;
+}
+
+.field-name {
+    color: var(--text-color-secondary);
+    font-size: 0.8rem;
+    font-family: var(--font-family-monospace, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.filter-snippet {
+    display: inline-block;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    background: var(--surface-ground);
+    font-family: var(--font-family-monospace, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.82rem;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.filter-empty {
+    color: var(--text-color-secondary);
+    font-style: italic;
+    font-size: 0.85rem;
+}
+
+.extraction-fields-panel {
+    padding: 0.75rem 1rem;
+    background: var(--surface-ground);
+}
+
+.extraction-fields-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+}
+
+.filter-dialog-hint {
+    margin: 0 0 0.75rem;
+    color: var(--text-color-secondary);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.filter-textarea-edit {
+    width: 100%;
+    font-family: var(--font-family-monospace, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.85rem;
 }
 </style>

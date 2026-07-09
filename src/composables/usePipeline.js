@@ -67,12 +67,12 @@ export function usePipeline() {
         });
     }
 
-    async function runExtraction(sourceOrgId) {
+    async function runExtraction(sourceOrgId, sourceObjectIds = null) {
         if (extracting.value) return;
         extracting.value = true;
         let res;
         try {
-            res = await store.startExtraction(sourceOrgId);
+            res = await store.startExtraction(sourceOrgId, sourceObjectIds);
         } catch (err) {
             const detail = err.response?.status === 401
                 ? 'Authentication required — log in to the source org from the workspace first.'

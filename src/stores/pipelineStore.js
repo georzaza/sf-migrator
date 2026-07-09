@@ -27,6 +27,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
 
     const loadPlan = ref({ loadOrder: [], deferredFields: [] });
     const extractionStatus = ref(emptyExtraction());
+    const extractionPreview = ref({ sourceOrgId: null, targetOrgId: null, objects: [] });
     const transformStatus = ref(emptyStatus());
     const loadStatus = ref(emptyStatus());
 
@@ -49,42 +50,65 @@ export const usePipelineStore = defineStore('pipeline', () => {
         }
     }
 
-    // ==================== Traceback (External Id) ====================
+    // ==================== Traceback (source -> target correlation) ====================
 
-    async function fetchTracebackCandidates(targetObjectId) {
-        const response = await axiosInstance.get('/api', {
-            headers: { action: 'get-traceback-candidates', targetObjectId },
-        });
-        return response.data.data || [];
+    /**
+     * Returns the tiered candidate lists + names of user-mapped target fields:
+     *   { external: [...], unique: [...], alphanumeric: [...], composite: [...],
+     *     mappedTargetFieldNames: [...] }
+     */
+    async function fetchTracebackCandidates(targetObjectId, sourceObjectId = null) {
+        const headers = { action: 'get-traceback-candidates', targetObjectId };
+        if (sourceObjectId) headers.sourceObjectId = sourceObjectId;
+        const response = await axiosInstance.get('/api', { headers });
+        return response.data.data || { external: [], unique: [], alphanumeric: [], composite: [], mappedTargetFieldNames: [] };
     }
 
     /**
-     * Read the currently-selected traceback field for a pair from the migration
-     * setting metadata. Returns { id, name } | null.
+     * Returns the stored traceback config for a pair, or { strategy: null, fields: [] }.
+     * Legacy `metadata.tracebackExternalIdField` is auto-translated server-side.
      */
-    async function fetchSelectedTracebackField(sourceObjectId, targetObjectId) {
+    async function fetchTraceback(sourceObjectId, targetObjectId) {
         const response = await axiosInstance.get('/api', {
             headers: { action: 'get-migration-setting', sourceObjectId, targetObjectId },
         });
-        return response.data.data?.metadata?.tracebackExternalIdField || null;
+        const meta = response.data.data?.metadata || {};
+        if (meta.traceback?.strategy && Array.isArray(meta.traceback.fields)) {
+            return { strategy: meta.traceback.strategy, fields: meta.traceback.fields };
+        }
+        const legacy = meta.tracebackExternalIdField;
+        if (legacy?.id && legacy?.name) {
+            return { strategy: 'external-id', fields: [{ id: legacy.id, name: legacy.name }] };
+        }
+        return { strategy: null, fields: [] };
     }
 
-    async function saveTracebackField(sourceObjectId, targetObjectId, fieldId) {
-        const response = await axiosInstance.put('/api', {
+    /**
+     * Persist the traceback config. Pass `null` to clear.
+     * `selection`: { strategy: 'external-id'|'unique'|'alphanumeric'|'composite', fieldIds: string[] }
+     */
+    async function saveTraceback(sourceObjectId, targetObjectId, selection) {
+        const body = {
             sourceObjectId,
             targetObjectId,
-            fieldId: fieldId ?? null,
-        }, {
-            headers: { action: 'set-traceback-field' },
+            strategy: selection?.strategy ?? null,
+            fieldIds: selection?.fieldIds ?? [],
+        };
+        const response = await axiosInstance.put('/api', body, {
+            headers: { action: 'set-traceback' },
         });
-        return response.data.data || null;
+        return response.data.data || { strategy: null, fields: [] };
     }
 
     // ==================== Extraction (source org) ====================
 
-    async function startExtraction(sourceOrgId) {
+    async function startExtraction(sourceOrgId, sourceObjectIds = null) {
         extractionStatus.value = { ...emptyExtraction(), extractionStatus: 'running' };
-        const response = await axiosInstance.post('/api', { sourceOrgId }, {
+        const body = { sourceOrgId };
+        if (Array.isArray(sourceObjectIds) && sourceObjectIds.length > 0) {
+            body.sourceObjectIds = sourceObjectIds;
+        }
+        const response = await axiosInstance.post('/api', body, {
             headers: { action: 'start-extraction' },
         });
         return response;
@@ -96,6 +120,26 @@ export const usePipelineStore = defineStore('pipeline', () => {
         });
         extractionStatus.value = response.data.data || emptyExtraction();
         return extractionStatus.value;
+    }
+
+    async function fetchExtractionPreview(sourceOrgId, targetOrgId = null) {
+        const headers = { action: 'get-extraction-preview', sourceOrgId };
+        if (targetOrgId) headers.targetOrgId = targetOrgId;
+        const response = await axiosInstance.get('/api', { headers });
+        extractionPreview.value = response.data.data || { sourceOrgId, targetOrgId, objects: [] };
+        return extractionPreview.value;
+    }
+
+    async function saveSourceExtractFilter(sourceObjectId, extractFilter) {
+        const response = await axiosInstance.put('/api',
+            { sourceObjectId, extractFilter },
+            { headers: { action: 'set-source-extract-filter' } },
+        );
+        const saved = response.data.data || { sourceObjectId, extractFilter: null };
+        // Reflect into the local preview if present.
+        const row = extractionPreview.value.objects?.find((o) => o.id === sourceObjectId);
+        if (row) row.extractFilter = saved.extractFilter;
+        return saved;
     }
 
     // ==================== Transform ====================
@@ -168,6 +212,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     function reset() {
         loadPlan.value = { loadOrder: [], deferredFields: [] };
         extractionStatus.value = emptyExtraction();
+        extractionPreview.value = { sourceOrgId: null, targetOrgId: null, objects: [] };
         transformStatus.value = emptyStatus();
         loadStatus.value = emptyStatus();
         error.value = null;
@@ -179,16 +224,19 @@ export const usePipelineStore = defineStore('pipeline', () => {
         error,
         loadPlan,
         extractionStatus,
+        extractionPreview,
         transformStatus,
         loadStatus,
 
         // Actions
         fetchLoadPlan,
         fetchTracebackCandidates,
-        fetchSelectedTracebackField,
-        saveTracebackField,
+        fetchTraceback,
+        saveTraceback,
         startExtraction,
         fetchExtractionStatus,
+        fetchExtractionPreview,
+        saveSourceExtractFilter,
         startTransform,
         fetchTransformStatus,
         startLoad,

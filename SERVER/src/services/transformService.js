@@ -29,6 +29,7 @@ import db from '../../models/index.js';
 import logger from '../lib/logger.js';
 import metadataRepo from '../repositories/metadataRepository.js';
 import mappingService from './mappingService.js';
+import migrationSettingService from './migrationSettingService.js';
 import extractionService from './extractionService.js';
 import { parseTransformationRule, extractReferencedFields, evaluateTransformationRule } from '../utils/transformationRule.js';
 
@@ -74,15 +75,25 @@ async function runTransform({ sourceOrgId, targetOrgId }) {
     log.info('Transform started', { runId, sourceOrgId, targetOrgId });
 
     const fieldMappings = await mappingService.getFieldMappingsByOrgPair(sourceOrgId, targetOrgId);
+    const settingsMap = await migrationSettingService.getEffectiveSettingsMap(sourceOrgId, targetOrgId);
 
-    // Group field mappings by target object.
+    // Group field mappings by target object; skip pairs marked disabled.
     const byTarget = new Map(); // targetObjectId -> { targetObject, mappings: [] }
+    let skippedCount = 0;
     for (const fm of fieldMappings) {
         if (!fm.targetObject?.name || !fm.targetObjectId) continue;
+        const setting = settingsMap.get(fm.sourceObjectId)?.get(fm.targetObjectId);
+        if (setting && setting.enabled === false) {
+            skippedCount += 1;
+            continue;
+        }
         if (!byTarget.has(fm.targetObjectId)) {
             byTarget.set(fm.targetObjectId, { targetObject: fm.targetObject, mappings: [] });
         }
         byTarget.get(fm.targetObjectId).mappings.push(fm);
+    }
+    if (skippedCount > 0) {
+        log.info('Skipped disabled object pairs in transform', { skippedCount });
     }
 
     if (byTarget.size === 0) {

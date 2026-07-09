@@ -48,6 +48,10 @@ export default (sequelize, DataTypes) => {
             type: DataTypes.DATE,
             allowNull: false,
             defaultValue: DataTypes.NOW
+        },
+        extractFilter: {
+            type: DataTypes.TEXT,
+            allowNull: true
         }
     }, {});
 

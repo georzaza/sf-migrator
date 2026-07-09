@@ -8,6 +8,7 @@
  */
 
 import mappingService from './mappingService.js';
+import migrationSettingService from './migrationSettingService.js';
 import logger from '../lib/logger.js';
 
 const log = logger.create('dependencyService');
@@ -51,7 +52,21 @@ function isMappedReferenceField(mapping) {
 async function getLoadPlan(sourceOrgId, targetOrgId) {
     log.info('Building load plan', { sourceOrgId, targetOrgId });
 
-    const fieldMappings = await mappingService.getFieldMappingsByOrgPair(sourceOrgId, targetOrgId);
+    const fieldMappingsRaw = await mappingService.getFieldMappingsByOrgPair(sourceOrgId, targetOrgId);
+    const settingsMap = await migrationSettingService.getEffectiveSettingsMap(sourceOrgId, targetOrgId);
+
+    // Drop mappings whose (source, target) pair is explicitly disabled in MigrationSettings.
+    const fieldMappings = fieldMappingsRaw.filter((m) => {
+        const targets = settingsMap.get(m.sourceObjectId);
+        const setting = targets?.get(m.targetObjectId);
+        return setting ? setting.enabled : true;
+    });
+    if (fieldMappings.length !== fieldMappingsRaw.length) {
+        log.info('Filtered disabled object pairs from load plan', {
+            removed: fieldMappingsRaw.length - fieldMappings.length,
+            kept: fieldMappings.length,
+        });
+    }
 
     // Nodes = mapped source objects (deduped). nameToId maps source object API name -> id.
     const nodes = new Map();

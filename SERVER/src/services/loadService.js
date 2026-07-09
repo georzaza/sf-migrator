@@ -4,23 +4,31 @@
  * Builds the insert-ready "stg3" tables from the transformed stg2 data and loads
  * them into the target org via Bulk API 2.0, in dependency order.
  *
- * Model (see /memories/session/plan-phase-E-pipeline.md "LOAD CORRELATION DECISION"):
+ * Model:
  *  - Objects load parents-first using dependencyService.getLoadPlan. Cyclic /
  *    self-referential lookups are cut ("deferredFields") and filled in a 2nd pass.
  *  - stg3 is built per target object from the LATEST stg2 run, success rows only.
  *    One stg2 row -> one stg3 row. Lookup columns are remapped from the SOURCE
- *    parent Id to the TARGET parent Id by resolving the parent target record via
- *    its selected External Id field (which stores the SOURCE record Id).
- *  - Correlation: the user-selected External Id field (per object pair) is written
- *    with the SOURCE record Id. Bulk echoes it back next to sf__Id / sf__Error, so
- *    each result row maps back to its source record (Bulk result order is not
- *    guaranteed). Captured target Ids are optionally cached in RecordIdMap.
- *  - Operation is upsert by the selected External Id field, making load reruns
- *    idempotent and allowing previously-created target records to be matched.
- *  - Cascade: if a parent record was not loaded, the child row is NOT loaded and the
- *    reason is recorded (stg3 __status/__error + an error CSV).
- *
- * Out of scope: update/upsert via external Id, polymorphic lookup remap.
+ *    parent Id to the TARGET parent Id by reading RecordIdMap (populated as
+ *    parents finish their pass-1 load).
+ *  - LOAD CORRELATION is driven by the per-object traceback config (see
+ *    tracebackService) and has 4 strategies:
+ *      * 'external-id' / 'unique' / 'alphanumeric' (single field): the SOURCE
+ *        record Id is written into the chosen target field at insert time. The
+ *        Bulk insert response echoes that field back next to sf__Id, giving us
+ *        a direct source -> target reconciliation. Existing target records
+ *        (re-runs) are detected up front via SOQL `WHERE field IN (sourceIds)`
+ *        and skipped for idempotency.
+ *      * 'composite' (2+ fields): the user-mapped values are inserted as-is.
+ *        The Bulk insert response echoes the chosen fields back, so each
+ *        source row is reconciled by tuple equality. Existing target records
+ *        are detected via a tuple OR-of-AND SOQL pre-query.
+ *  - Bulk results are always treated as INSERT — we never call upsert anymore,
+ *    since tiers 2/3/4 are not (necessarily) backed by Salesforce externalId.
+ *  - Ambiguity = abort: if any source row matches more than one target record
+ *    during reconciliation or the pre-existence check, the entire load is
+ *    failed (per product spec).
+ *  - Cascade: if a parent record was not loaded, the child row is NOT loaded.
  */
 
 import fs from 'fs/promises';
@@ -110,7 +118,6 @@ async function runLoad({ sourceOrgId, targetOrgId }) {
         conn,
         loadDir,
         idMaps: new Map(), // source object name -> Map(sourceId -> targetId)
-        nodesBySourceObjectName: new Map(loadOrder.map((node) => [node.sourceObjectName, node])),
     };
 
     const results = [];
@@ -119,14 +126,27 @@ async function runLoad({ sourceOrgId, targetOrgId }) {
     setLoadProgress(sourceOrgId, targetOrgId, { pass: 1, total: totalObjects, completed, currentObject: null, results: [...results] });
 
     // PASS 1 — insert each object in dependency order.
-    for (const node of loadOrder) {
-        setLoadProgress(sourceOrgId, targetOrgId, { pass: 1, total: totalObjects, completed, currentObject: node.targetObjectName, results: [...results] });
-        const mappings = mappingsByTarget.get(node.targetObjectId) || [];
-        const deferredForObject = deferredFields.filter((d) => d.sourceObjectId === node.sourceObjectId);
-        const result = await loadObjectPass1({ ctx, node, mappings, deferredForObject });
-        results.push(result);
-        completed += 1;
-        setLoadProgress(sourceOrgId, targetOrgId, { pass: 1, total: totalObjects, completed, currentObject: null, results: [...results] });
+    try {
+        for (const node of loadOrder) {
+            setLoadProgress(sourceOrgId, targetOrgId, { pass: 1, total: totalObjects, completed, currentObject: node.targetObjectName, results: [...results] });
+            const mappings = mappingsByTarget.get(node.targetObjectId) || [];
+            const deferredForObject = deferredFields.filter((d) => d.sourceObjectId === node.sourceObjectId);
+            const result = await loadObjectPass1({ ctx, node, mappings, deferredForObject });
+            results.push(result);
+            completed += 1;
+            setLoadProgress(sourceOrgId, targetOrgId, { pass: 1, total: totalObjects, completed, currentObject: null, results: [...results] });
+        }
+    } catch (error) {
+        if (error instanceof AmbiguousTargetMatchError) {
+            log.error('Load aborted: ambiguous target match', error, { runId, sourceOrgId, targetOrgId });
+            const summary = {
+                runId, sourceOrgId, targetOrgId,
+                objectCount: results.length, loadDir, results,
+                aborted: true, error: error.message,
+            };
+            return summary;
+        }
+        throw error;
     }
 
     // PASS 2 — fill the deferred (cut/self-ref) lookups now that all target Ids exist.
@@ -156,7 +176,12 @@ async function runLoad({ sourceOrgId, targetOrgId }) {
 }
 
 /**
- * Build stg3 for one object and Bulk-insert the ready rows (pass 1).
+ * Build stg3 for one object, run the configured traceback strategy, Bulk-insert
+ * the ready rows, and reconcile target Ids (pass 1).
+ *
+ * Throws an `AmbiguousTargetMatchError` if reconciliation finds more than one
+ * target record for a single source row — the caller (runLoad) propagates that
+ * to abort the entire load.
  */
 async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
     const { sourceObjectName, targetObjectName, sourceObjectId, targetObjectId } = node;
@@ -178,15 +203,19 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
     };
 
     try {
-        // The user must have chosen an External Id field for load traceback.
-        const traceback = await tracebackService.getSelectedExternalIdField(sourceObjectId, targetObjectId);
-        if (!traceback) {
+        const traceback = await tracebackService.getTraceback(sourceObjectId, targetObjectId);
+        if (!traceback.strategy || traceback.fields.length === 0) {
             result.status = 'skipped';
-            result.errorMessage = 'No External Id field selected for load traceback; object not migrated.';
-            log.warn('Object skipped: no traceback field', { targetObjectName });
+            result.errorMessage = 'No traceback configured for this object pair; object not migrated.';
+            log.warn('Object skipped: no traceback configured', { targetObjectName });
             return result;
         }
-        const extIdColumn = traceback.name;
+        const strategy = traceback.strategy;
+        const tracebackColumns = traceback.fields.map((f) => sanitizeColumnName(f.name));
+        const isCompositeStrategy = strategy === 'composite';
+        // For single-field strategies the loader writes the SOURCE record Id into
+        // the chosen column at insert time, overwriting any user mapping for it.
+        const overrideColumn = isCompositeStrategy ? null : tracebackColumns[0];
 
         // Target field columns (sanitized API names, deduped) + lookup / deferred maps.
         const targetColumns = [];
@@ -198,25 +227,43 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
             const col = sanitizeColumnName(m.targetField.name);
             if (!seen.has(col)) { seen.add(col); targetColumns.push(col); }
 
-            // as-is lookup mapping: source field references a parent object -> remap target column.
             if (m.mappingType === 'as-is' && Array.isArray(m.sourceField?.referenceTo) && m.sourceField.referenceTo.length > 0) {
                 const referencedObjectName = getFirstReferenceTargetName(m.sourceField.referenceTo);
                 if (referencedObjectName) lookupRemap.set(col, referencedObjectName);
             }
         }
-        // Deferred (cut/self-ref) source fields -> their target columns are filled in pass 2.
         for (const d of deferredForObject) {
             const m = mappings.find((mm) => mm.sourceField?.name === d.fieldName);
             if (!m?.targetField?.name) continue;
             deferredColumns.set(sanitizeColumnName(m.targetField.name), d.referencedObjectName);
         }
 
-        // Conflict: the traceback field cannot also be a user-mapped target column (we'd overwrite it).
-        if (seen.has(extIdColumn)) {
-            result.status = 'skipped';
-            result.errorMessage = `Traceback External Id field "${extIdColumn}" is also a mapped target field; resolve the conflict. Object not migrated.`;
-            log.warn('Object skipped: traceback field conflict', { targetObjectName, extIdColumn });
-            return result;
+        // For composite strategy, every traceback column MUST also be a user-
+        // mapped target column (we cannot fabricate a tuple value), otherwise
+        // the load is unreconcilable.
+        if (isCompositeStrategy) {
+            const missing = tracebackColumns.filter((c) => !seen.has(c));
+            if (missing.length > 0) {
+                result.status = 'skipped';
+                result.errorMessage = `Composite traceback fields are not user-mapped: ${missing.join(', ')}. Map them or pick different fields.`;
+                log.warn('Object skipped: composite traceback fields not mapped', { targetObjectName, missing });
+                return result;
+            }
+        }
+
+        // Single-field tiers OVERWRITE any user mapping for the chosen column
+        // with the source record Id at insert. We log the conflict — the
+        // validation service surfaces it to the UI as an advisory warning.
+        if (overrideColumn && seen.has(overrideColumn)) {
+            log.info('Traceback field overrides user mapping for this object', {
+                targetObjectName, column: overrideColumn,
+            });
+        }
+        // Ensure the override column ends up in the insert payload even if the
+        // user did not map it.
+        if (overrideColumn && !seen.has(overrideColumn)) {
+            seen.add(overrideColumn);
+            targetColumns.push(overrideColumn);
         }
 
         // Read the latest successful stg2 run.
@@ -232,47 +279,47 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
         }
         const stg2Rows = await readSuccessRows(stg2Table, runId);
         result.total = stg2Rows.length;
-        const ownSourceIds = stg2Rows.map((row) => row.__srcId).filter(Boolean);
-        const existingOwnMap = await getIdMap(ctx, sourceObjectName, ownSourceIds, true);
 
-        // Preload the target Ids for parent objects referenced by lookups. Parent
-        // records are resolved in the target org through their selected External Id
-        // field, whose value is the original source record Id.
+        // Preload parent target Ids (lookup remap) from the RecordIdMap cache.
         const lookupSourceIdsByParent = collectLookupSourceIds(stg2Rows, targetColumns, lookupRemap);
         for (const [parent, sourceIds] of lookupSourceIdsByParent) {
             await getIdMap(ctx, parent, sourceIds);
         }
 
-        // stg3 columns = target field columns + the traceback External Id column.
+        // stg3 columns = the union of target field columns and any traceback columns.
         const stg3Columns = [...targetColumns];
-        if (!stg3Columns.includes(extIdColumn)) stg3Columns.push(extIdColumn);
+        for (const col of tracebackColumns) {
+            if (!stg3Columns.includes(col)) stg3Columns.push(col);
+        }
 
         const stg3Table = getStg3TableName(ctx.targetOrgId, targetObjectName);
         result.stg3Table = stg3Table;
         await ensureStg3Table(stg3Table, stg3Columns);
 
-        const stg3Rows = [];   // every stg3 row (ready + skipped) for audit
-        const readyRecords = []; // { srcId, values } sent to Bulk
+        // Detect already-existing target records (idempotency).
+        // Single-field tiers: SOQL `WHERE F IN (sourceIds)`.
+        // Composite tier: tuple OR-of-AND pre-query built once after rows are ready.
+        let existingOwnMap = new Map();
+        if (!isCompositeStrategy) {
+            const ownSourceIds = stg2Rows.map((row) => row.__srcId).filter(Boolean);
+            existingOwnMap = await queryTargetIdsByField(ctx.conn, {
+                objectName: targetObjectName,
+                fieldName: overrideColumn,
+                values: ownSourceIds,
+            });
+        }
+
+        const stg3Rows = [];
+        const readyRecords = []; // { srcId, values, key } sent to Bulk
         for (const row of stg2Rows) {
             const srcId = row.__srcId;
 
-            if (srcId && existingOwnMap.has(String(srcId))) {
-                stg3Rows.push(makeStg3Row(
-                    srcId,
-                    sourceObjectName,
-                    'skipped-already-loaded',
-                    'Already exists in the target org by External Id',
-                    existingOwnMap.get(String(srcId)),
-                    ctx.runId,
-                    {},
-                ));
-                result.skipped += 1;
-                continue;
-            }
-
+            // Build the prospective insert payload first; we may need its
+            // values to compute the composite key or the override value.
             const values = {};
             let rowError = null;
             for (const col of targetColumns) {
+                if (col === overrideColumn) continue; // set below
                 const raw = row[col];
                 if (lookupRemap.has(col) && raw !== null && raw !== undefined && String(raw) !== '') {
                     const parentObj = lookupRemap.get(col);
@@ -290,85 +337,163 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
                     values[col] = raw ?? null;
                 }
             }
+            if (overrideColumn) values[overrideColumn] = srcId;
 
             if (rowError) {
-                stg3Rows.push(makeStg3Row(srcId, sourceObjectName, 'skipped', rowError, null, ctx.runId, {}));
+                stg3Rows.push(makeStg3Row(srcId, sourceObjectName, 'skipped', rowError, null, ctx.runId, values));
                 result.skipped += 1;
                 continue;
             }
 
-            values[extIdColumn] = srcId; // correlation token
-            readyRecords.push({ srcId, values });
+            // Compute the row's reconciliation key.
+            const key = isCompositeStrategy
+                ? compositeKeyFromValues(values, tracebackColumns)
+                : srcId != null ? String(srcId) : null;
+
+            if (!isCompositeStrategy && srcId && existingOwnMap.has(String(srcId))) {
+                stg3Rows.push(makeStg3Row(
+                    srcId, sourceObjectName, 'skipped-already-loaded',
+                    'Already exists in the target org by traceback field',
+                    existingOwnMap.get(String(srcId)), ctx.runId, values,
+                ));
+                result.skipped += 1;
+                continue;
+            }
+
+            readyRecords.push({ srcId, values, key });
             result.ready += 1;
         }
 
-        // Bulk upsert the ready records by the selected External Id field.
+        // Composite tier: pre-existence check via tuple OR-clause.
+        let existingCompositeByKey = new Map();
+        if (isCompositeStrategy && readyRecords.length > 0) {
+            const lookupResult = await queryTargetIdsByTuples(ctx.conn, {
+                objectName: targetObjectName,
+                fieldNames: tracebackColumns,
+                tuples: readyRecords.map((r) => tracebackColumns.map((c) => r.values[c])),
+            });
+            assertNoAmbiguousMatches(lookupResult.ambiguousKeys, targetObjectName, 'pre-existence check');
+            existingCompositeByKey = lookupResult.byKey;
+        }
+
+        // Re-partition composite ready records into "already exists" vs. "to insert".
+        const toInsert = [];
+        if (isCompositeStrategy) {
+            for (const rec of readyRecords) {
+                if (rec.key && existingCompositeByKey.has(rec.key)) {
+                    stg3Rows.push(makeStg3Row(
+                        rec.srcId, sourceObjectName, 'skipped-already-loaded',
+                        'Already exists in the target org by composite key',
+                        existingCompositeByKey.get(rec.key), ctx.runId, rec.values,
+                    ));
+                    result.skipped += 1;
+                    result.ready -= 1;
+                } else {
+                    toInsert.push(rec);
+                }
+            }
+        } else {
+            toInsert.push(...readyRecords);
+        }
+
+        // Bulk INSERT the records (no upsert — tiers 2/3/4 may not be backed by externalId).
         let bulkResults = { successfulResults: [], failedResults: [], unprocessedRecords: [] };
-        if (readyRecords.length > 0) {
+        if (toInsert.length > 0) {
             bulkResults = await bulkIngestService.ingestRecords({
                 conn: ctx.conn,
                 objectName: targetObjectName,
-                operation: 'upsert',
-                externalIdFieldName: extIdColumn,
-                records: readyRecords.map((r) => r.values),
+                operation: 'insert',
+                records: toInsert.map((r) => r.values),
             });
         }
 
-        // Correlate results back to source records via the echoed External Id column.
-        const idMapRows = [];
-        const successById = new Map();
-        const successfulSourceIds = [];
-        for (const s of bulkResults.successfulResults) {
-            const srcId = s[extIdColumn];
-            const targetId = s.sf__Id;
-            if (srcId && targetId) {
-                successById.set(String(srcId), targetId);
-            }
-            if (srcId) successfulSourceIds.push(srcId);
-        }
-        if (successfulSourceIds.length > 0) {
-            const resolved = await getIdMap(ctx, sourceObjectName, successfulSourceIds, true);
-            for (const srcId of successfulSourceIds) {
-                const key = String(srcId);
-                const targetId = successById.get(key) || resolved.get(key);
-                if (!targetId) continue;
-                successById.set(key, targetId);
-                idMapRows.push({
-                    sourceOrgId: ctx.sourceOrgId,
-                    targetOrgId: ctx.targetOrgId,
-                    objectName: sourceObjectName,
-                    sourceRecordId: key,
-                    targetRecordId: targetId,
-                    migrationJobId: null,
-                });
-            }
-        }
-        const failedById = new Map();
-        for (const f of bulkResults.failedResults) {
-            const srcId = f[extIdColumn];
-            if (srcId) failedById.set(String(srcId), f.sf__Error || 'Unknown error');
-        }
-        const unprocessed = Array.isArray(bulkResults.unprocessedRecords) ? bulkResults.unprocessedRecords : [];
-        const unprocessedIds = new Set(unprocessed.map((u) => String(u?.[extIdColumn])).filter(Boolean));
+        // Reconcile results back to source records.
+        // Bulk 2.0 echoes back every input field (including our traceback columns),
+        // plus sf__Id on success / sf__Error on failure. Result order is not guaranteed.
+        const successById = new Map(); // sourceId-or-compositeKey -> targetId
+        const failedByKey = new Map(); // sourceId-or-compositeKey -> error
+        const matchCount = new Map();  // key -> count (for ambiguity detection on insert)
 
-        // Final stg3 rows for the ready records.
-        for (const rec of readyRecords) {
-            const key = String(rec.srcId);
-            const fieldValues = stripExtId(rec.values, extIdColumn);
-            if (successById.has(key)) {
-                stg3Rows.push(makeStg3Row(rec.srcId, sourceObjectName, 'loaded', null, successById.get(key), ctx.runId, rec.values));
+        for (const s of bulkResults.successfulResults) {
+            const key = isCompositeStrategy
+                ? compositeKeyFromValues(s, tracebackColumns)
+                : (s[overrideColumn] != null ? String(s[overrideColumn]) : null);
+            if (!key) continue;
+            matchCount.set(key, (matchCount.get(key) || 0) + 1);
+            if (s.sf__Id) successById.set(key, s.sf__Id);
+        }
+        for (const f of bulkResults.failedResults) {
+            const key = isCompositeStrategy
+                ? compositeKeyFromValues(f, tracebackColumns)
+                : (f[overrideColumn] != null ? String(f[overrideColumn]) : null);
+            if (!key) continue;
+            failedByKey.set(key, f.sf__Error || 'Unknown error');
+        }
+        const ambiguousKeys = [...matchCount.entries()].filter(([, n]) => n > 1).map(([k]) => k);
+        assertNoAmbiguousMatches(ambiguousKeys, targetObjectName, 'insert reconciliation');
+
+        const unprocessed = Array.isArray(bulkResults.unprocessedRecords) ? bulkResults.unprocessedRecords : [];
+        const unprocessedKeys = new Set(unprocessed.map((u) => {
+            return isCompositeStrategy
+                ? compositeKeyFromValues(u, tracebackColumns)
+                : (u?.[overrideColumn] != null ? String(u[overrideColumn]) : null);
+        }).filter(Boolean));
+
+        const idMapRows = [];
+        for (const rec of toInsert) {
+            const key = rec.key;
+            if (key && successById.has(key)) {
+                const targetId = successById.get(key);
+                stg3Rows.push(makeStg3Row(rec.srcId, sourceObjectName, 'loaded', null, targetId, ctx.runId, rec.values));
                 result.loaded += 1;
-            } else if (failedById.has(key)) {
-                stg3Rows.push(makeStg3Row(rec.srcId, sourceObjectName, 'failed', failedById.get(key), null, ctx.runId, rec.values));
+                if (rec.srcId) {
+                    idMapRows.push({
+                        sourceOrgId: ctx.sourceOrgId,
+                        targetOrgId: ctx.targetOrgId,
+                        objectName: sourceObjectName,
+                        sourceRecordId: String(rec.srcId),
+                        targetRecordId: targetId,
+                        migrationJobId: null,
+                    });
+                }
+            } else if (key && failedByKey.has(key)) {
+                stg3Rows.push(makeStg3Row(rec.srcId, sourceObjectName, 'failed', failedByKey.get(key), null, ctx.runId, rec.values));
                 result.failed += 1;
-            } else if (unprocessedIds.has(key)) {
+            } else if (key && unprocessedKeys.has(key)) {
                 stg3Rows.push(makeStg3Row(rec.srcId, sourceObjectName, 'unprocessed', 'Not processed by Bulk job', null, ctx.runId, rec.values));
                 result.failed += 1;
             } else {
                 stg3Rows.push(makeStg3Row(rec.srcId, sourceObjectName, 'failed', 'No Bulk result returned for record', null, ctx.runId, rec.values));
                 result.failed += 1;
             }
-            void fieldValues;
+        }
+
+        // Existing-target rows (idempotency) also belong in RecordIdMap.
+        if (!isCompositeStrategy) {
+            for (const [srcId, targetId] of existingOwnMap) {
+                idMapRows.push({
+                    sourceOrgId: ctx.sourceOrgId,
+                    targetOrgId: ctx.targetOrgId,
+                    objectName: sourceObjectName,
+                    sourceRecordId: String(srcId),
+                    targetRecordId: targetId,
+                    migrationJobId: null,
+                });
+            }
+        } else if (existingCompositeByKey.size > 0) {
+            // For composite, we need to look up which readyRecord matched which key.
+            for (const rec of readyRecords) {
+                if (rec.key && existingCompositeByKey.has(rec.key) && rec.srcId) {
+                    idMapRows.push({
+                        sourceOrgId: ctx.sourceOrgId,
+                        targetOrgId: ctx.targetOrgId,
+                        objectName: sourceObjectName,
+                        sourceRecordId: String(rec.srcId),
+                        targetRecordId: existingCompositeByKey.get(rec.key),
+                        migrationJobId: null,
+                    });
+                }
+            }
         }
 
         await insertStg3Rows(stg3Table, stg3Columns, stg3Rows);
@@ -376,24 +501,28 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
         if (idMapRows.length > 0) {
             try {
                 await recordIdMapRepository.setTargetIds(idMapRows);
+                // Refresh the in-memory id map for this object so children see the new ids.
+                ctx.idMaps.delete(sourceObjectName);
             } catch (cacheError) {
-                log.warn('RecordIdMap cache update failed; continuing because External Id is the load source of truth', cacheError, {
-                    targetObjectName,
-                    rowCount: idMapRows.length,
-                });
+                log.error('RecordIdMap cache update failed', cacheError, { targetObjectName, rowCount: idMapRows.length });
+                throw cacheError;
             }
         }
 
-        // Per-object success / error CSVs.
         const { successCsv, errorCsv } = await writeObjectCsvs(ctx.loadDir, targetObjectName, stg3Rows);
         result.successCsv = successCsv;
         result.errorCsv = errorCsv;
 
         result.status = 'success';
         log.info('Object loaded (pass 1)', {
-            targetObjectName, total: result.total, loaded: result.loaded, failed: result.failed, skipped: result.skipped,
+            targetObjectName, strategy, total: result.total, loaded: result.loaded,
+            failed: result.failed, skipped: result.skipped,
         });
     } catch (error) {
+        if (error instanceof AmbiguousTargetMatchError) {
+            // Propagate to abort the whole load.
+            throw error;
+        }
         result.errorMessage = error.message || String(error);
         log.error('Object load failed (pass 1)', error, { targetObjectName });
     }
@@ -505,6 +634,14 @@ function getFirstReferenceTargetName(referenceTo) {
     return null;
 }
 
+/**
+ * Resolve source -> target record Ids for one source object, primarily from
+ * RecordIdMap (populated by pass-1 loads). Used to remap lookup columns.
+ *
+ * No SOQL fallback: with the new traceback model the chosen key field can be
+ * anything (or a tuple), so we can't generically rediscover existing records
+ * from the target org. RecordIdMap is the source of truth.
+ */
 async function getIdMap(ctx, sourceObjectName, sourceRecordIds = [], refresh = false) {
     if (refresh) ctx.idMaps.delete(sourceObjectName);
     if (!ctx.idMaps.has(sourceObjectName)) ctx.idMaps.set(sourceObjectName, new Map());
@@ -514,78 +651,130 @@ async function getIdMap(ctx, sourceObjectName, sourceRecordIds = [], refresh = f
     const missingIds = requestedIds.filter((id) => !map.has(id));
     if (missingIds.length === 0) return map;
 
-    const node = ctx.nodesBySourceObjectName.get(sourceObjectName);
-    const targetObjectName = node?.targetObjectName || sourceObjectName;
-
-    if (node?.sourceObjectId && node?.targetObjectId) {
-        const externalIdField = await tracebackService.getSelectedExternalIdField(node.sourceObjectId, node.targetObjectId);
-        if (externalIdField?.name) {
-            const resolved = await queryTargetIdsByExternalId(ctx.conn, {
-                objectName: targetObjectName,
-                externalIdFieldName: externalIdField.name,
-                externalIdValues: missingIds,
-            });
-            mergeIntoMap(map, resolved);
-        } else {
-            log.warn('Cannot resolve lookup by External Id because no field is selected', {
-                sourceObjectName,
-                targetObjectName,
-            });
-        }
-    } else {
-        log.warn('Cannot resolve lookup by External Id because parent object is not in the load plan', {
-            sourceObjectName,
-            targetObjectName,
-        });
+    const rows = await recordIdMapRepository.findByObject({
+        sourceOrgId: ctx.sourceOrgId,
+        targetOrgId: ctx.targetOrgId,
+        objectName: sourceObjectName,
+    });
+    for (const row of rows) {
+        if (row.targetRecordId) map.set(String(row.sourceRecordId), row.targetRecordId);
     }
-
-    const unresolvedIds = missingIds.filter((id) => !map.has(id));
-    if (unresolvedIds.length > 0) {
-        const existingTargetIds = await queryExistingTargetIds(ctx.conn, {
-            objectName: targetObjectName,
-            ids: unresolvedIds,
-        });
-        mergeIntoMap(map, existingTargetIds);
-    }
-
     return map;
 }
 
-async function queryTargetIdsByExternalId(conn, { objectName, externalIdFieldName, externalIdValues }) {
-    const values = uniqueStrings(externalIdValues);
+/**
+ * SOQL: SELECT Id, fieldName FROM objectName WHERE fieldName IN (values).
+ * Throws AmbiguousTargetMatchError if any value matches more than one record.
+ */
+async function queryTargetIdsByField(conn, { objectName, fieldName, values }) {
+    const distinct = uniqueStrings(values);
     const resolved = new Map();
-    if (values.length === 0) return resolved;
+    if (distinct.length === 0 || !fieldName) return resolved;
 
     const safeObjectName = assertSalesforceApiName(objectName, 'objectName');
-    const safeExternalIdFieldName = assertSalesforceApiName(externalIdFieldName, 'externalIdFieldName');
+    const safeFieldName = assertSalesforceApiName(fieldName, 'fieldName');
+    const ambiguous = [];
 
-    for (const chunk of chunkArray(values, 200)) {
+    for (const chunk of chunkArray(distinct, 200)) {
         const literals = chunk.map((value) => `'${escapeSoqlLiteral(value)}'`).join(', ');
-        const soql = `SELECT Id, ${safeExternalIdFieldName} FROM ${safeObjectName} WHERE ${safeExternalIdFieldName} IN (${literals})`;
+        const soql = `SELECT Id, ${safeFieldName} FROM ${safeObjectName} WHERE ${safeFieldName} IN (${literals})`;
         const result = await conn.query(soql);
         for (const record of result.records || []) {
-            const sourceId = record[safeExternalIdFieldName];
-            if (sourceId && record.Id) resolved.set(String(sourceId), record.Id);
+            const key = record[safeFieldName];
+            if (key == null || !record.Id) continue;
+            const k = String(key);
+            if (resolved.has(k)) {
+                ambiguous.push(k);
+            } else {
+                resolved.set(k, record.Id);
+            }
         }
     }
+    assertNoAmbiguousMatches(ambiguous, objectName, `field "${fieldName}" pre-existence check`);
     return resolved;
 }
 
-async function queryExistingTargetIds(conn, { objectName, ids }) {
-    const values = uniqueStrings(ids);
-    const resolved = new Map();
-    if (values.length === 0) return resolved;
+/**
+ * SOQL: composite tuple lookup. Builds a WHERE clause of OR-of-AND groups,
+ *   (F1='v1' AND F2='v2') OR (F1='v3' AND F2='v4') ...
+ * chunked to keep query length bounded. Returns:
+ *   { byKey: Map<tupleKey, targetId>, ambiguousKeys: string[] }
+ */
+async function queryTargetIdsByTuples(conn, { objectName, fieldNames, tuples }) {
+    const byKey = new Map();
+    const ambiguousKeys = [];
+    if (!Array.isArray(fieldNames) || fieldNames.length === 0 || tuples.length === 0) {
+        return { byKey, ambiguousKeys };
+    }
 
     const safeObjectName = assertSalesforceApiName(objectName, 'objectName');
-    for (const chunk of chunkArray(values, 200)) {
-        const literals = chunk.map((value) => `'${escapeSoqlLiteral(value)}'`).join(', ');
-        const soql = `SELECT Id FROM ${safeObjectName} WHERE Id IN (${literals})`;
+    const safeFieldNames = fieldNames.map((f) => assertSalesforceApiName(f, 'fieldName'));
+
+    // Dedupe input tuples by their composite key; skip any tuple containing a null.
+    const distinctTuples = new Map(); // key -> values[]
+    for (const t of tuples) {
+        if (!Array.isArray(t) || t.length !== fieldNames.length) continue;
+        if (t.some((v) => v === null || v === undefined || String(v) === '')) continue;
+        const key = compositeKeyFromArray(t);
+        if (!distinctTuples.has(key)) distinctTuples.set(key, t);
+    }
+    if (distinctTuples.size === 0) return { byKey, ambiguousKeys };
+
+    const entries = [...distinctTuples.entries()];
+    // ~25 tuples per query keeps SOQL well under the 100KB limit even for wide field sets.
+    const groupSize = Math.max(1, Math.floor(25));
+    for (let i = 0; i < entries.length; i += groupSize) {
+        const chunk = entries.slice(i, i + groupSize);
+        const groups = chunk.map(([, vals]) => {
+            const ands = safeFieldNames.map((f, idx) => `${f} = '${escapeSoqlLiteral(vals[idx])}'`).join(' AND ');
+            return `(${ands})`;
+        });
+        const selectFields = ['Id', ...safeFieldNames].join(', ');
+        const soql = `SELECT ${selectFields} FROM ${safeObjectName} WHERE ${groups.join(' OR ')}`;
         const result = await conn.query(soql);
         for (const record of result.records || []) {
-            if (record.Id) resolved.set(String(record.Id), record.Id);
+            const tupleVals = safeFieldNames.map((f) => record[f]);
+            if (tupleVals.some((v) => v === null || v === undefined)) continue;
+            const key = compositeKeyFromArray(tupleVals);
+            if (!record.Id) continue;
+            if (byKey.has(key)) ambiguousKeys.push(key);
+            else byKey.set(key, record.Id);
         }
     }
-    return resolved;
+    return { byKey, ambiguousKeys };
+}
+
+/**
+ * Build a stable composite key from a record-like object and a list of field columns.
+ * Field values are coerced to strings; nulls become the literal "\0" (unmatchable
+ * sentinel) so any null in the tuple cannot collide with real values.
+ */
+function compositeKeyFromValues(record, fieldColumns) {
+    return compositeKeyFromArray(fieldColumns.map((c) => (record?.[c] == null ? null : record[c])));
+}
+
+function compositeKeyFromArray(values) {
+    return values.map((v) => (v == null ? '\u0000' : String(v).replace(/\u001f/g, ''))).join('\u001f');
+}
+
+class AmbiguousTargetMatchError extends Error {
+    constructor(message, { objectName, keys, phase }) {
+        super(message);
+        this.name = 'AmbiguousTargetMatchError';
+        this.objectName = objectName;
+        this.keys = keys;
+        this.phase = phase;
+    }
+}
+
+function assertNoAmbiguousMatches(keys, objectName, phase) {
+    if (!keys || keys.length === 0) return;
+    const preview = keys.slice(0, 5).join(', ');
+    const more = keys.length > 5 ? ` (+${keys.length - 5} more)` : '';
+    throw new AmbiguousTargetMatchError(
+        `Load aborted on ${objectName} during ${phase}: ${keys.length} source row(s) matched more than one target record (${preview}${more}). Refine the traceback selection so it uniquely identifies records.`,
+        { objectName, keys, phase },
+    );
 }
 
 function uniqueStrings(values) {
@@ -598,10 +787,6 @@ function uniqueStrings(values) {
     return [...new Set(list
         .filter((value) => value !== null && value !== undefined && String(value) !== '')
         .map((value) => String(value)))];
-}
-
-function mergeIntoMap(target, source) {
-    for (const [key, value] of source) target.set(key, value);
 }
 
 function chunkArray(values, size) {
@@ -636,11 +821,6 @@ function makeStg3Row(srcId, srcObject, status, error, targetId, runId, values) {
         __runId: runId,
         values: values || {},
     };
-}
-
-function stripExtId(values, extIdColumn) {
-    const { [extIdColumn]: _omit, ...rest } = values;
-    return rest;
 }
 
 /* ------------------------------------------------------------------ *

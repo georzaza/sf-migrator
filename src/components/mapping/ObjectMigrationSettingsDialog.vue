@@ -48,26 +48,18 @@ const settingsStore = useSettingsStore();
 const pipelineStore = usePipelineStore();
 const toast = useToast();
 
-const operationOptions = [
-    { label: 'Insert', value: 'insert' },
-    { label: 'Upsert', value: 'upsert' },
-    { label: 'Update', value: 'update' },
-];
-
 const defaultForm = () => ({
     enabled: true,
-    operation: 'insert',
     batchSize: 200,
-    useBulkApi: true,
     sortToAvoidLocks: false,
-    extractFilter: '',
 });
 
 const form = ref(defaultForm());
 const saving = ref(false);
 const errorMessage = ref('');
-// undefined = user has not changed the External-Id in this dialog session.
-const pendingTracebackFieldId = ref(undefined);
+// undefined = user has not changed the traceback in this dialog session.
+// Otherwise: null to clear, or { strategy, fields:[{id,name}] }.
+const pendingTraceback = ref(undefined);
 
 const dialogHeader = computed(() => {
     const src = props.sourceObjectLabel || 'Source';
@@ -80,7 +72,7 @@ watch(() => props.visible, async (val) => {
 
     errorMessage.value = '';
     form.value = defaultForm();
-    pendingTracebackFieldId.value = undefined;
+    pendingTraceback.value = undefined;
 
     if (!props.sourceObjectId || !props.targetObjectId) return;
 
@@ -89,11 +81,8 @@ watch(() => props.visible, async (val) => {
         if (setting) {
             form.value = {
                 enabled: setting.enabled ?? true,
-                operation: setting.operation ?? 'insert',
                 batchSize: setting.batchSize ?? 200,
-                useBulkApi: setting.useBulkApi ?? true,
                 sortToAvoidLocks: setting.sortToAvoidLocks ?? false,
-                extractFilter: setting.extractFilter ?? '',
             };
         }
     } catch (error) {
@@ -105,8 +94,9 @@ function onClose() {
     emit('update:visible', false);
 }
 
-function onTracebackChange(field) {
-    pendingTracebackFieldId.value = field?.id ?? null;
+function onTracebackChange(selection) {
+    // selection = { strategy, fields:[{id,name}] } or { strategy: null, fields: [] }
+    pendingTraceback.value = selection;
 }
 
 async function onSave() {
@@ -118,16 +108,17 @@ async function onSave() {
     try {
         const payload = {
             enabled: form.value.enabled,
-            operation: form.value.operation,
             batchSize: form.value.batchSize,
-            useBulkApi: form.value.useBulkApi,
             sortToAvoidLocks: form.value.sortToAvoidLocks,
-            extractFilter: form.value.extractFilter?.trim() ? form.value.extractFilter.trim() : null,
         };
 
         await settingsStore.saveSetting(props.sourceObjectId, props.targetObjectId, payload);
-        if (pendingTracebackFieldId.value !== undefined) {
-            await pipelineStore.saveTracebackField(props.sourceObjectId, props.targetObjectId, pendingTracebackFieldId.value);
+        if (pendingTraceback.value !== undefined) {
+            const sel = pendingTraceback.value;
+            const body = sel?.strategy
+                ? { strategy: sel.strategy, fieldIds: sel.fields.map((f) => f.id) }
+                : null;
+            await pipelineStore.saveTraceback(props.sourceObjectId, props.targetObjectId, body);
         }
         toast.add({ severity: 'success', summary: 'Saved', detail: 'Migration settings saved', life: 3000 });
         emit('saved');
@@ -160,19 +151,7 @@ async function onSave() {
             </div>
 
             <div class="field-row">
-                <label for="setting-operation">Operation</label>
-                <Dropdown
-                    id="setting-operation"
-                    v-model="form.operation"
-                    :options="operationOptions"
-                    optionLabel="label"
-                    optionValue="value"
-                    class="w-full"
-                />
-            </div>
-
-            <div class="field-row">
-                <label>Traceback External-Id field</label>
+                <label>Traceback (source &harr; target correlation)</label>
                 <TracebackFieldSelect
                     :sourceObjectId="sourceObjectId"
                     :targetObjectId="targetObjectId"
@@ -180,41 +159,47 @@ async function onSave() {
                     @change="onTracebackChange"
                 />
                 <small class="field-hint">
-                    Unique field on the target used to trace records back to the source and resolve lookups. Saved with this dialog.
+                    How records are traced back to the source after load. Pick a single field (External Id, Unique, or Alphanumeric &ge; 18 chars) — the source record Id is written into it — or a combination of fields (composite key) where you guarantee uniqueness.
                 </small>
             </div>
 
             <div class="field-row">
-                <label for="setting-batch">Batch Size</label>
-                <InputNumber
-                    id="setting-batch"
-                    v-model="form.batchSize"
-                    :min="1"
-                    :max="10000"
-                    showButtons
-                    class="w-full"
-                />
+                <small class="field-hint">
+                    Extract filters (SOQL WHERE clauses) are now configured per <strong>source object</strong> in the Pipeline view's Extraction pane.
+                </small>
             </div>
 
-            <div class="field-row checkbox-row">
-                <Checkbox v-model="form.useBulkApi" :binary="true" inputId="setting-bulk" />
-                <label for="setting-bulk">Use Bulk API</label>
-            </div>
+            <Divider />
 
-            <div class="field-row checkbox-row">
-                <Checkbox v-model="form.sortToAvoidLocks" :binary="true" inputId="setting-sort" />
-                <label for="setting-sort">Sort records to avoid row locks</label>
-            </div>
+            <div class="under-dev-section">
+                <Message severity="warn" :closable="false">
+                    <template #messageicon><i class="pi pi-wrench"></i></template>
+                    The settings below are under development and have no effect yet.
+                </Message>
 
-            <div class="field-row">
-                <label for="setting-filter">Extract Filter (optional WHERE clause)</label>
-                <Textarea
-                    id="setting-filter"
-                    v-model="form.extractFilter"
-                    rows="2"
-                    placeholder="e.g. IsActive = true"
-                    class="w-full"
-                />
+                <div class="field-row">
+                    <label for="setting-batch">
+                        Batch Size
+                        <Tag value="Under development" severity="warn" class="ml-2" />
+                    </label>
+                    <InputNumber
+                        id="setting-batch"
+                        v-model="form.batchSize"
+                        :min="1"
+                        :max="10000"
+                        showButtons
+                        :disabled="true"
+                        class="w-full"
+                    />
+                </div>
+
+                <div class="field-row checkbox-row">
+                    <Checkbox v-model="form.sortToAvoidLocks" :binary="true" inputId="setting-sort" :disabled="true" />
+                    <label for="setting-sort">
+                        Sort records to avoid row locks
+                        <Tag value="Under development" severity="warn" class="ml-2" />
+                    </label>
+                </div>
             </div>
         </form>
 
@@ -255,5 +240,23 @@ async function onSave() {
 
 .mb-3 {
     margin-bottom: 0.75rem;
+}
+
+.ml-2 {
+    margin-left: 0.5rem;
+}
+
+.under-dev-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 0.75rem;
+    border-radius: 6px;
+    background: var(--surface-ground);
+}
+
+.filter-textarea {
+    font-family: var(--font-family-monospace, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.85rem;
 }
 </style>

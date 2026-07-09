@@ -1436,6 +1436,9 @@ onMounted(async () => {
 }
 
 .org-selector-section {
+    position: sticky;
+    top: 0;
+    z-index: 20;
     display: flex;
     align-items: center;
     gap: 2rem;
@@ -1444,6 +1447,7 @@ onMounted(async () => {
     background: var(--surface-card);
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid var(--surface-border);
 }
 
 .org-selector {

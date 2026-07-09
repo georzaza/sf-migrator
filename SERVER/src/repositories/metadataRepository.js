@@ -138,6 +138,14 @@ async function getStats(sfOrgId) {
     };
 }
 
+async function updateObjectExtractFilter(id, extractFilter) {
+    const [count] = await SfObjectMetadata.update(
+        { extractFilter },
+        { where: { id } },
+    );
+    return count > 0;
+}
+
 export default {
     findOrCreateObject,
     findOrCreateField,
@@ -149,4 +157,5 @@ export default {
     bulkUpsertObjects,
     bulkUpsertFields,
     getStats,
+    updateObjectExtractFilter,
 };

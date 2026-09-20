@@ -280,6 +280,37 @@ export const useMappingStore = defineStore('mapping', () => {
         error.value = null;
     }
 
+    /**
+     * Download all mappings for an org pair as a CSV file.
+     */
+    async function exportMappingsCsv(sourceOrgId, targetOrgId) {
+        const response = await axiosInstance.get('/api', {
+            headers: { action: 'export-mappings-csv', sourceOrgId, targetOrgId },
+            responseType: 'blob',
+        });
+        const url = URL.createObjectURL(new Blob([response.data], { type: 'text/csv' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'mappings.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    /**
+     * Import mappings from parsed CSV rows (array of objects with header keys).
+     * @param {string} sourceOrgId
+     * @param {string} targetOrgId
+     * @param {Array<object>} rows - parsed CSV rows with keys: sourceObject, sourceField,
+     *   mappingType, targetObject, targetField, transformationRule, constantValue
+     * @returns {Promise<{ created: number, skipped: number, errors: string[] }>}
+     */
+    async function importMappingsCsv(sourceOrgId, targetOrgId, rows) {
+        const response = await axiosInstance.put('/api', { sourceOrgId, targetOrgId, rows }, {
+            headers: { action: 'import-mappings-csv' },
+        });
+        return response.data.data || { created: 0, skipped: 0, errors: [] };
+    }
+
     return {
         // State
         objectMappings,
@@ -304,5 +335,7 @@ export const useMappingStore = defineStore('mapping', () => {
         setCurrentMapping,
         validateObjectMapping,
         clearMappings,
+        exportMappingsCsv,
+        importMappingsCsv,
     };
 });

@@ -11,7 +11,6 @@ import authMiddleware from '../middleware/authMiddleware.js';
 import orgRepo from '../repositories/orgRepository.js';
 import mdtRepo from '../repositories/metadataRepository.js';
 //import mappingRepo from '../repositories/mappingRepository.js';
-import orgStatsService from '../services/orgStatsService.js';
 import mdtService from '../services/metadataService.js';
 import sfService from '../services/salesforceService.js';
 import mappingService from '../services/mappingService.js';
@@ -158,20 +157,6 @@ router.get('/', authMiddleware, async (req, res) => {
         }
     }
 
-    else if (action === 'get-org-stats') {
-        const orgId = req.headers.orgid;
-        if (!orgId) {
-            return sendResponse(res, 400, false, 'Org ID is required');
-        }
-        try {
-            const stats = await fsService.getLatestOrgStats(orgId);
-            sendResponse(res, 200, true, 'Metadata statistics retrieved successfully', stats);
-        } catch (error) {
-            log.error('Failed to retrieve metadata statistics', error, { orgId });
-            sendResponse(res, 500, false, `Failed to retrieve metadata statistics.`);
-        }
-    }
-
     else if (action === 'get-mappings') {
         const sourceOrgId = req.headers.sourceorgid;
         const targetOrgId = req.headers.targetorgid;
@@ -284,28 +269,25 @@ router.get('/', authMiddleware, async (req, res) => {
         }
     }
 
-    else if (action === 'get-traceback-candidates') {
+    else if (action === 'get-upsert-config') {
         const targetObjectId = req.headers.targetobjectid;
         const sourceObjectId = req.headers.sourceobjectid;
         if (!targetObjectId) {
             return sendResponse(res, 400, false, 'Target object ID is required');
         }
         try {
-            const candidates = await tracebackService.listTracebackCandidates(targetObjectId);
-            // Include the names of fields already user-mapped so the UI can warn
-            // when a tier-1/2/3 selection would override a mapping.
-            let mappedTargetFieldNames = [];
+            const candidates = await tracebackService.listExternalIdCandidates(targetObjectId);
+            let config = { upsertExternalId: null, operation: 'upsert' };
             if (sourceObjectId) {
-                const names = await tracebackService.getMappedTargetFieldNames(sourceObjectId, targetObjectId);
-                mappedTargetFieldNames = Array.from(names);
+                config = await tracebackService.getUpsertConfig(sourceObjectId, targetObjectId);
             }
-            sendResponse(res, 200, true, 'Traceback candidates retrieved successfully', {
-                ...candidates,
-                mappedTargetFieldNames,
+            sendResponse(res, 200, true, 'Upsert config retrieved successfully', {
+                externalIdCandidates: candidates,
+                ...config,
             });
         } catch (error) {
-            log.error('Failed to retrieve traceback candidates', error, { targetObjectId });
-            sendResponse(res, 500, false, error.message || 'Failed to retrieve traceback candidates');
+            log.error('Failed to retrieve upsert config', error, { targetObjectId });
+            sendResponse(res, 500, false, error.message || 'Failed to retrieve upsert config');
         }
     }
 
@@ -352,6 +334,78 @@ router.get('/', authMiddleware, async (req, res) => {
         }
     }
 
+    else if (action === 'get-extraction-results') {
+        const sourceOrgId = req.headers.sourceorgid;
+        const targetOrgId = req.headers.targetorgid || null;
+        if (!sourceOrgId) {
+            return sendResponse(res, 400, false, 'sourceOrgId is required');
+        }
+        try {
+            const results = await extractionService.getExtractionResults(sourceOrgId, targetOrgId);
+            sendResponse(res, 200, true, 'Extraction results retrieved successfully', results);
+        } catch (error) {
+            log.error('Failed to retrieve extraction results', error, { sourceOrgId });
+            sendResponse(res, 500, false, error.message || 'Failed to retrieve extraction results');
+        }
+    }
+
+    else if (action === 'download-extraction-csv') {
+        const sourceOrgId = req.headers.sourceorgid;
+        const objectName = req.headers.objectname;
+        if (!sourceOrgId || !objectName) {
+            return sendResponse(res, 400, false, 'sourceOrgId and objectName are required');
+        }
+        try {
+            const csv = await extractionService.resolveExtractionCsvData(sourceOrgId, objectName);
+            if (csv === null) {
+                return sendResponse(res, 404, false, 'No extraction data found for this object');
+            }
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="${objectName}_extracted.csv"`);
+            res.send(csv);
+        } catch (error) {
+            log.error('Failed to download extraction CSV', error, { sourceOrgId, objectName });
+            sendResponse(res, 500, false, error.message || 'Failed to download extraction CSV');
+        }
+    }
+
+    else if (action === 'download-transform-csv') {
+        const targetOrgId = req.headers.targetorgid;
+        const objectName = req.headers.objectname;
+        if (!targetOrgId || !objectName) {
+            return sendResponse(res, 400, false, 'targetOrgId and objectName are required');
+        }
+        try {
+            const csv = await transformService.resolveTransformCsvData(targetOrgId, objectName);
+            if (csv === null) {
+                return sendResponse(res, 404, false, 'No transform data found for this object');
+            }
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="${objectName}_transformed.csv"`);
+            res.send(csv);
+        } catch (error) {
+            log.error('Failed to download transform CSV', error, { targetOrgId, objectName });
+            sendResponse(res, 500, false, error.message || 'Failed to download transform CSV');
+        }
+    }
+
+    else if (action === 'export-mappings-csv') {
+        const sourceOrgId = req.headers.sourceorgid;
+        const targetOrgId = req.headers.targetorgid;
+        if (!sourceOrgId || !targetOrgId) {
+            return sendResponse(res, 400, false, 'sourceOrgId and targetOrgId are required');
+        }
+        try {
+            const csv = await mappingService.exportMappingsCsv(sourceOrgId, targetOrgId);
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename="mappings.csv"');
+            res.send(csv);
+        } catch (error) {
+            log.error('Failed to export mappings CSV', error, { sourceOrgId, targetOrgId });
+            sendResponse(res, 500, false, error.message || 'Failed to export mappings CSV');
+        }
+    }
+
     else {
         sendResponse(res, 400, false, 'Unknown GET action');
     }
@@ -379,13 +433,7 @@ router.post('/', authMiddleware, async (req, res) => {
             // STEP 1: object & field metadata retrieval
             // Return the inner promise so rejections propagate to the top level .catch
             mdtService.analyzeAndSaveOrg(orgId, options)
-                .then(() => {
-                    log.info('Objects & fields metadata retrieval was successful. Entering org stats calculation.', { orgId });
-                    // STEP 2: org stats retrieval — returns the promise
-                    return orgStatsService.calculateAndSaveOrgStats(conn, orgId);
-                })
                 .then(async () => {
-                    log.info('Org stats retrieval was successful.', { orgId });
                     // STEP 3: all analysis completed, update db
                     await orgRepo.updateAnalysisStatus(orgId, 'complete');
                     log.info('Org analysis completed', { orgId });
@@ -713,18 +761,39 @@ router.put('/', authMiddleware, async (req, res) => {
         }
     }
 
-    else if (action === 'set-traceback') {
-        const { sourceObjectId, targetObjectId, strategy, fieldIds } = req.body;
+    else if (action === 'set-upsert-config') {
+        const { sourceObjectId, targetObjectId, externalIdFieldId, operation } = req.body;
         if (!sourceObjectId || !targetObjectId) {
             return sendResponse(res, 400, false, 'Source and target object IDs are required');
         }
         try {
-            const selection = strategy ? { strategy, fieldIds } : null;
-            const saved = await tracebackService.setTraceback(sourceObjectId, targetObjectId, selection);
-            sendResponse(res, 200, true, 'Traceback configuration saved successfully', saved);
+            const results = {};
+            if (operation !== undefined) {
+                results.operation = await tracebackService.setOperation(sourceObjectId, targetObjectId, operation);
+            }
+            if (externalIdFieldId !== undefined) {
+                results.upsertExternalId = await tracebackService.setUpsertExternalId(
+                    sourceObjectId, targetObjectId, externalIdFieldId || null,
+                );
+            }
+            sendResponse(res, 200, true, 'Upsert configuration saved successfully', results);
         } catch (error) {
-            log.error('Failed to save traceback configuration', error, { sourceObjectId, targetObjectId });
-            sendResponse(res, 500, false, error.message || 'Failed to save traceback configuration');
+            log.error('Failed to save upsert configuration', error, { sourceObjectId, targetObjectId });
+            sendResponse(res, 500, false, error.message || 'Failed to save upsert configuration');
+        }
+    }
+
+    else if (action === 'import-mappings-csv') {
+        const { sourceOrgId, targetOrgId, rows } = req.body;
+        if (!sourceOrgId || !targetOrgId || !Array.isArray(rows)) {
+            return sendResponse(res, 400, false, 'sourceOrgId, targetOrgId and rows array are required');
+        }
+        try {
+            const result = await mappingService.importMappingsCsv(sourceOrgId, targetOrgId, rows);
+            sendResponse(res, 200, true, `Import complete: ${result.created} created, ${result.skipped} skipped`, result);
+        } catch (error) {
+            log.error('Failed to import mappings CSV', error, { sourceOrgId, targetOrgId });
+            sendResponse(res, 500, false, error.message || 'Failed to import mappings CSV');
         }
     }
 

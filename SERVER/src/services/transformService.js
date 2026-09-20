@@ -77,23 +77,14 @@ async function runTransform({ sourceOrgId, targetOrgId }) {
     const fieldMappings = await mappingService.getFieldMappingsByOrgPair(sourceOrgId, targetOrgId);
     const settingsMap = await migrationSettingService.getEffectiveSettingsMap(sourceOrgId, targetOrgId);
 
-    // Group field mappings by target object; skip pairs marked disabled.
+    // Group field mappings by target object.
     const byTarget = new Map(); // targetObjectId -> { targetObject, mappings: [] }
-    let skippedCount = 0;
     for (const fm of fieldMappings) {
         if (!fm.targetObject?.name || !fm.targetObjectId) continue;
-        const setting = settingsMap.get(fm.sourceObjectId)?.get(fm.targetObjectId);
-        if (setting && setting.enabled === false) {
-            skippedCount += 1;
-            continue;
-        }
         if (!byTarget.has(fm.targetObjectId)) {
             byTarget.set(fm.targetObjectId, { targetObject: fm.targetObject, mappings: [] });
         }
         byTarget.get(fm.targetObjectId).mappings.push(fm);
-    }
-    if (skippedCount > 0) {
-        log.info('Skipped disabled object pairs in transform', { skippedCount });
     }
 
     if (byTarget.size === 0) {
@@ -529,6 +520,33 @@ function quoteIdentifier(identifier) {
     return `"${String(identifier).replace(/"/g, '""')}"`;
 }
 
+function csvEscapeTransform(value) {
+    const s = String(value ?? '');
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+async function resolveTransformCsvData(targetOrgId, targetObjectName) {
+    const tableName = getStg2TableName(targetOrgId, targetObjectName);
+    if (!(await tableExists(tableName))) return null;
+    // Get the latest run ID
+    const [runIdRows] = await db.sequelize.query(
+        `SELECT "__runId" AS runid FROM ${quoteIdentifier(tableName)} ORDER BY "__transformedAt" DESC LIMIT 1;`,
+    );
+    const runId = runIdRows?.[0]?.runid;
+    if (!runId) return '';
+    const [rows] = await db.sequelize.query(
+        `SELECT * FROM ${quoteIdentifier(tableName)} WHERE "__runId" = $1 LIMIT 50000;`,
+        { bind: [runId] },
+    );
+    if (rows.length === 0) return '';
+    const headers = Object.keys(rows[0]).filter((h) => h !== '__rowId');
+    const lines = [headers.map(csvEscapeTransform).join(',')];
+    for (const row of rows) {
+        lines.push(headers.map((h) => csvEscapeTransform(row[h])).join(','));
+    }
+    return lines.join('\r\n');
+}
+
 export default {
     runTransform,
     getTransformStatus,
@@ -536,4 +554,5 @@ export default {
         transformStatusByKey.set(statusKey(sourceOrgId, targetOrgId), status);
     },
     getStg2TableName,
+    resolveTransformCsvData,
 };

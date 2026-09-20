@@ -23,11 +23,6 @@ const router = createRouter({
             redirect: ' ',
             children: [
                 {
-                    path: '/org-stats',
-                    name: 'org-stats',
-                    component: () => import('@/views/OrgStatsView.vue')
-                },
-                {
                     path: '/migration-workspace',
                     name: 'migration-workspace',
                     component: () => import('@/views/MigrationWorkspace.vue')

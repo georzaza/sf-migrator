@@ -23,7 +23,6 @@ const handleLogin = async () => {
             router.push('/auth/access');
             return;
         }
-        // TODO, route to welcome, add navigation from welcome to migration workspace
         setTimeout(() => { router.push('/migration-workspace'); }, 300);
     }
     catch (error) {

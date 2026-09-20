@@ -1,29 +1,20 @@
 /**
- * Traceback Service — load correlation strategy + field selection.
+ * Upsert Key Service — External ID field selection for upsert operations.
  *
- * The user picks HOW source records map back to their target counterparts after
- * a load. We no longer assume a target object has an External Id field. Four
- * tiers are offered, in priority order, and the composite tier is ALWAYS
- * available as a fallback:
+ * The user selects a target External ID field that will serve as the upsert key
+ * during migration. The Salesforce Bulk API 2.0 upsert operation uses this field
+ * to match existing records (update) or create new ones (insert).
  *
- *   T1 'external-id'  : field.externalId && updateable && !autoNumber
- *   T2 'unique'       : field.unique     && updateable && !autoNumber   (and not T1)
- *   T3 'alphanumeric' : textual field (string/textarea/url/email/encryptedstring)
- *                       with length >= 18, updateable, !autoNumber       (and not T1/T2)
- *   T4 'composite'    : any 2+ user-picked target fields — the user is fully
- *                       responsible for choosing a tuple that uniquely
- *                       identifies a target record. No validity check.
+ * Requirements:
+ *  - Field must be a Salesforce External ID field (externalId === true)
+ *  - Field must be updateable and not auto-number
+ *  - Field must be user-mapped (source field → target external ID field)
  *
- * For tiers 1–3 the loader writes the SOURCE record Id into the chosen field
- * and reconciles after insert via SOQL `WHERE field IN (sourceIds)`. For tier 4
- * the loader inserts user-mapped values as-is and reconciles by tuple match.
+ * Selection is stored on `MigrationSetting.metadata.upsertExternalId`:
+ *   { id: fieldId, name: apiName }
  *
- * Selection is stored on `MigrationSetting.metadata.traceback`:
- *   { strategy: 'external-id'|'unique'|'alphanumeric'|'composite',
- *     fields:   [ { id, name }, ... ] }
- *
- * Legacy `metadata.tracebackExternalIdField` is translated on read to
- * `{ strategy:'external-id', fields:[that field] }` and dropped on the next save.
+ * The migration operation ('insert' | 'upsert') is stored separately on
+ * `MigrationSetting.metadata.operation` (defaults to 'upsert').
  */
 
 import metadataRepo from '../repositories/metadataRepository.js';
@@ -31,191 +22,164 @@ import migrationSettingRepo from '../repositories/migrationSettingRepository.js'
 import mappingRepo from '../repositories/mappingRepository.js';
 import logger from '../lib/logger.js';
 
-const log = logger.create('tracebackService');
-
-// Textual Salesforce field types that can carry an 18-char alphanumeric Id token.
-const ALPHANUMERIC_TYPES = new Set(['string', 'textarea', 'url', 'email', 'encryptedstring']);
-
-const VALID_STRATEGIES = new Set(['external-id', 'unique', 'alphanumeric', 'composite']);
-
-function notAutoNumber(field) {
-    return field.autoNumber !== true;
-}
+const log = logger.create('upsertKeyService');
 
 function isExternalIdCandidate(field) {
-    return field.externalId === true && field.updateable === true && notAutoNumber(field);
+    return field.externalId === true && field.updateable === true && field.autoNumber !== true;
 }
 
-function isUniqueCandidate(field) {
-    return field.unique === true && field.updateable === true && notAutoNumber(field) && !isExternalIdCandidate(field);
-}
-
-function isAlphanumericCandidate(field) {
-    if (!field.updateable || !notAutoNumber(field)) return false;
-    if (isExternalIdCandidate(field) || isUniqueCandidate(field)) return false;
-    const type = String(field.type || '').toLowerCase();
-    if (!ALPHANUMERIC_TYPES.has(type)) return false;
-    return Number(field.length || 0) >= 18;
-}
-
-// Tier 4: any user-writable, non-system field is fair game. The user owns
-// uniqueness, so we don't filter beyond updateable + !autoNumber.
-function isCompositeCandidate(field) {
-    if (field.autoNumber === true) return false;
-    if (field.updateable !== true) return false;
-    return true;
-}
-
-function projectField(field, tier) {
+function projectField(field) {
     return {
         id: field.id,
         name: field.name,
         label: field.label,
         type: field.type,
-        length: field.length ?? null,
         externalId: field.externalId === true,
-        unique: field.unique === true,
-        tier,
     };
 }
 
 /**
- * Build the tiered candidate lists for a target object. The same field never
- * appears in more than one of {external, unique, alphanumeric}; `composite`
- * is independent and may overlap with the others.
+ * List all External ID fields available on a target object.
  */
-async function listTracebackCandidates(targetObjectId) {
+async function listExternalIdCandidates(targetObjectId) {
     if (!targetObjectId) throw new Error('targetObjectId is required');
     const fields = await metadataRepo.findFieldsByObjectId(targetObjectId);
-    const external = [];
-    const unique = [];
-    const alphanumeric = [];
-    const composite = [];
+    const candidates = [];
     for (const f of fields) {
-        if (isExternalIdCandidate(f)) external.push(projectField(f, 'external-id'));
-        else if (isUniqueCandidate(f)) unique.push(projectField(f, 'unique'));
-        else if (isAlphanumericCandidate(f)) alphanumeric.push(projectField(f, 'alphanumeric'));
-        if (isCompositeCandidate(f)) composite.push(projectField(f, 'composite'));
-    }
-    const byLabel = (a, b) => String(a.label || a.name).localeCompare(String(b.label || b.name));
-    external.sort(byLabel);
-    unique.sort(byLabel);
-    alphanumeric.sort(byLabel);
-    composite.sort(byLabel);
-    return { external, unique, alphanumeric, composite };
-}
-
-function emptyTraceback() {
-    return { strategy: null, fields: [] };
-}
-
-function readStoredTraceback(setting) {
-    const meta = setting?.metadata || {};
-    if (meta.traceback && meta.traceback.strategy && Array.isArray(meta.traceback.fields)) {
-        const fields = meta.traceback.fields
-            .filter((f) => f && f.id && f.name)
-            .map((f) => ({ id: f.id, name: f.name }));
-        if (VALID_STRATEGIES.has(meta.traceback.strategy) && fields.length > 0) {
-            return { strategy: meta.traceback.strategy, fields };
+        if (isExternalIdCandidate(f)) {
+            candidates.push(projectField(f));
         }
     }
-    // Backward-compat: legacy single-field external-id selection.
-    const legacy = meta.tracebackExternalIdField;
-    if (legacy && legacy.id && legacy.name) {
-        return { strategy: 'external-id', fields: [{ id: legacy.id, name: legacy.name }] };
+    const byLabel = (a, b) => String(a.label || a.name).localeCompare(String(b.label || b.name));
+    candidates.sort(byLabel);
+    return candidates;
+}
+
+function readStoredUpsertKey(setting) {
+    const meta = setting?.metadata || {};
+
+    // New format: metadata.upsertExternalId
+    if (meta.upsertExternalId && meta.upsertExternalId.id && meta.upsertExternalId.name) {
+        return { id: meta.upsertExternalId.id, name: meta.upsertExternalId.name };
     }
-    return emptyTraceback();
+
+    // Legacy: migrate from old traceback format (external-id strategy only)
+    if (meta.traceback?.strategy === 'external-id' && meta.traceback.fields?.[0]) {
+        const field = meta.traceback.fields[0];
+        if (field.id && field.name) {
+            return { id: field.id, name: field.name };
+        }
+    }
+
+    // Legacy: metadata.tracebackExternalIdField
+    if (meta.tracebackExternalIdField && meta.tracebackExternalIdField.id && meta.tracebackExternalIdField.name) {
+        return { id: meta.tracebackExternalIdField.id, name: meta.tracebackExternalIdField.name };
+    }
+
+    return null;
+}
+
+function readStoredOperation(setting) {
+    // operation is a proper DB column on MigrationSetting, not stored in metadata.
+    // Default to 'upsert' if not set.
+    const operation = setting?.operation || 'upsert';
+    return ['insert', 'upsert'].includes(operation) ? operation : 'upsert';
 }
 
 /**
- * Read the stored traceback configuration for an object pair.
- * @returns {Promise<{ strategy: string|null, fields: Array<{id,name}> }>}
+ * Read the stored upsert External ID configuration and operation for an object pair.
+ * @returns {Promise<{ upsertExternalId: {id, name}|null, operation: 'insert'|'upsert' }>}
  */
-async function getTraceback(sourceObjectId, targetObjectId) {
+async function getUpsertConfig(sourceObjectId, targetObjectId) {
     const setting = await migrationSettingRepo.findByObjectPair(sourceObjectId, targetObjectId);
-    return readStoredTraceback(setting);
+    return {
+        upsertExternalId: readStoredUpsertKey(setting),
+        operation: readStoredOperation(setting),
+    };
 }
 
-async function validateFieldsForStrategy(targetObjectId, strategy, fieldIds) {
-    const ids = Array.isArray(fieldIds) ? fieldIds.filter(Boolean) : [];
-    if (ids.length === 0) {
-        throw new Error('At least one field id is required');
-    }
-    if (strategy === 'composite') {
-        if (ids.length < 2) {
-            throw new Error('Composite traceback requires 2 or more fields');
-        }
-    } else if (ids.length !== 1) {
-        throw new Error(`Strategy "${strategy}" requires exactly one field`);
+/**
+ * Set the upsert External ID field for an object pair.
+ * @param {string|number} sourceObjectId
+ * @param {string|number} targetObjectId
+ * @param {string|number|null} fieldId - External ID field id, or null to clear
+ * @returns {Promise<{id, name}|null>}
+ */
+async function setUpsertExternalId(sourceObjectId, targetObjectId, fieldId) {
+    if (!sourceObjectId || !targetObjectId) {
+        throw new Error('sourceObjectId and targetObjectId are required');
     }
 
-    const fields = [];
-    for (const fieldId of ids) {
+    let upsertExternalId = null;
+
+    if (fieldId) {
         const field = await metadataRepo.findFieldById(fieldId);
         if (!field) throw new Error(`Field not found: ${fieldId}`);
         if (field.objectMetadataId !== targetObjectId) {
             throw new Error(`Field ${field.name} does not belong to the target object`);
         }
-        if (strategy === 'external-id' && !isExternalIdCandidate(field)) {
-            throw new Error(`Field "${field.label || field.name}" is not a valid External Id candidate`);
+        if (!isExternalIdCandidate(field)) {
+            throw new Error(`Field "${field.label || field.name}" is not a valid External ID (must be externalId=true, updateable, and not auto-number)`);
         }
-        if (strategy === 'unique' && !isUniqueCandidate(field)) {
-            throw new Error(`Field "${field.label || field.name}" is not a valid Unique candidate`);
-        }
-        if (strategy === 'alphanumeric' && !isAlphanumericCandidate(field)) {
-            throw new Error(`Field "${field.label || field.name}" is not a valid Alphanumeric candidate (textual, length >= 18, updateable)`);
-        }
-        if (strategy === 'composite' && !isCompositeCandidate(field)) {
-            throw new Error(`Field "${field.label || field.name}" cannot be used in a composite key (not updateable or autoNumber)`);
-        }
-        fields.push({ id: field.id, name: field.name });
-    }
-    const seen = new Set();
-    return fields.filter((f) => (seen.has(f.id) ? false : (seen.add(f.id), true)));
-}
-
-/**
- * Persist (or clear) the traceback configuration.
- *  - `selection = null` (or { strategy: null }) clears the configuration.
- *  - `selection = { strategy, fieldIds }` sets it (validated per strategy).
- *
- * @returns {Promise<{ strategy: string|null, fields: Array<{id,name}> }>}
- */
-async function setTraceback(sourceObjectId, targetObjectId, selection) {
-    if (!sourceObjectId || !targetObjectId) {
-        throw new Error('sourceObjectId and targetObjectId are required');
-    }
-
-    let stored = emptyTraceback();
-    if (selection && selection.strategy) {
-        if (!VALID_STRATEGIES.has(selection.strategy)) {
-            throw new Error(`Unknown traceback strategy: ${selection.strategy}`);
-        }
-        const fields = await validateFieldsForStrategy(targetObjectId, selection.strategy, selection.fieldIds);
-        stored = { strategy: selection.strategy, fields };
+        upsertExternalId = { id: field.id, name: field.name };
     }
 
     const existing = await migrationSettingRepo.findByObjectPair(sourceObjectId, targetObjectId);
     const metadata = { ...(existing?.metadata || {}) };
-    if (stored.strategy) metadata.traceback = stored;
-    else delete metadata.traceback;
+
+    if (upsertExternalId) {
+        metadata.upsertExternalId = upsertExternalId;
+    } else {
+        delete metadata.upsertExternalId;
+    }
+
+    // Clean up legacy fields
+    delete metadata.traceback;
     delete metadata.tracebackExternalIdField;
 
     await migrationSettingRepo.upsert(sourceObjectId, targetObjectId, { metadata });
-    log.info('Traceback configuration saved', {
+    log.info('Upsert External ID saved', {
         sourceObjectId,
         targetObjectId,
-        strategy: stored.strategy,
-        fields: stored.fields.map((f) => f.name),
+        fieldName: upsertExternalId?.name || null,
     });
-    return stored;
+    return upsertExternalId;
+}
+
+/**
+ * Set the operation type for an object pair.
+ * @param {string|number} sourceObjectId
+ * @param {string|number} targetObjectId
+ * @param {'insert'|'upsert'} operation
+ * @returns {Promise<'insert'|'upsert'>}
+ */
+async function setOperation(sourceObjectId, targetObjectId, operation) {
+    if (!sourceObjectId || !targetObjectId) {
+        throw new Error('sourceObjectId and targetObjectId are required');
+    }
+    if (!['insert', 'upsert'].includes(operation)) {
+        throw new Error(`Invalid operation: ${operation}. Must be 'insert' or 'upsert'.`);
+    }
+
+    // operation is a proper DB column on MigrationSetting.
+    await migrationSettingRepo.upsert(sourceObjectId, targetObjectId, { operation });
+    log.info('Operation saved', { sourceObjectId, targetObjectId, operation });
+    return operation;
+}
+
+/**
+ * Check if the selected upsert External ID field is mapped.
+ * @returns {Promise<boolean>} - true if the field is mapped, false otherwise
+ */
+async function isUpsertExternalIdMapped(sourceObjectId, targetObjectId, externalIdFieldName) {
+    if (!externalIdFieldName) return false;
+    const mappings = await mappingRepo.findFieldMappingsByObjectPair(sourceObjectId, targetObjectId);
+    return mappings.some((m) => m.targetField?.name === externalIdFieldName);
 }
 
 /**
  * Helper for validation/UI warnings: API names of target fields that are
- * already user-mapped for this object pair. For tiers 1–3 the loader will
- * overwrite the mapped value with the source record Id, so the user should
- * be warned about the conflict.
+ * already user-mapped for this object pair.
  * @returns {Promise<Set<string>>}
  */
 async function getMappedTargetFieldNames(sourceObjectId, targetObjectId) {
@@ -228,8 +192,10 @@ async function getMappedTargetFieldNames(sourceObjectId, targetObjectId) {
 }
 
 export default {
-    listTracebackCandidates,
-    getTraceback,
-    setTraceback,
+    listExternalIdCandidates,
+    getUpsertConfig,
+    setUpsertExternalId,
+    setOperation,
+    isUpsertExternalIdMapped,
     getMappedTargetFieldNames,
 };

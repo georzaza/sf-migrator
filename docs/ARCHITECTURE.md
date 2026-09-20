@@ -879,12 +879,12 @@ sequenceDiagram
   U->>F: Enter credentials
   F->>S: POST /auth/login { userIdentifier, password }
   S->>DB: find user by email OR username
-  S->>S: bcrypt.compare, generate JWT (12h)
+  S->>S: bcrypt.compare, generate JWT
   S-->>F: 200 + Set-Cookie: auth_token
   F->>S: GET /auth/whoami
   S-->>F: 200 + { email, username }
   F->>F: update userStore, load orgs
-  F->>U: redirect /welcome
+  F->>U: redirect to homepage
 ```
 
 ### Org Analysis Flow

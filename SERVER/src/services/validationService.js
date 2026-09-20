@@ -161,34 +161,35 @@ async function validateObjectMapping(sourceObjectId, targetObjectId) {
         }
     }
 
-    // BLOCK (load): a load-correlation traceback must be configured, otherwise
-    // source records cannot be matched to their created target records and the
-    // object is not migrated.
-    const selectedTraceback = await tracebackService.getTraceback(sourceObjectId, targetObjectId);
-    if (!selectedTraceback.strategy) {
-        const candidates = await tracebackService.listTracebackCandidates(targetObjectId);
-        const hints = [];
-        if (candidates.external.length) hints.push(`External Id: ${candidates.external.map((c) => c.label || c.name).join(', ')}`);
-        if (candidates.unique.length) hints.push(`Unique: ${candidates.unique.map((c) => c.label || c.name).join(', ')}`);
-        if (candidates.alphanumeric.length) hints.push(`Alphanumeric (length >= 18): ${candidates.alphanumeric.map((c) => c.label || c.name).join(', ')}`);
-        warnings.push({
-            code: 'no-traceback-field',
-            message: hints.length > 0
-                ? `No traceback configured. Pick a single field — ${hints.join(' | ')} — or a combination of fields (composite). Until then, this object will not be migrated.`
-                : `No traceback configured. Pick a combination of fields (composite) that uniquely identifies records on the target. Until then, this object will not be migrated.`,
-        });
-    } else if (selectedTraceback.strategy !== 'composite' && selectedTraceback.fields[0]) {
-        // ADVISORY: for tier 1–3 strategies, warn if the chosen field is also
-        // user-mapped — the loader will overwrite the mapped value with the
-        // source record Id.
-        const mappedNames = await tracebackService.getMappedTargetFieldNames(sourceObjectId, targetObjectId);
-        const tracebackName = selectedTraceback.fields[0].name;
-        if (mappedNames.has(tracebackName)) {
+    // BLOCK (load): for UPSERT operations, an External ID must be configured
+    // and must be mapped. For INSERT operations, External ID is optional.
+    const upsertConfig = await tracebackService.getUpsertConfig(sourceObjectId, targetObjectId);
+    const operation = upsertConfig.operation || 'upsert';
+
+    if (operation === 'upsert') {
+        if (!upsertConfig.upsertExternalId) {
+            const candidates = await tracebackService.listExternalIdCandidates(targetObjectId);
+            const hint = candidates.length > 0
+                ? `Available External ID fields: ${candidates.map((c) => c.label || c.name).join(', ')}`
+                : 'No External ID fields available on this target object. Consider marking a field as External ID in Salesforce.';
             warnings.push({
-                code: 'traceback-field-overrides-mapping',
-                field: tracebackName,
-                message: `Field "${tracebackName}" is both the traceback field and a user-mapped target field. The user mapping will be overridden with the source record Id during load.`,
+                code: 'upsert-requires-external-id',
+                message: `Operation is UPSERT but no External ID is configured. ${hint} Until configured, this object will not be migrated.`,
             });
+        } else {
+            // BLOCK: the upsert External ID field must be mapped
+            const isMapped = await tracebackService.isUpsertExternalIdMapped(
+                sourceObjectId,
+                targetObjectId,
+                upsertConfig.upsertExternalId.name,
+            );
+            if (!isMapped) {
+                warnings.push({
+                    code: 'upsert-external-id-not-mapped',
+                    field: upsertConfig.upsertExternalId.name,
+                    message: `External ID field "${upsertConfig.upsertExternalId.name}" is selected for UPSERT but is not mapped. Map a source field to this target field, or the migration will fail.`,
+                });
+            }
         }
     }
 

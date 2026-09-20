@@ -17,6 +17,8 @@ export function usePipeline() {
     const currentStage = ref('idle');
     const running = ref(false);
     const extracting = ref(false);
+    const transforming = ref(false);
+    const loading = ref(false);
 
     const extractionTimer = ref(null);
     const transformTimer = ref(null);
@@ -116,17 +118,20 @@ export function usePipeline() {
 
     async function runTransform(sourceOrgId, targetOrgId) {
         currentStage.value = 'transform';
+        transforming.value = true;
         let res;
         try {
             res = await store.startTransform(sourceOrgId, targetOrgId);
         } catch (err) {
             const detail = err.response?.data?.message || err.message || 'Failed to start transform';
             toast.add({ severity: 'error', summary: 'Transform', detail, life: 5000 });
+            transforming.value = false;
             return { status: 'failed', error: detail };
         }
         if (res.status !== 202 || !res.data?.success) {
             const detail = res.data?.message || 'Failed to start transform';
             toast.add({ severity: 'error', summary: 'Transform', detail, life: 5000 });
+            transforming.value = false;
             return { status: 'failed', error: detail };
         }
 
@@ -143,22 +148,26 @@ export function usePipeline() {
         } else {
             toast.add({ severity: 'error', summary: 'Transform failed', detail: final.error || 'Transform failed', life: 7000 });
         }
+        transforming.value = false;
         return final;
     }
 
     async function runLoad(sourceOrgId, targetOrgId) {
         currentStage.value = 'load';
+        loading.value = true;
         let res;
         try {
             res = await store.startLoad(sourceOrgId, targetOrgId);
         } catch (err) {
             const detail = err.response?.data?.message || err.message || 'Failed to start load';
             toast.add({ severity: 'error', summary: 'Load', detail, life: 5000 });
+            loading.value = false;
             return { status: 'failed', error: detail };
         }
         if (res.status !== 202 || !res.data?.success) {
             const detail = res.data?.message || 'Failed to start load';
             toast.add({ severity: 'error', summary: 'Load', detail, life: 5000 });
+            loading.value = false;
             return { status: 'failed', error: detail };
         }
 
@@ -176,6 +185,7 @@ export function usePipeline() {
         } else {
             toast.add({ severity: 'error', summary: 'Load failed', detail: final.error || 'Load failed', life: 7000 });
         }
+        loading.value = false;
         return final;
     }
 
@@ -233,6 +243,8 @@ export function usePipeline() {
         currentStage,
         running,
         extracting,
+        transforming,
+        loading,
         runExtraction,
         runTransform,
         runLoad,

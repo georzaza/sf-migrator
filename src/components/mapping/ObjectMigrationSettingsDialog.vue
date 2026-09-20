@@ -17,7 +17,7 @@ import { ref, watch, computed } from 'vue';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { usePipelineStore } from '@/stores/pipelineStore';
 import { useToast } from 'primevue/usetoast';
-import TracebackFieldSelect from '@/components/pipeline/TracebackFieldSelect.vue';
+import UpsertConfigSelect from '@/components/pipeline/UpsertConfigSelect.vue';
 
 const props = defineProps({
     visible: {
@@ -49,7 +49,6 @@ const pipelineStore = usePipelineStore();
 const toast = useToast();
 
 const defaultForm = () => ({
-    enabled: true,
     batchSize: 200,
     sortToAvoidLocks: false,
 });
@@ -57,9 +56,8 @@ const defaultForm = () => ({
 const form = ref(defaultForm());
 const saving = ref(false);
 const errorMessage = ref('');
-// undefined = user has not changed the traceback in this dialog session.
-// Otherwise: null to clear, or { strategy, fields:[{id,name}] }.
-const pendingTraceback = ref(undefined);
+// undefined = user has not changed the upsert config in this dialog session.
+const pendingUpsertConfig = ref(undefined);
 
 const dialogHeader = computed(() => {
     const src = props.sourceObjectLabel || 'Source';
@@ -72,7 +70,7 @@ watch(() => props.visible, async (val) => {
 
     errorMessage.value = '';
     form.value = defaultForm();
-    pendingTraceback.value = undefined;
+    pendingUpsertConfig.value = undefined;
 
     if (!props.sourceObjectId || !props.targetObjectId) return;
 
@@ -80,7 +78,6 @@ watch(() => props.visible, async (val) => {
         const setting = await settingsStore.loadSetting(props.sourceObjectId, props.targetObjectId);
         if (setting) {
             form.value = {
-                enabled: setting.enabled ?? true,
                 batchSize: setting.batchSize ?? 200,
                 sortToAvoidLocks: setting.sortToAvoidLocks ?? false,
             };
@@ -94,9 +91,9 @@ function onClose() {
     emit('update:visible', false);
 }
 
-function onTracebackChange(selection) {
-    // selection = { strategy, fields:[{id,name}] } or { strategy: null, fields: [] }
-    pendingTraceback.value = selection;
+function onUpsertConfigChange(config) {
+    // config = { operation, externalIdFieldId, externalIdFieldName }
+    pendingUpsertConfig.value = config;
 }
 
 async function onSave() {
@@ -107,18 +104,17 @@ async function onSave() {
 
     try {
         const payload = {
-            enabled: form.value.enabled,
             batchSize: form.value.batchSize,
             sortToAvoidLocks: form.value.sortToAvoidLocks,
         };
 
         await settingsStore.saveSetting(props.sourceObjectId, props.targetObjectId, payload);
-        if (pendingTraceback.value !== undefined) {
-            const sel = pendingTraceback.value;
-            const body = sel?.strategy
-                ? { strategy: sel.strategy, fieldIds: sel.fields.map((f) => f.id) }
-                : null;
-            await pipelineStore.saveTraceback(props.sourceObjectId, props.targetObjectId, body);
+        if (pendingUpsertConfig.value !== undefined) {
+            const cfg = pendingUpsertConfig.value;
+            await pipelineStore.saveUpsertConfig(props.sourceObjectId, props.targetObjectId, {
+                operation: cfg.operation,
+                externalIdFieldId: cfg.externalIdFieldId,
+            });
         }
         toast.add({ severity: 'success', summary: 'Saved', detail: 'Migration settings saved', life: 3000 });
         emit('saved');
@@ -145,21 +141,16 @@ async function onSave() {
         </Message>
 
         <form class="settings-form" @submit.prevent="onSave">
-            <div class="field-row checkbox-row">
-                <Checkbox v-model="form.enabled" :binary="true" inputId="setting-enabled" />
-                <label for="setting-enabled">Include this object pair in migration</label>
-            </div>
-
             <div class="field-row">
-                <label>Traceback (source &harr; target correlation)</label>
-                <TracebackFieldSelect
+                <label>Load Operation &amp; External ID</label>
+                <UpsertConfigSelect
                     :sourceObjectId="sourceObjectId"
                     :targetObjectId="targetObjectId"
                     :autoSave="false"
-                    @change="onTracebackChange"
+                    @change="onUpsertConfigChange"
                 />
                 <small class="field-hint">
-                    How records are traced back to the source after load. Pick a single field (External Id, Unique, or Alphanumeric &ge; 18 chars) — the source record Id is written into it — or a combination of fields (composite key) where you guarantee uniqueness.
+                    For <strong>Upsert</strong> (default), Salesforce matches target records via the chosen External ID field — updating existing records or creating new ones. The External ID field must also be mapped to a source field. For <strong>Insert</strong>, all records are always created as new.
                 </small>
             </div>
 

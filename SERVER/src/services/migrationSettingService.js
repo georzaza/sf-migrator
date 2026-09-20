@@ -9,9 +9,9 @@ import logger from '../lib/logger.js';
 const log = logger.create('migrationSettingService');
 
 const ALLOWED_FIELDS = [
-    'enabled',
     'batchSize',
     'sortToAvoidLocks',
+    'operation',
     'externalIdStrategy',
     'metadata',
 ];
@@ -39,9 +39,8 @@ async function getEffectiveSettingsMap(sourceOrgId, targetOrgId) {
     if (!sourceOrgId || !targetOrgId) return out;
     const rows = await migrationSettingRepo.findAllByOrgPair(sourceOrgId, targetOrgId);
     for (const row of rows) {
-        const enabled = row.enabled !== false;
         if (!out.has(row.sourceObjectId)) out.set(row.sourceObjectId, new Map());
-        out.get(row.sourceObjectId).set(row.targetObjectId, { enabled });
+        out.get(row.sourceObjectId).set(row.targetObjectId, {});
     }
     return out;
 }

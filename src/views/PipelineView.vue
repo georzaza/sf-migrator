@@ -10,13 +10,6 @@
             </div>
             <div class="header-right">
                 <Tag :value="overallStatusLabel" :severity="overallStatusSeverity" />
-                <Button
-                    label="Run Migration"
-                    icon="pi pi-play"
-                    :loading="running"
-                    :disabled="!bothOrgsAnalyzed || running"
-                    @click="onRunMigration"
-                />
             </div>
         </div>
 
@@ -123,6 +116,15 @@
                         </template>
                         <p v-else class="stage-hint">Maps staged records to the target schema.</p>
                     </div>
+                    <Button
+                        label="Run transformations"
+                        icon="pi pi-sync"
+                        size="small"
+                        outlined
+                        :loading="transforming"
+                        :disabled="transforming || loading"
+                        @click="onRunTransform"
+                    />
                 </div>
 
                 <!-- Load -->
@@ -145,17 +147,17 @@
                         </template>
                         <p v-else class="stage-hint">Inserts/updates records into the target org.</p>
                     </div>
+                    <Button
+                        label="Load data"
+                        icon="pi pi-upload"
+                        size="small"
+                        outlined
+                        :loading="loading"
+                        :disabled="transforming || loading"
+                        @click="onRunLoad"
+                    />
                 </div>
             </div>
-
-            <Message
-                v-if="pipeline.extractionStatus.extractionStatus !== 'complete'"
-                severity="info"
-                :closable="false"
-                class="prereq-note"
-            >
-                Make sure source data has been extracted before running the migration.
-            </Message>
 
             <!-- Extraction plan -->
             <div class="section-card">
@@ -183,8 +185,7 @@
                     </Column>
                     <Column header="Role" style="width: 10rem">
                         <template #body="{ data }">
-                            <Tag v-if="data.isDisabled" value="All pairs disabled" severity="secondary" />
-                            <Tag v-else-if="data.isIntermediate" value="Lookup parent" severity="info" v-tooltip.top="'Pulled in to resolve relationship paths in expressions/lookups. Not directly mapped.'" />
+                            <Tag v-if="data.isIntermediate" value="Lookup parent" severity="info" v-tooltip.top="'Pulled in to resolve relationship paths in expressions/lookups. Not directly mapped.'" />
                             <Tag v-else value="Mapped" severity="success" />
                         </template>
                     </Column>
@@ -239,16 +240,6 @@
                     </Column>
                     <Column field="sourceObjectName" header="Source Object" style="min-width: 12rem" />
                     <Column field="targetObjectName" header="Target Object" style="min-width: 12rem" />
-                    <Column header="Traceback" style="min-width: 22rem">
-                        <template #body="{ data }">
-                            <TracebackFieldSelect
-                                :sourceObjectId="data.sourceObjectId"
-                                :targetObjectId="data.targetObjectId"
-                                :showWarnings="false"
-                                @change="onTracebackChange"
-                            />
-                        </template>
-                    </Column>
                     <Column header="Settings" style="width: 6rem" :exportable="false">
                         <template #body="{ data }">
                             <Button
@@ -274,6 +265,35 @@
                 </div>
             </div>
 
+            <!-- Extraction results -->
+            <div v-if="pipeline.extractionResults.length" class="section-card">
+                <div class="section-head">
+                    <h2><i class="pi pi-cloud-download"></i> Extraction Results</h2>
+                </div>
+                <DataTable :value="pipeline.extractionResults" size="small">
+                    <Column field="label" header="Object" style="min-width: 14rem">
+                        <template #body="{ data }">
+                            <div class="field-label">{{ data.label }}</div>
+                            <div class="field-name">{{ data.objectName }}</div>
+                        </template>
+                    </Column>
+                    <Column field="rowCount" header="Rows" style="width: 7rem" />
+                    <Column header="Actions" style="width: 9rem" :exportable="false">
+                        <template #body="{ data }">
+                            <Button
+                                v-if="data.tableExists"
+                                icon="pi pi-download"
+                                size="small"
+                                text
+                                v-tooltip.top="'Download extracted CSV'"
+                                @click="downloadExtractionCsv(data.objectName)"
+                            />
+                            <span v-else class="text-sm text-surface-400">No data</span>
+                        </template>
+                    </Column>
+                </DataTable>
+            </div>
+
             <!-- Transform results -->
             <div v-if="transformResults.length" class="section-card">
                 <div class="section-head">
@@ -293,6 +313,17 @@
                     <Column field="errorMessage" header="Message" style="min-width: 14rem">
                         <template #body="{ data }">
                             <span class="error-cell">{{ data.errorMessage }}</span>
+                        </template>
+                    </Column>
+                    <Column header="Download" style="width: 8rem" :exportable="false">
+                        <template #body="{ data }">
+                            <Button
+                                icon="pi pi-download"
+                                size="small"
+                                text
+                                v-tooltip.top="'Download transformed CSV'"
+                                @click="downloadTransformCsv(data.targetObject)"
+                            />
                         </template>
                     </Column>
                 </DataTable>
@@ -316,11 +347,15 @@
                     <Column field="failed" header="Failed" style="width: 6rem" />
                     <Column field="skipped" header="Skipped" style="width: 6rem" />
                     <Column field="deferredUpdated" header="Deferred" style="width: 7rem" />
+                    <Column field="errorMessage" header="Message" style="min-width: 14rem">
+                        <template #body="{ data }">
+                            <span v-if="data.errorMessage" class="text-sm text-red-500">{{ data.errorMessage }}</span>
+                        </template>
+                    </Column>
                     <Column header="Actions" style="min-width: 12rem">
                         <template #body="{ data }">
                             <div class="row-actions">
                                 <Button
-                                    v-if="data.loaded > 0"
                                     icon="pi pi-download"
                                     size="small"
                                     text
@@ -329,7 +364,6 @@
                                     @click="downloadCsv(data.targetObject, 'success')"
                                 />
                                 <Button
-                                    v-if="data.failed > 0"
                                     icon="pi pi-download"
                                     severity="danger"
                                     size="small"
@@ -402,7 +436,7 @@ import { useOrgStore } from '@/stores/orgStore';
 import { usePipelineStore } from '@/stores/pipelineStore';
 import { usePipeline } from '@/composables/usePipeline';
 import { findOrgById, loadMigrationSelection, saveMigrationSelection } from '@/utils/migrationSelection';
-import TracebackFieldSelect from '@/components/pipeline/TracebackFieldSelect.vue';
+import UpsertConfigSelect from '@/components/pipeline/UpsertConfigSelect.vue';
 import LoadErrorDialog from '@/components/pipeline/LoadErrorDialog.vue';
 import ObjectMigrationSettingsDialog from '@/components/mapping/ObjectMigrationSettingsDialog.vue';
 
@@ -410,7 +444,7 @@ const route = useRoute();
 const toast = useToast();
 const orgStore = useOrgStore();
 const pipeline = usePipelineStore();
-const { currentStage, running, extracting, runExtraction, runMigration, resumeIfRunning, stopPolling } = usePipeline();
+const { currentStage, running, extracting, transforming, loading, runExtraction, runTransform, runLoad, resumeIfRunning, stopPolling } = usePipeline();
 
 const selectedSourceOrg = ref(null);
 const selectedTargetOrg = ref(null);
@@ -555,6 +589,11 @@ async function onOrgsReady() {
     } catch (e) {
         toast.add({ severity: 'error', summary: 'Extraction preview', detail: e.response?.data?.message || e.message || 'Failed to load extraction preview', life: 5000 });
     }
+    try {
+        await pipeline.fetchExtractionResults(sourceOrgId.value, targetOrgId.value);
+    } catch (e) {
+        // Non-critical — don't block the rest of the view
+    }
     await resumeIfRunning(sourceOrgId.value, targetOrgId.value);
 }
 
@@ -564,17 +603,42 @@ function onOrgChange() {
     onOrgsReady();
 }
 
-async function onRunMigration() {
+async function onRunTransform() {
     if (!bothOrgsAnalyzed.value) return;
-    await runMigration(sourceOrgId.value, targetOrgId.value);
+    await runTransform(sourceOrgId.value, targetOrgId.value);
+}
+
+async function onRunLoad() {
+    if (!bothOrgsAnalyzed.value) return;
+    await runLoad(sourceOrgId.value, targetOrgId.value);
 }
 
 async function onRunExtraction() {
     if (!sourceOrgId.value) return;
     await runExtraction(sourceOrgId.value);
+    // Refresh extraction results after extraction completes
+    try {
+        await pipeline.fetchExtractionResults(sourceOrgId.value, targetOrgId.value);
+    } catch (e) { /* non-critical */ }
 }
 
-function onTracebackChange() {
+async function downloadExtractionCsv(objectName) {
+    try {
+        await pipeline.downloadExtractionCsv(sourceOrgId.value, objectName);
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Download failed', detail: e.message || 'Extraction CSV not available', life: 5000 });
+    }
+}
+
+async function downloadTransformCsv(objectName) {
+    try {
+        await pipeline.downloadTransformCsv(targetOrgId.value, objectName);
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Download failed', detail: e.message || 'Transform CSV not available', life: 5000 });
+    }
+}
+
+function onUpsertConfigChange() {
     // Selection persisted by the component; nothing else required here.
 }
 

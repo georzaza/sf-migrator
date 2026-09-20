@@ -59,7 +59,7 @@ async function getLoadPlan(sourceOrgId, targetOrgId) {
     const fieldMappings = fieldMappingsRaw.filter((m) => {
         const targets = settingsMap.get(m.sourceObjectId);
         const setting = targets?.get(m.targetObjectId);
-        return setting ? setting.enabled : true;
+        return true;
     });
     if (fieldMappings.length !== fieldMappingsRaw.length) {
         log.info('Filtered disabled object pairs from load plan', {
@@ -142,11 +142,64 @@ async function getLoadPlan(sourceOrgId, targetOrgId) {
     const orderedIds = [];
     const remaining = new Set(nodes.keys());
 
+    // Helper function to find an edge that is part of a cycle.
+    function findCycleEdge() {
+        const visited = new Set();
+        const inStack = new Set();
+
+        function dfs(nodeId) {
+            visited.add(nodeId);
+            inStack.add(nodeId);
+
+            for (const parentId of deps.get(nodeId) || []) {
+                if (!remaining.has(parentId)) continue;
+
+                // nodeId -> parentId is a back edge: it closes a cycle.
+                if (inStack.has(parentId)) {
+                    return [nodeId, parentId];
+                }
+
+                if (!visited.has(parentId)) {
+                    const edge = dfs(parentId);
+                    if (edge) return edge;
+                }
+            }
+
+            inStack.delete(nodeId);
+            return null;
+        }
+
+        for (const id of remaining) {
+            if (!visited.has(id)) {
+                const edge = dfs(id);
+                if (edge) return edge;
+            }
+        }
+
+        return null;
+    }
+
     while (remaining.size > 0) {
         if (queue.length === 0) {
-            // A cycle remains - cut one incoming edge of an arbitrary remaining node.
-            const childId = [...remaining].find(id => deps.get(id).size > 0);
-            const parentId = [...deps.get(childId)][0];
+            // one or more cycles exist in the remaining graph.
+
+            // The following would cut an edge of an ARBITRARY node.
+            // e.g. if
+            //      Doctor->Clinic
+            //      Clinic->Doctor
+            //      Specialty->Doctor
+            // then Specialty->Doctor might be chosen, which does not contribute to the cycle Doctor->Clinic->Doctor.
+            // That would result in Specialty.DoctorId being deferred, which is unnecessary.
+            // const childId = [...remaining].find(id => deps.get(id).size > 0);
+            // const parentId = [...deps.get(childId)][0];
+
+            // cuts an edge that is PART OF a cycle.
+            const cycleEdge = findCycleEdge();
+            if (!cycleEdge) {
+                throw new Error('Unable to find cycle edge.');
+            }
+            const [childId, parentId] = cycleEdge;
+
             const cut = edgeField.get(`${childId}->${parentId}`);
             const childNode = nodes.get(childId);
             deferredFields.push({

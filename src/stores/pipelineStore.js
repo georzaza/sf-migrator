@@ -1,6 +1,6 @@
 /**
- * Pipeline Store — Pinia store for the migration pipeline (load plan, traceback
- * External-Id selection, transform + load triggers/status, and load results).
+ * Pipeline Store — Pinia store for the migration pipeline (load plan, upsert
+ * External-Id + operation selection, transform + load triggers/status, and load results).
  *
  * Thin data layer over the action-dispatch API. Polling/orchestration lives in
  * the usePipeline composable; this store holds the shared reactive state and the
@@ -28,6 +28,7 @@ export const usePipelineStore = defineStore('pipeline', () => {
     const loadPlan = ref({ loadOrder: [], deferredFields: [] });
     const extractionStatus = ref(emptyExtraction());
     const extractionPreview = ref({ sourceOrgId: null, targetOrgId: null, objects: [] });
+    const extractionResults = ref([]);
     const transformStatus = ref(emptyStatus());
     const loadStatus = ref(emptyStatus());
 
@@ -50,54 +51,30 @@ export const usePipelineStore = defineStore('pipeline', () => {
         }
     }
 
-    // ==================== Traceback (source -> target correlation) ====================
+    // ==================== Upsert Config (External ID + Operation) ====================
 
     /**
-     * Returns the tiered candidate lists + names of user-mapped target fields:
-     *   { external: [...], unique: [...], alphanumeric: [...], composite: [...],
-     *     mappedTargetFieldNames: [...] }
+     * Returns: { externalIdCandidates: [...], upsertExternalId: {id,name}|null, operation: 'insert'|'upsert' }
      */
-    async function fetchTracebackCandidates(targetObjectId, sourceObjectId = null) {
-        const headers = { action: 'get-traceback-candidates', targetObjectId };
+    async function fetchUpsertConfig(targetObjectId, sourceObjectId = null) {
+        const headers = { action: 'get-upsert-config', targetObjectId };
         if (sourceObjectId) headers.sourceObjectId = sourceObjectId;
         const response = await axiosInstance.get('/api', { headers });
-        return response.data.data || { external: [], unique: [], alphanumeric: [], composite: [], mappedTargetFieldNames: [] };
+        return response.data.data || { externalIdCandidates: [], upsertExternalId: null, operation: 'upsert' };
     }
 
     /**
-     * Returns the stored traceback config for a pair, or { strategy: null, fields: [] }.
-     * Legacy `metadata.tracebackExternalIdField` is auto-translated server-side.
+     * Persist the upsert External ID field and/or operation.
+     * Pass `externalIdFieldId: null` to clear the External ID selection.
      */
-    async function fetchTraceback(sourceObjectId, targetObjectId) {
-        const response = await axiosInstance.get('/api', {
-            headers: { action: 'get-migration-setting', sourceObjectId, targetObjectId },
-        });
-        const meta = response.data.data?.metadata || {};
-        if (meta.traceback?.strategy && Array.isArray(meta.traceback.fields)) {
-            return { strategy: meta.traceback.strategy, fields: meta.traceback.fields };
-        }
-        const legacy = meta.tracebackExternalIdField;
-        if (legacy?.id && legacy?.name) {
-            return { strategy: 'external-id', fields: [{ id: legacy.id, name: legacy.name }] };
-        }
-        return { strategy: null, fields: [] };
-    }
-
-    /**
-     * Persist the traceback config. Pass `null` to clear.
-     * `selection`: { strategy: 'external-id'|'unique'|'alphanumeric'|'composite', fieldIds: string[] }
-     */
-    async function saveTraceback(sourceObjectId, targetObjectId, selection) {
-        const body = {
-            sourceObjectId,
-            targetObjectId,
-            strategy: selection?.strategy ?? null,
-            fieldIds: selection?.fieldIds ?? [],
-        };
+    async function saveUpsertConfig(sourceObjectId, targetObjectId, { externalIdFieldId, operation } = {}) {
+        const body = { sourceObjectId, targetObjectId };
+        if (externalIdFieldId !== undefined) body.externalIdFieldId = externalIdFieldId;
+        if (operation !== undefined) body.operation = operation;
         const response = await axiosInstance.put('/api', body, {
-            headers: { action: 'set-traceback' },
+            headers: { action: 'set-upsert-config' },
         });
-        return response.data.data || { strategy: null, fields: [] };
+        return response.data.data || {};
     }
 
     // ==================== Extraction (source org) ====================
@@ -128,6 +105,39 @@ export const usePipelineStore = defineStore('pipeline', () => {
         const response = await axiosInstance.get('/api', { headers });
         extractionPreview.value = response.data.data || { sourceOrgId, targetOrgId, objects: [] };
         return extractionPreview.value;
+    }
+
+    async function fetchExtractionResults(sourceOrgId, targetOrgId = null) {
+        const headers = { action: 'get-extraction-results', sourceOrgId };
+        if (targetOrgId) headers.targetOrgId = targetOrgId;
+        const response = await axiosInstance.get('/api', { headers });
+        extractionResults.value = response.data.data || [];
+        return extractionResults.value;
+    }
+
+    function downloadCsvBlob(csvData, filename) {
+        const url = URL.createObjectURL(new Blob([csvData], { type: 'text/csv' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    async function downloadExtractionCsv(sourceOrgId, objectName) {
+        const response = await axiosInstance.get('/api', {
+            headers: { action: 'download-extraction-csv', sourceOrgId, objectName },
+            responseType: 'blob',
+        });
+        downloadCsvBlob(response.data, `${objectName}_extracted.csv`);
+    }
+
+    async function downloadTransformCsv(targetOrgId, objectName) {
+        const response = await axiosInstance.get('/api', {
+            headers: { action: 'download-transform-csv', targetOrgId, objectName },
+            responseType: 'blob',
+        });
+        downloadCsvBlob(response.data, `${objectName}_transformed.csv`);
     }
 
     async function saveSourceExtractFilter(sourceObjectId, extractFilter) {
@@ -225,17 +235,20 @@ export const usePipelineStore = defineStore('pipeline', () => {
         loadPlan,
         extractionStatus,
         extractionPreview,
+        extractionResults,
         transformStatus,
         loadStatus,
 
         // Actions
         fetchLoadPlan,
-        fetchTracebackCandidates,
-        fetchTraceback,
-        saveTraceback,
+        fetchUpsertConfig,
+        saveUpsertConfig,
         startExtraction,
         fetchExtractionStatus,
         fetchExtractionPreview,
+        fetchExtractionResults,
+        downloadExtractionCsv,
+        downloadTransformCsv,
         saveSourceExtractFilter,
         startTransform,
         fetchTransformStatus,

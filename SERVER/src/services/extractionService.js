@@ -103,12 +103,6 @@ async function runExtraction({ sourceOrgId, targetOrgId = null, sourceObjectIds 
     const sourceObjects = extractionPlan.objects;
     const requiredFieldsByObjectId = extractionPlan.fieldsByObjectId;
 
-    // Per-pair settings — used to skip source objects whose every target pair is disabled.
-    const settingsMap = targetOrgId
-        ? await migrationSettingService.getEffectiveSettingsMap(sourceOrgId, targetOrgId)
-        : new Map();
-    const fullySkippedSourceObjectIds = computeFullySkippedSources(fieldMappings, settingsMap);
-
     log.info('Source objects resolved for extraction', {
         runId,
         sourceOrgId,
@@ -148,27 +142,6 @@ async function runExtraction({ sourceOrgId, targetOrgId = null, sourceObjectIds 
             extractionProgress.set(sourceOrgId, { objectName, remaining: sourceObjects.length - i - 1 });
             continue;
         }
-
-        if (fullySkippedSourceObjectIds.has(sourceObjectId)) {
-            log.info('Skipping source object — every target pair disabled', { runId, objectName, sourceObjectId });
-            extractionProgress.set(sourceOrgId, { objectName, remaining: sourceObjects.length - i - 1 });
-            results.push({
-                sourceObjectId,
-                objectName,
-                status: 'skipped',
-                fieldsExportedCount: 0,
-                recordsExported: 0,
-                startedAt,
-                finishedAt: new Date(),
-                queryFilePath: null,
-                csvFilePath: null,
-                stgTableName: null,
-                validatedRowCount: null,
-                errorMessage: 'All target pairs for this source object are disabled in Migration Settings.',
-            });
-            continue;
-        }
-
         let fields = [];
         let queryFilePath = null;
         let csvFilePath = null;
@@ -368,6 +341,7 @@ async function runExtractionForTargetOrg({ targetOrgId }) {
                 }
             }
 
+
             log.info('Source org extraction succeeded', { targetOrgId, sourceOrgId, objects: sourceSummary.totalObjects, success: sourceSummary.successCount, failed: sourceSummary.failedCount });
             resultsBySourceOrg.push({
                 sourceOrgId,
@@ -399,27 +373,6 @@ async function runExtractionForTargetOrg({ targetOrgId }) {
         createdStageTables: uniqueStageTables,
         resultsBySourceOrg,
     };
-}
-
-/**
- * Walk all (source -> target) mappings and return the set of source object ids
- * whose every target pairing is explicitly disabled in MigrationSettings.
- */
-function computeFullySkippedSources(fieldMappings, settingsMap) {
-    const seenTargetsBySource = new Map(); // sourceObjectId -> Set<targetObjectId>
-    for (const m of fieldMappings) {
-        if (!m.sourceObjectId || !m.targetObjectId) continue;
-        if (!seenTargetsBySource.has(m.sourceObjectId)) seenTargetsBySource.set(m.sourceObjectId, new Set());
-        seenTargetsBySource.get(m.sourceObjectId).add(m.targetObjectId);
-    }
-    const fullySkipped = new Set();
-    for (const [sourceId, targets] of seenTargetsBySource) {
-        const targetSettings = settingsMap.get(sourceId);
-        if (!targetSettings) continue;
-        const everyDisabled = [...targets].every((tid) => targetSettings.get(tid)?.enabled === false);
-        if (everyDisabled) fullySkipped.add(sourceId);
-    }
-    return fullySkipped;
 }
 
 /** Last-line defense before interpolating user-provided SOQL into the WHERE clause. */
@@ -726,7 +679,7 @@ async function getExtractionPreview({ sourceOrgId, targetOrgId = null }) {
     const settingsMap = targetOrgId
         ? await migrationSettingService.getEffectiveSettingsMap(sourceOrgId, targetOrgId)
         : new Map();
-    const skipped = computeFullySkippedSources(fieldMappings, settingsMap);
+    const skipped = new Set();
 
     const objects = plan.objects.map((obj) => ({
         id: obj.id,
@@ -745,10 +698,56 @@ async function getExtractionPreview({ sourceOrgId, targetOrgId = null }) {
     };
 }
 
+async function getExtractionResults(sourceOrgId, targetOrgId = null) {
+    const preview = await getExtractionPreview({ sourceOrgId, targetOrgId });
+    const results = [];
+    for (const obj of preview.objects) {
+        const tableName = getStageTableName(sourceOrgId, obj.name);
+        const [existsRows] = await db.sequelize.query(
+            `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1) AS exists;`,
+            { bind: [tableName] },
+        );
+        const exists = !!existsRows?.[0]?.exists;
+        let rowCount = 0;
+        if (exists) {
+            const [countRows] = await db.sequelize.query(
+                `SELECT COUNT(*) AS count FROM ${quoteIdentifier(tableName)};`,
+            );
+            rowCount = parseInt(countRows?.[0]?.count ?? 0, 10);
+        }
+        results.push({ objectName: obj.name, label: obj.label, rowCount, tableExists: exists });
+    }
+    return results;
+}
+
+function csvEscapeExtraction(value) {
+    const s = String(value ?? '');
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+async function resolveExtractionCsvData(sourceOrgId, objectName) {
+    const tableName = getStageTableName(sourceOrgId, objectName);
+    const [existsRows] = await db.sequelize.query(
+        `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1) AS exists;`,
+        { bind: [tableName] },
+    );
+    if (!existsRows?.[0]?.exists) return null;
+    const [rows] = await db.sequelize.query(`SELECT * FROM ${quoteIdentifier(tableName)} LIMIT 50000;`);
+    if (rows.length === 0) return '';
+    const headers = Object.keys(rows[0]);
+    const lines = [headers.map(csvEscapeExtraction).join(',')];
+    for (const row of rows) {
+        lines.push(headers.map((h) => csvEscapeExtraction(row[h])).join(','));
+    }
+    return lines.join('\r\n');
+}
+
 export default {
     runExtraction,
     runExtractionForTargetOrg,
     getExtractionPreview,
+    getExtractionResults,
+    resolveExtractionCsvData,
     getStageTableName,
     getProgress,
 };

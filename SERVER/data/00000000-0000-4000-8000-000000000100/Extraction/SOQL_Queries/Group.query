@@ -1,1 +1,0 @@
-SELECT CreatedById, CreatedDate, Description, DeveloperName, DoesIncludeBosses, DoesSendEmailToMembers, Email, Id, LastModifiedById, LastModifiedDate, Name, OwnerId, RelatedId, SystemModstamp, Type FROM Group

@@ -229,6 +229,152 @@ async function deleteFieldMapping(mappingId) {
     return await mappingRepo.deleteFieldMapping(mappingId);
 }
 
+/**
+ * Export all field mappings for an org pair as CSV rows.
+ * Columns: sourceObject, sourceField, mappingType, targetObject, targetField,
+ *          transformationRule, constantValue
+ */
+async function exportMappingsCsv(sourceOrgId, targetOrgId) {
+    const mappings = await mappingRepo.findFieldMappingsByOrgPair(sourceOrgId, targetOrgId);
+
+    const headers = ['sourceObject', 'sourceField', 'mappingType', 'targetObject', 'targetField', 'transformationRule', 'constantValue'];
+
+    const rows = mappings.map((m) => [
+        m.sourceObject?.name ?? '',
+        m.sourceField?.name ?? '',
+        m.mappingType ?? '',
+        m.targetObject?.name ?? '',
+        m.targetField?.name ?? '',
+        m.transformationRule ?? '',
+        m.constantValue ?? '',
+    ]);
+
+    return [headers, ...rows]
+        .map((row) => row.map(csvEscape).join(','))
+        .join('\r\n');
+}
+
+function csvEscape(value) {
+    const s = String(value ?? '');
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Import field mappings from parsed CSV rows (array of objects with header keys).
+ * Skips rows with missing required fields. Returns { created, skipped, errors }.
+ */
+async function importMappingsCsv(sourceOrgId, targetOrgId, rows) {
+    if (!sourceOrgId || !targetOrgId) throw new Error('sourceOrgId and targetOrgId are required');
+
+    // Pre-load all object/field metadata for fast lookup
+    const sourceObjects = await metadataRepo.findObjectsByOrgId(sourceOrgId);
+    const targetObjects = await metadataRepo.findObjectsByOrgId(targetOrgId);
+
+    const sourceObjByName = new Map(sourceObjects.map((o) => [o.name, o]));
+    const targetObjByName = new Map(targetObjects.map((o) => [o.name, o]));
+
+    // Cache fields per object (loaded on demand)
+    const sourceFieldsCache = new Map(); // objectId -> Map(fieldName -> field)
+    const targetFieldsCache = new Map();
+
+    async function getSourceFields(objectId) {
+        if (!sourceFieldsCache.has(objectId)) {
+            const fields = await metadataRepo.findFieldsByObjectId(objectId);
+            sourceFieldsCache.set(objectId, new Map(fields.map((f) => [f.name, f])));
+        }
+        return sourceFieldsCache.get(objectId);
+    }
+
+    async function getTargetFields(objectId) {
+        if (!targetFieldsCache.has(objectId)) {
+            const fields = await metadataRepo.findFieldsByObjectId(objectId);
+            targetFieldsCache.set(objectId, new Map(fields.map((f) => [f.name, f])));
+        }
+        return targetFieldsCache.get(objectId);
+    }
+
+    let created = 0;
+    let skipped = 0;
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowNum = i + 2; // 1-based, +1 for header
+
+        const sourceObjectName = String(row.sourceObject ?? '').trim();
+        const sourceFieldName = String(row.sourceField ?? '').trim();
+        const mappingType = String(row.mappingType ?? '').trim();
+        const targetObjectName = String(row.targetObject ?? '').trim();
+        const targetFieldName = String(row.targetField ?? '').trim();
+        const transformationRule = String(row.transformationRule ?? '').trim() || null;
+        const constantValue = String(row.constantValue ?? '').trim() || null;
+
+        if (!targetObjectName || !targetFieldName || !mappingType) {
+            errors.push(`Row ${rowNum}: missing targetObject, targetField, or mappingType`);
+            skipped++;
+            continue;
+        }
+
+        if (!['as-is', 'expression', 'constant'].includes(mappingType)) {
+            errors.push(`Row ${rowNum}: invalid mappingType "${mappingType}"`);
+            skipped++;
+            continue;
+        }
+
+        const sourceObj = sourceObjectName ? sourceObjByName.get(sourceObjectName) : null;
+        const targetObj = targetObjByName.get(targetObjectName);
+
+        if (!targetObj) {
+            errors.push(`Row ${rowNum}: target object "${targetObjectName}" not found`);
+            skipped++;
+            continue;
+        }
+        if (mappingType === 'as-is' && !sourceObj) {
+            errors.push(`Row ${rowNum}: source object "${sourceObjectName}" not found (required for as-is mapping)`);
+            skipped++;
+            continue;
+        }
+
+        const targetFieldMap = await getTargetFields(targetObj.id);
+        const targetField = targetFieldMap.get(targetFieldName);
+        if (!targetField) {
+            errors.push(`Row ${rowNum}: target field "${targetFieldName}" not found on "${targetObjectName}"`);
+            skipped++;
+            continue;
+        }
+
+        let sourceFieldId = null;
+        if (mappingType === 'as-is' && sourceFieldName) {
+            const sourceFieldMap = await getSourceFields(sourceObj.id);
+            const sourceField = sourceFieldMap.get(sourceFieldName);
+            if (!sourceField) {
+                errors.push(`Row ${rowNum}: source field "${sourceFieldName}" not found on "${sourceObjectName}"`);
+                skipped++;
+                continue;
+            }
+            sourceFieldId = sourceField.id;
+        }
+
+        try {
+            await createFieldMapping({
+                sourceObjectId: sourceObj?.id ?? null,
+                targetObjectId: targetObj.id,
+                sourceFieldId,
+                targetFieldId: targetField.id,
+                mappingType,
+                transformationRule,
+                constantValue,
+            });
+            created++;
+        } catch (err) {
+            errors.push(`Row ${rowNum}: ${err.message}`);
+            skipped++;
+        }
+    }
+
+    return { created, skipped, errors };
+}
+
 export default {
     getObjectMappingsBySourceOrg,
     getObjectMappingsByOrgPair,
@@ -244,6 +390,10 @@ export default {
     createFieldMapping,
     updateFieldMapping,
     deleteFieldMapping,
+
+    // CSV export/import
+    exportMappingsCsv,
+    importMappingsCsv,
 };
 
 function buildObjectPairSummaries(fieldMappings) {

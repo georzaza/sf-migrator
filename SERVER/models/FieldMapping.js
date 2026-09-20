@@ -32,7 +32,7 @@ export default (sequelize, DataTypes) => {
         transformationRule: {
             type: DataTypes.TEXT,
             allowNull: true,
-            comment: 'Transformation DSL in braces. Supports field references, concatenation with ||, and SUBSTR(expr,start,end).'
+            comment: 'Transformation DSL in braces. '
         },
         constantValue: {
             type: DataTypes.STRING,

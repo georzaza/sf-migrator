@@ -192,7 +192,7 @@
                     <Textarea
                         v-model="transformationRule"
                         rows="4"
-                        placeholder="Use {Object.Field}, {Object.Field1 || Object.Field2}, {SUBSTR(Object.Field, 2, 5)}"
+                        placeholder="UNDER DEVELOPMENT. Will support {Object.Field}, {Object.Field1 || Object.Field2}, {SUBSTR(Object.Field, 2, 5)}, etc."
                         class="w-full"
                     />
                 </div>
@@ -342,10 +342,32 @@
         </div>
 
         <!-- Existing Mappings Table -->
-        <div v-if="bothOrgsAnalyzed && allFieldMappings.length > 0" class="mappings-section">
+        <div v-if="bothOrgsAnalyzed" class="mappings-section">
             <div class="section-header">
                 <h2>All Field Mappings</h2>
                 <div class="header-controls">
+                    <Button
+                        label="Export CSV"
+                        icon="pi pi-download"
+                        size="small"
+                        outlined
+                        :loading="exportingCsv"
+                        @click="onExportCsv"
+                    />
+                    <Button
+                        label="Import CSV"
+                        icon="pi pi-upload"
+                        size="small"
+                        outlined
+                        @click="triggerImport"
+                    />
+                    <input
+                        ref="importFileInput"
+                        type="file"
+                        accept=".csv"
+                        class="hidden"
+                        @change="onImportFileSelected"
+                    />
                     <Button
                         label="Clear All Filters"
                         icon="pi pi-filter-slash"
@@ -501,6 +523,30 @@
             <template #footer>
                 <Button label="Cancel" icon="pi pi-times" @click="showDeleteDialog = false" text />
                 <Button label="Delete" icon="pi pi-trash" severity="danger" @click="deleteFieldMapping" :loading="mappingStore.loading" />
+            </template>
+        </Dialog>
+
+        <!-- Import Result Dialog -->
+        <Dialog
+            v-model:visible="showImportResultDialog"
+            header="Import Result"
+            :modal="true"
+            style="width: 520px"
+        >
+            <div v-if="importResult" class="import-result">
+                <div class="import-stats">
+                    <Tag :value="`${importResult.created} created`" severity="success" />
+                    <Tag v-if="importResult.skipped > 0" :value="`${importResult.skipped} skipped`" severity="warn" />
+                </div>
+                <div v-if="importResult.errors?.length" class="import-errors">
+                    <p class="import-errors-title">Errors:</p>
+                    <ul>
+                        <li v-for="(err, i) in importResult.errors" :key="i" class="import-error-item">{{ err }}</li>
+                    </ul>
+                </div>
+            </div>
+            <template #footer>
+                <Button label="Close" @click="showImportResultDialog = false" />
             </template>
         </Dialog>
 
@@ -727,6 +773,13 @@ const showDeleteDialog = ref(false);
 const fieldMappingToDelete = ref(null);
 const currentObjectMapping = ref(null);
 const allFieldMappings = ref([]);
+
+// Export / Import
+const exportingCsv = ref(false);
+const importFileInput = ref(null);
+const importingCsv = ref(false);
+const showImportResultDialog = ref(false);
+const importResult = ref(null);
 
 // Migration settings dialog + validation warnings
 const showSettingsDialog = ref(false);
@@ -1146,6 +1199,96 @@ function clearFilters() {
         'targetFieldName': { value: null, matchMode: FilterMatchMode.CONTAINS },
         'mappingType': { value: null, matchMode: FilterMatchMode.EQUALS }
     };
+}
+
+async function onExportCsv() {
+    if (!selectedSourceOrg.value?.id || !selectedTargetOrg.value?.id) return;
+    exportingCsv.value = true;
+    try {
+        await mappingStore.exportMappingsCsv(selectedSourceOrg.value.id, selectedTargetOrg.value.id);
+    } catch (err) {
+        toast.add({ severity: 'error', summary: 'Export failed', detail: err.message || 'Failed to export mappings', life: 5000 });
+    } finally {
+        exportingCsv.value = false;
+    }
+}
+
+function triggerImport() {
+    importFileInput.value?.click();
+}
+
+async function onImportFileSelected(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    // Reset input so the same file can be re-selected if needed
+    event.target.value = '';
+
+    if (!selectedSourceOrg.value?.id || !selectedTargetOrg.value?.id) {
+        toast.add({ severity: 'warn', summary: 'No orgs selected', detail: 'Select source and target orgs first', life: 4000 });
+        return;
+    }
+
+    importingCsv.value = true;
+    try {
+        const text = await file.text();
+        const rows = parseCsvToObjects(text);
+        if (rows.length === 0) {
+            toast.add({ severity: 'warn', summary: 'Empty file', detail: 'No data rows found in the CSV', life: 4000 });
+            return;
+        }
+        const result = await mappingStore.importMappingsCsv(
+            selectedSourceOrg.value.id,
+            selectedTargetOrg.value.id,
+            rows,
+        );
+        importResult.value = result;
+        showImportResultDialog.value = true;
+        if (result.created > 0) {
+            await loadAllFieldMappings();
+        }
+    } catch (err) {
+        toast.add({ severity: 'error', summary: 'Import failed', detail: err.response?.data?.message || err.message || 'Failed to import mappings', life: 5000 });
+    } finally {
+        importingCsv.value = false;
+    }
+}
+
+/**
+ * Parse a CSV string into an array of objects using the first row as headers.
+ */
+function parseCsvToObjects(csvText) {
+    const lines = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(Boolean);
+    if (lines.length < 2) return [];
+    const headers = parseCsvRow(lines[0]);
+    const result = [];
+    for (let i = 1; i < lines.length; i++) {
+        const values = parseCsvRow(lines[i]);
+        if (values.every((v) => v === '')) continue;
+        const obj = {};
+        headers.forEach((h, idx) => { obj[h] = values[idx] ?? ''; });
+        result.push(obj);
+    }
+    return result;
+}
+
+function parseCsvRow(line) {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+            if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+            else if (ch === '"') { inQuotes = false; }
+            else { current += ch; }
+        } else {
+            if (ch === '"') { inQuotes = true; }
+            else if (ch === ',') { values.push(current); current = ''; }
+            else { current += ch; }
+        }
+    }
+    values.push(current);
+    return values;
 }
 
 function onMappingTypeChange() {
@@ -1629,6 +1772,32 @@ onMounted(async () => {
 .header-controls {
     display: flex;
     gap: 0.5rem;
+    align-items: center;
+}
+
+.hidden {
+    display: none;
+}
+
+.import-result {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.import-stats {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.import-errors-title {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.import-error-item {
+    font-size: 0.85rem;
+    color: var(--red-500);
 }
 
 .filter-info {

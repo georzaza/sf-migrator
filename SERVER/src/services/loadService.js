@@ -269,6 +269,7 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
             const values = {};
             let rowError = null;
 
+            /* previous code with error
             for (const col of targetColumns) {
                 const raw = row[col];
 
@@ -289,6 +290,34 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
                     values[col] = null;
                 }
                 // Handle regular mapped fields
+                else {
+                    values[col] = raw ?? null;
+                }
+            }
+            */
+           for (const col of targetColumns) {
+                const raw = row[col];
+
+                // Handle deferred fields FIRST.
+                // These lookups intentionally remain null in pass 1
+                // and are populated during pass 2.
+                if (deferredColumns.has(col)) {
+                    values[col] = null;
+                }
+                // Handle normal lookup fields.
+                else if (lookupRemap.has(col) && raw !== null && raw !== undefined && String(raw) !== '') {
+                    const parentObj = lookupRemap.get(col);
+                    const parentMap = await getIdMap(ctx, parentObj, [raw]);
+                    const targetParentId = parentMap.get(String(raw));
+
+                    if (targetParentId) {
+                        values[col] = targetParentId;
+                    } else {
+                        rowError = `Lookup ${col}: parent ${parentObj} record ${raw} was not loaded`;
+                        break;
+                    }
+                }
+                // Handle regular mapped fields.
                 else {
                     values[col] = raw ?? null;
                 }

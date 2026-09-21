@@ -1,0 +1,1 @@
+SELECT Id, Contact__c, Account__c, Description__c, Street__c, Region__c, Postal_Code__c, Country__c, City__c FROM Facility__c

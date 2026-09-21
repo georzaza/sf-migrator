@@ -156,7 +156,7 @@ async function onSave() {
 
             <div class="field-row">
                 <small class="field-hint">
-                    Extract filters (SOQL WHERE clauses) are now configured per <strong>source object</strong> in the Pipeline view's Extraction pane.
+                    Extract filters (SOQL WHERE clauses) are configured per <strong>source object</strong> in the Extraction pane of the Pipeline view.
                 </small>
             </div>
 

@@ -57,6 +57,7 @@ async function beginOAuth(sfOrgId, returnTo) {
         clientId: sfOrg.clientId,
         clientSecret: sfOrg.clientSecret,
         redirectUri: process.env.SF_REDIRECT_URI,
+        useVerifier: true
     });
     oauth2Map.set(sfOrgId, oauth2);
 

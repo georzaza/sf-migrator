@@ -193,6 +193,17 @@ async function getLoadPlan(sourceOrgId, targetOrgId) {
             // const childId = [...remaining].find(id => deps.get(id).size > 0);
             // const parentId = [...deps.get(childId)][0];
 
+            log.info('Cycle detected - current graph', {
+                remaining: [...remaining].map(id => nodes.get(id)?.sourceObjectName),
+                deps: [...remaining].map(id => ({
+                    object: nodes.get(id)?.sourceObjectName,
+                    parents: [...(deps.get(id) || [])].map(
+                        parentId => nodes.get(parentId)?.sourceObjectName
+                    ),
+                })),
+            });
+
+
             // cuts an edge that is PART OF a cycle.
             const cycleEdge = findCycleEdge();
             if (!cycleEdge) {
@@ -216,10 +227,27 @@ async function getLoadPlan(sourceOrgId, targetOrgId) {
             });
             deps.get(childId).delete(parentId);
             children.get(parentId).delete(childId);
-            inDegree.set(childId, deps.get(childId).size);
+            // fixes an error where indegree was recalculated using already-loaded parents,
+            // so nodes whose remaining dependencies were all already loaded were incorrectly
+            // kept at inDegree > 0 and never added to the queue.
+            // previous problematic piece of code: inDegree.set(childId, deps.get(childId).size);
+            // the fix:
+            inDegree.set(
+                childId,
+                [...deps.get(childId)].filter(parentId => remaining.has(parentId)).length
+            );
             if (inDegree.get(childId) === 0) queue.push(childId);
             continue;
         }
+
+        log.info('Kahn state', {
+            queue: queue.map(id => nodes.get(id)?.sourceObjectName),
+            remaining: [...remaining].map(id => nodes.get(id)?.sourceObjectName),
+            inDegree: [...inDegree].map(([id, degree]) => ({
+                object: nodes.get(id)?.sourceObjectName,
+                degree,
+            })),
+        });
 
         const id = queue.shift();
         if (!remaining.has(id)) continue;
@@ -228,6 +256,13 @@ async function getLoadPlan(sourceOrgId, targetOrgId) {
 
         for (const childId of children.get(id)) {
             inDegree.set(childId, inDegree.get(childId) - 1);
+
+            log.info('Reduced in-degree', {
+                parent: nodes.get(id)?.sourceObjectName,
+                child: nodes.get(childId)?.sourceObjectName,
+                newInDegree: inDegree.get(childId),
+            });
+
             if (inDegree.get(childId) === 0) queue.push(childId);
         }
     }

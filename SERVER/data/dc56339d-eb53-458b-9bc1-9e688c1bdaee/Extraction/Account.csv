@@ -1,0 +1,3 @@
+"Id","Name","AccountNumber","ParentId","Description"
+"001d200001zJkzZAAS","Interbalkan Medical Center","0001","","Main customer account"
+"001d200001zJkzaAAC","Central Athens Clinic","0002","001d200001zJkzZAAS","Secondary customer account"

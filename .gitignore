@@ -21,3 +21,4 @@ sf-skills/
 thesis/
 .env.development_backup
 seeders copy/
+.env.development

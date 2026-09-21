@@ -1,3 +1,6 @@
+**Below steps are deprecated since salesforce decided to move to external client apps**
+**But they still are good guidance steps**
+
 1. Setup --> Identity --> OAuth and OpenID Connect Settings
     - Enable "Allow OAuth Username-Password Flows"
 

@@ -19,3 +19,5 @@ docs/
 SERVER/docs/
 sf-skills/
 thesis/
+.env.development_backup
+seeders_backup/

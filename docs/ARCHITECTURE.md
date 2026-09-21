@@ -1,7 +1,8 @@
 # SF Migrator — Architecture
 
-> **Last updated**: 2026-06-22
-> **Status**: Active implementation
+**Last updated**: 2026-06-22
+
+**Requires a mass update to come up to speed with the latest updates on the app**
 
 ---
 
@@ -29,7 +30,7 @@
 
 ### Implementation Status
 
-✅ **Complete**:
+**Complete**:
 - User authentication and authorization (JWT + httpOnly cookies)
 - Org CRUD + OAuth2 Salesforce connection flow
 - Metadata analysis (objects & fields via Composite API)
@@ -157,13 +158,13 @@ Vue App Initialization
 
 | Route | Component | Auth Required | Purpose |
 |-------|-----------|---------------|---------|
-| `/welcome` | Welcome.vue | ✅ | Landing page |
-| `/org-stats` | OrgStatsView.vue | ✅ | Org statistics |
-| `/migration-workspace` | MigrationWorkspace.vue | ✅ | Field mapping UI |
-| `/field-mapping/:mappingId` | FieldMapping.vue | ✅ | Mapping detail view |
-| `/auth/login` | auth/Login.vue | ❌ | Login |
-| `/auth/register` | auth/Register.vue | ❌ | Registration |
-| `/auth/access` | auth/Access.vue | ❌ | Access denied |
+| `/welcome` | Welcome.vue | Yes | Landing page |
+| `/org-stats` | OrgStatsView.vue | Yes | Org statistics |
+| `/migration-workspace` | MigrationWorkspace.vue | Yes | Field mapping UI |
+| `/field-mapping/:mappingId` | FieldMapping.vue | Yes | Mapping detail view |
+| `/auth/login` | auth/Login.vue | No | Login |
+| `/auth/register` | auth/Register.vue | No | Registration |
+| `/auth/access` | auth/Access.vue | No | Access denied |
 
 **Navigation Guard**: Calls `isLoggedIn()` (GET /auth/whoami) before each authenticated route. Redirects to `/auth/login` if unauthenticated.
 
@@ -207,14 +208,14 @@ The primary working view for configuring migrations:
 ```
 State:    isAuthenticated, email, username, serverDown
 Actions:  setEmail, setUsername, setIsAuthenticated
-Persist:  ✅ localStorage
+Persist:  localStorage
 ```
 
 #### orgStore.js
 ```
 State:    orgs[], selectedOrg, showEditOrgDialog, showAddOrgDialog
 Actions:  loadOrgs(), setSelectedOrg(), deleteOrg(), getOrgStats()
-Persist:  ✅ localStorage
+Persist:  localStorage
 ```
 
 #### mappingStore.js
@@ -225,7 +226,7 @@ Actions:  loadMappings(sourceOrgId, targetOrgId?)
           updateFieldMapping(mappingId, updates)
           deleteFieldMapping(mappingId)
           clearMappings()
-Persist:  ❌ session-only
+Persist:  session-only
 ```
 
 #### metadataStore.js
@@ -235,7 +236,7 @@ State:    objectsByOrg: Map<orgId, SfObjectMetadata[]>
 Actions:  loadObjects(orgId), loadFields(objectId)
           getObjects(orgId), getFields(objectId)
           clearCache(), clearOrgCache(orgId)
-Persist:  ❌ in-memory only
+Persist:  in-memory only
 Note:     O(1) Map lookups, decoupled from mappingStore
 ```
 

@@ -1579,7 +1579,7 @@ onMounted(async () => {
 }
 
 .org-selector-section {
-    position: sticky;
+    position: auto;
     top: 0;
     z-index: 20;
     display: flex;

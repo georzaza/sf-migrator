@@ -15,3 +15,12 @@
 6. TODO UPDATE Start the server by navigating to SERVER/src/ and running `node server.js`
 7. TODO UPDATE Start the VUe frontend by navigating to root folder/src and running `npm run dev`
 8. TODO UPDATE Visit localhost:5173 on the browser.
+
+
+Feel free to contact me or raise an issue if you have trouble during the installation steps. 
+You want to generally install postgresql and run `npm install` on both the 'src' and 'SERVER' folder.
+`npm run` is then your guidance. 
+
+The app is configured for production, so you might need to make a few minor changes to have it up and running on your local. 
+
+Feel free to ask me and I can temporarily deploy it and have it running live on one of my servers, so you can avoid all installation & running steps altogether. 

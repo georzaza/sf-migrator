@@ -1,1 +1,0 @@
-SELECT Id, Name, AccountNumber, ParentId, Description FROM Account

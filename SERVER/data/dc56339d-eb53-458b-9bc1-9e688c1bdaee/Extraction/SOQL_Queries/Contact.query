@@ -1,1 +1,0 @@
-SELECT Id, Facility__c, AccountId, Title, LastName, FirstName, Description, Department FROM Contact

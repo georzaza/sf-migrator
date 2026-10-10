@@ -1,4 +1,5 @@
 /**
+ * TODO needs work
  * Transformation rule parser/evaluator for field mapping expressions.
  * Supported syntax:
  *   {Object.Field}

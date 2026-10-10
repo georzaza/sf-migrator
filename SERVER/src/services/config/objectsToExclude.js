@@ -1,3 +1,6 @@
+/* TODO improve.
+ AAlso, is this file actually used?
+ ANother one exists under utils (excludedObjects).js*/
 const standardObjectFilters = {
     'patternList': [
         new RegExp('^ExtlClntApp'),

@@ -1,3 +1,6 @@
+/* TODO improve.
+ Also, is this file actually used?
+ ANother one exists under utils objectsToExclude.js*/
 const standardObjectFilters = {
     'patternList': [
         new RegExp('^ExtlClntApp'),     // ExternalClientApplication and related objects

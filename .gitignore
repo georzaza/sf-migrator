@@ -15,10 +15,29 @@ dist
 SAKAI_TEMPLATE
 .package-lock.json
 
-docs/
-SERVER/docs/
-sf-skills/
+SERVER/data/
+
+docs/Cloudflare.md
+docs/NEXT_STEPS.md
+docs/SF_Migrator_Talk copy.md
+docs/SF_Migrator_Talk_Story.md
+docs/SF_Migrator_Talk.md
+docs/memory/
+docs/frontend/components/OrgStats.md
+docs/frontend/components/dashboard.md
+docs/services/orgStatsService.md
+
 thesis/
 .env.development_backup
-seeders copy/
 .env.development
+
+SERVER/.env.development
+SERVER/.env.production
+
+seeders copy/
+seeders/
+
+
+SERVER/.sfdx
+
+

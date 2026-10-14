@@ -1,5 +1,9 @@
 # Installation
 
+Feel free to ask me and I can temporarily deploy the app and have it running live on one of my servers, so you can avoid all installation & running steps altogether. 
+
+The sections below are outdated and I haven't found the time to create a proper installation guide.
+
 1. Install node, postgres. A sample configuration is for the postgres db is provided in `SERVER/config/config.json`
 2. Navigate to folder SERVER and run `npm install` 
 3. Navigate back to root folder and run `npm install`
@@ -22,5 +26,3 @@ You want to generally install postgresql and run `npm install` on both the 'src'
 `npm run` is then your guidance. 
 
 The app is configured for production, so you might need to make a few minor changes to have it up and running on your local. 
-
-Feel free to ask me and I can temporarily deploy it and have it running live on one of my servers, so you can avoid all installation & running steps altogether. 

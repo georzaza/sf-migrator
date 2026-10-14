@@ -12,6 +12,8 @@
  *
  *   log.info('Something happened', { key: 'value' });
  *   log.error('Something failed', error, { orgId: '...' });
+ *   log.warn('Something might be wrong', { key: 'value' });
+ *   log.debug('Debugging information', { key: 'value' });
  */
 
 import { AsyncLocalStorage } from 'async_hooks';

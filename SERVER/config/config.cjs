@@ -1,7 +1,8 @@
 const path = require('path');
 const fs = require('fs');
 
-const env = process.env.NODE_ENV || 'development';
+// if on development env, use 'dev' DB name
+const env = process.env.NODE_ENV === 'development' ? 'dev' : (process.env.NODE_ENV || 'dev');
 
 // load env variables into process.env from envFiles
 const envFile = path.resolve(__dirname, `../.env.${env}`);
@@ -14,7 +15,7 @@ const schema  = process.env.DB_SCHEMA || 'public';
 
 const development = {
     username: process.env.DB_USER || 'sf_migrator',
-    password: process.env.DB_PASSWORD || '9911',
+    password: process.env.DB_PASSWORD || '1199',
     database: process.env.DB_NAME || `sf_migrator_${env}`,
     host: process.env.DB_HOST || '127.0.0.1',
     dialect: 'postgres',
@@ -25,7 +26,7 @@ const development = {
 
 const test = {
     username: process.env.DB_USER || 'sf_migrator_test',
-    password: process.env.DB_PASSWORD || '9911',
+    password: process.env.DB_PASSWORD || '1199',
     database: process.env.DB_NAME || `sf_migrator_${env}`,
     host: process.env.DB_HOST || '127.0.0.1',
     dialect: 'postgres',
@@ -37,7 +38,7 @@ const test = {
 
 const production = {
     username: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || '9911',
+    password: process.env.DB_PASSWORD || '1199',
     database: process.env.DB_NAME || `sf_migrator_${env}`,
     host: process.env.DB_HOST || '127.0.0.1',
     dialect: 'postgres',

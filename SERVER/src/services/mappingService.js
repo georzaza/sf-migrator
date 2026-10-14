@@ -6,7 +6,8 @@ import mappingRepo from '../repositories/mappingRepository.js';
 import metadataRepo from '../repositories/metadataRepository.js';
 import validationService from './validationService.js';
 import logger from '../lib/logger.js';
-import { parseTransformationRule } from '../utils/transformationRule.js';
+import { validateTransform } from '../utils/transformTree.js';
+import { parseExpressionToTree } from '../utils/expressionParser.js';
 
 const log = logger.create('mappingService');
 
@@ -57,7 +58,7 @@ async function upsertObjectMapping(sourceObjectId, targetObjectId) {
     }
 
     const pseudoId = `${sourceObjectId}:${targetObjectId}`;
-    log.info('Object mapping pair validated', { sourceObjectId, targetObjectId });
+    // log.info('Object mapping pair validated', { sourceObjectId, targetObjectId });
     return {
         id: pseudoId,
         sourceObjectId,
@@ -119,28 +120,36 @@ async function createFieldMapping(data) {
         throw new Error(`Target field not found: ${targetFieldId}`);
     }
 
-    // For as-is mapping, validate source field
-    if (mappingType === 'as-is') {
-        if (!sourceFieldId) {
-            throw new Error('Source field is required for as-is mapping');
+    // Resolve the canonical transform tree. An explicit tree (from a visual
+    // builder) wins; otherwise an expression formula is compiled into one so the
+    // tree is always the stored source of truth.
+    let transform = data.transform ?? null;
+    if (!transform && mappingType === 'expression') {
+        if (!transformationRule) {
+            throw new Error('Transformation rule is required for expression mapping');
         }
-        const sourceField = await metadataRepo.findFieldById(sourceFieldId);
-        if (!sourceField) {
-            throw new Error(`Source field not found: ${sourceFieldId}`);
+        transform = parseExpressionToTree(transformationRule);
+    }
+    const hasTree = transform !== null;
+
+    if (hasTree) {
+        validateTransform(transform);
+    } else {
+        // For as-is mapping, validate source field
+        if (mappingType === 'as-is') {
+            if (!sourceFieldId) {
+                throw new Error('Source field is required for as-is mapping');
+            }
+            const sourceField = await metadataRepo.findFieldById(sourceFieldId);
+            if (!sourceField) {
+                throw new Error(`Source field not found: ${sourceFieldId}`);
+            }
         }
-    }
 
-    // For expression mapping, require transformationRule and validate grammar
-    if (mappingType === 'expression' && !transformationRule) {
-        throw new Error('Transformation rule is required for expression mapping');
-    }
-    if (mappingType === 'expression') {
-        parseTransformationRule(transformationRule);
-    }
-
-    // For constant mapping, require constantValue
-    if (mappingType === 'constant' && !constantValue) {
-        throw new Error('Constant value is required for constant mapping');
+        // For constant mapping, require constantValue
+        if (mappingType === 'constant' && !constantValue) {
+            throw new Error('Constant value is required for constant mapping');
+        }
     }
 
     // Run mapping validation (throws on blocking rules, returns advisory warnings)
@@ -151,6 +160,7 @@ async function createFieldMapping(data) {
         targetFieldId,
         mappingType,
         transformationRule,
+        transform,
     });
 
     // Create the field mapping
@@ -162,9 +172,10 @@ async function createFieldMapping(data) {
         mappingType,
         transformationRule: transformationRule || null,
         constantValue: constantValue || null,
+        transform,
     });
 
-    log.info('Field mapping created', { mappingId: mapping.id, sourceObjectId, targetObjectId });
+    // log.info('Field mapping created', { mappingId: mapping.id, sourceObjectId, targetObjectId });
 
     const result = mapping.toJSON();
     result.warnings = warnings;
@@ -181,7 +192,7 @@ async function updateFieldMapping(mappingId, updates) {
         throw new Error(`Field mapping not found: ${mappingId}`);
     }
 
-    const allowedFields = ['sourceObjectId', 'targetObjectId', 'sourceFieldId', 'targetFieldId', 'mappingType', 'transformationRule', 'constantValue'];
+    const allowedFields = ['sourceObjectId', 'targetObjectId', 'sourceFieldId', 'targetFieldId', 'mappingType', 'transformationRule', 'constantValue', 'transform'];
     const filteredUpdates = {};
 
     for (const field of allowedFields) {
@@ -190,12 +201,26 @@ async function updateFieldMapping(mappingId, updates) {
         }
     }
 
-    if (filteredUpdates.mappingType === 'expression' && !filteredUpdates.transformationRule && !existing.transformationRule) {
-        throw new Error('Transformation rule is required for expression mapping');
+    // A transform tree is the source of truth. Precedence: an explicitly supplied
+    // tree, else recompiled from an updated expression formula, else the stored tree.
+    const effectiveMappingType = filteredUpdates.mappingType ?? existing.mappingType;
+    if (filteredUpdates.transform === undefined
+        && filteredUpdates.transformationRule !== undefined
+        && effectiveMappingType === 'expression') {
+        filteredUpdates.transform = filteredUpdates.transformationRule
+            ? parseExpressionToTree(filteredUpdates.transformationRule)
+            : null;
     }
 
-    if (filteredUpdates.mappingType === 'expression' || (filteredUpdates.transformationRule && (filteredUpdates.mappingType || existing.mappingType) === 'expression')) {
-        parseTransformationRule(filteredUpdates.transformationRule || existing.transformationRule);
+    const effectiveTransform = filteredUpdates.transform !== undefined ? filteredUpdates.transform : existing.transform;
+    if (filteredUpdates.transform !== undefined && filteredUpdates.transform !== null) {
+        validateTransform(filteredUpdates.transform);
+    }
+
+    if (!effectiveTransform) {
+        if (effectiveMappingType === 'expression' && !filteredUpdates.transformationRule && !existing.transformationRule) {
+            throw new Error('Transformation rule is required for expression mapping');
+        }
     }
 
     // Run mapping validation against the effective (post-update) values.
@@ -204,8 +229,9 @@ async function updateFieldMapping(mappingId, updates) {
         targetObjectId: filteredUpdates.targetObjectId ?? existing.targetObjectId,
         sourceFieldId: filteredUpdates.sourceFieldId ?? existing.sourceFieldId,
         targetFieldId: filteredUpdates.targetFieldId ?? existing.targetFieldId,
-        mappingType: filteredUpdates.mappingType ?? existing.mappingType,
+        mappingType: effectiveMappingType,
         transformationRule: filteredUpdates.transformationRule ?? existing.transformationRule,
+        transform: effectiveTransform,
         excludeMappingId: mappingId,
     };
     const { warnings } = await validationService.validateFieldMapping(effective);

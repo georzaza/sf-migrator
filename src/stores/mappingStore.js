@@ -311,6 +311,35 @@ export const useMappingStore = defineStore('mapping', () => {
         return response.data.data || { created: 0, skipped: 0, errors: [] };
     }
 
+    /**
+     * Load record expansions (object-level explode transforms) for an org pair.
+     */
+    async function loadRecordExpansions(sourceOrgId, targetOrgId) {
+        const response = await axiosInstance.get('/api', {
+            headers: { action: 'get-record-expansions', sourceOrgId, targetOrgId },
+        });
+        return response.data.data || [];
+    }
+
+    /**
+     * Create or update the record expansion for a source/target object pair.
+     */
+    async function upsertRecordExpansion(sourceObjectId, targetObjectId, variants) {
+        const response = await axiosInstance.put('/api', { sourceObjectId, targetObjectId, variants }, {
+            headers: { action: 'upsert-record-expansion' },
+        });
+        return response.data.data;
+    }
+
+    /**
+     * Delete a record expansion by id.
+     */
+    async function deleteRecordExpansion(expansionId) {
+        await axiosInstance.delete('/api', {
+            headers: { action: 'delete-record-expansion', expansionId },
+        });
+    }
+
     return {
         // State
         objectMappings,
@@ -337,5 +366,8 @@ export const useMappingStore = defineStore('mapping', () => {
         clearMappings,
         exportMappingsCsv,
         importMappingsCsv,
+        loadRecordExpansions,
+        upsertRecordExpansion,
+        deleteRecordExpansion,
     };
 });

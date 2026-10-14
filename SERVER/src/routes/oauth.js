@@ -78,7 +78,7 @@ router.get('/oauth2/callback', async (req, res) => {
 
     try {
         const userInfo = await sfService.completeOAuth(sfOrgId, code);
-        log.info('OAuth2 callback complete', { sfOrgId, userId: userInfo?.id });
+        // log.info('OAuth2 callback complete', { sfOrgId, userId: userInfo?.id });
         return res.send(popupResultHtml({ type: 'sf-oauth-success', sfOrgId }, fallbackBase));
     } catch (err) {
         log.error('OAuth2 callback failed', err, { sfOrgId });

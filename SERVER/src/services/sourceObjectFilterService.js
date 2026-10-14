@@ -38,7 +38,7 @@ async function setExtractFilter(sourceObjectId, rawFilter) {
     if (!obj) throw new Error(`Source object not found: ${sourceObjectId}`);
     const clean = sanitizeFilter(rawFilter);
     await metadataRepo.updateObjectExtractFilter(sourceObjectId, clean);
-    log.info('Source object extract filter saved', { sourceObjectId, hasFilter: clean !== null });
+    // log.info('Source object extract filter saved', { sourceObjectId, hasFilter: clean !== null });
     return clean;
 }
 

@@ -70,7 +70,7 @@ async function upsertSetting(sourceObjectId, targetObjectId, updates = {}) {
     }
 
     const setting = await migrationSettingRepo.upsert(sourceObjectId, targetObjectId, fields);
-    log.info('Migration setting saved', { sourceObjectId, targetObjectId, settingId: setting.id });
+    // log.info('Migration setting saved', { sourceObjectId, targetObjectId, settingId: setting.id });
     return setting;
 }
 

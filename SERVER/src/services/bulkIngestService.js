@@ -100,14 +100,9 @@ async function ingestRecords({ conn, objectName, records, operation = 'insert', 
         options.externalIdFieldName = externalIdFieldName;
     }
 
-    log.info('Starting Bulk 2.0 ingest', { objectName, operation, recordCount: records.length });
+    // log.info('Starting Bulk 2.0 ingest', { objectName, operation, recordCount: records.length });
     const results = await conn.bulk2.loadAndWaitForResults(options);
-    log.info('Bulk 2.0 ingest finished', {
-        objectName,
-        operation,
-        successCount: results.successfulResults?.length || 0,
-        failedCount: results.failedResults?.length || 0,
-    });
+    // log.info('Bulk 2.0 ingest finished', { objectName, operation, successCount: results.successfulResults?.length || 0, failedCount: results.failedResults?.length || 0, });
 
     return {
         successfulResults: results.successfulResults || [],

@@ -19,7 +19,7 @@ router.post('/login', async (req, res) => {
         !req.body || !req.body.userIdentifier || !req.body.password  || !req.headers ||
         !req.get('action') || req.get('action').toLowerCase() !== 'login')
     {
-        log.info('ERROR in auth.js headers parsing', req.headers);
+        log.error('ERROR in auth.js headers parsing', req.headers);
         return sendResponse(res, 400, false, 'Bad request.');
     }
 

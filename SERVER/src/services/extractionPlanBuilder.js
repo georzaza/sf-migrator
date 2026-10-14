@@ -22,6 +22,7 @@ import {
     parseTransformationRule,
     extractReferencedFields,
 } from '../utils/transformationRule.js';
+import { mappingToTree, collectTransformFields } from '../utils/transformTree.js';
 
 const log = logger.create('extractionPlanBuilder');
 
@@ -39,12 +40,13 @@ function extractReferenceTargetNames(referenceTo) {
     return names;
 }
 
-async function buildExtractionPlan({ sourceOrgId, fieldMappings, metadataRepo }) {
+async function buildExtractionPlan({ sourceOrgId, fieldMappings, recordExpansions, metadataRepo }) {
     if (!sourceOrgId) throw new Error('sourceOrgId is required');
     if (!metadataRepo) throw new Error('metadataRepo is required');
     const mappings = Array.isArray(fieldMappings) ? fieldMappings : [];
+    const expansions = Array.isArray(recordExpansions) ? recordExpansions : [];
 
-    log.info('Building extraction plan', { sourceOrgId, mappingCount: mappings.length });
+    // log.info('Building extraction plan', { sourceOrgId, mappingCount: mappings.length, expansionCount: expansions.length });
 
     // Load source-org object index once
     const allObjects = await metadataRepo.findObjectsByOrgId(sourceOrgId);
@@ -102,48 +104,82 @@ async function buildExtractionPlan({ sourceOrgId, fieldMappings, metadataRepo })
             addField(rootObject.id, m.sourceField.name);
         }
 
-        // (b) transformationRule expressions — only meaningful for expression mappings
-        const rule = m.transformationRule;
-        if (m.mappingType === 'expression' && rule && typeof rule === 'string' && rule.trim()) {
-            let refs;
+        // (b) referenced field paths — derived from the canonical transform tree so
+        // every node kind (expression, if, coalesce, valueMap, …) contributes. Falls
+        // back to the legacy DSL for expression rows without a stored tree.
+        let refs = [];
+        if (m.transform) {
             try {
-                const ast = parseTransformationRule(rule);
+                refs = Array.from(collectTransformFields(mappingToTree(m)));
+            } catch (err) {
+                log.warn('Failed to collect fields from transform tree; using direct sourceField only', {
+                    mappingId: m.id,
+                    error: err.message,
+                });
+            }
+        } else if (m.mappingType === 'expression' && m.transformationRule && typeof m.transformationRule === 'string' && m.transformationRule.trim()) {
+            try {
+                const ast = parseTransformationRule(m.transformationRule);
                 refs = Array.from(extractReferencedFields(ast));
             } catch (err) {
                 log.warn('Failed to parse transformationRule; falling back to direct sourceField only', {
                     mappingId: m.id,
-                    rule,
+                    rule: m.transformationRule,
                     error: err.message,
                 });
-                refs = [];
             }
+        }
 
-            for (const ref of refs) {
-                const segments = ref.split('.').filter(Boolean);
-                if (segments.length === 0) continue;
-                await walkPath({
-                    segments,
-                    rootObject,
-                    objectsByName,
-                    getFields,
-                    ensureObject,
-                    addField,
-                });
-            }
+        for (const ref of refs) {
+            const segments = ref.split('.').filter(Boolean);
+            if (segments.length === 0) continue;
+            await walkPath({
+                segments,
+                rootObject,
+                objectsByName,
+                getFields,
+                ensureObject,
+                addField,
+            });
         }
         // 'as-is' and 'constant' contribute nothing beyond (a)
     }
 
+    // 3) Record expansions: walk every field path referenced by variant trees
+    // (fields + filters), rooted at the expansion's source object.
+    for (const exp of expansions) {
+        const so = exp.sourceObject;
+        if (!so?.id || !so?.name) continue;
+        const cached = objectsById.get(so.id);
+        const rootObject = cached || { id: so.id, name: so.name, label: so.label || null, extractFilter: null };
+        ensureObject(rootObject);
+
+        const variants = Array.isArray(exp.variants) ? exp.variants : [];
+        const refs = new Set();
+        for (const v of variants) {
+            if (v?.filter) { try { collectTransformFields(v.filter, refs); } catch { /* skip */ } }
+            for (const tree of Object.values(v?.fields || {})) {
+                try { collectTransformFields(tree, refs); } catch { /* skip */ }
+            }
+        }
+
+        for (const ref of refs) {
+            const segments = String(ref).split('.').filter(Boolean);
+            if (segments.length === 0) continue;
+            await walkPath({
+                segments,
+                rootObject,
+                objectsByName,
+                getFields,
+                ensureObject,
+                addField,
+            });
+        }
+    }
+
     const objects = Array.from(planObjects.values()).filter(o => !!o.name);
 
-    log.info('Extraction plan built', {
-        sourceOrgId,
-        objectCount: objects.length,
-        objects: objects.map(o => ({
-            name: o.name,
-            fields: Array.from(requiredFields.get(o.id) || []).sort(),
-        })),
-    });
+    // log.info('Extraction plan built', { sourceOrgId, objectCount: objects.length, objects: objects.map(o => ({ name: o.name, fields: Array.from(requiredFields.get(o.id) || []).sort(), })), });
 
     return { objects, fieldsByObjectId: requiredFields };
 }

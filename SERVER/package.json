@@ -8,7 +8,11 @@
         "migrate:dev:status": "cross-env NODE_ENV=development npx sequelize-cli db:migrate:status --env development --migrations-path migrations --config config/config.cjs",
         "seed:dev": "cross-env NODE_ENV=development npx sequelize-cli db:seed:all --env development --seeders-path seeders --config config/config.cjs",
         "seed:dev:undo": "cross-env NODE_ENV=development npx sequelize-cli db:seed:undo:all --seeders-path seeders --env development --config config/config.cjs",
-        "fresh:dev": "echo First remove type module from package.json && npm run seed:dev:undo && npm run migrate:dev:undo && npm run migrate:dev && npm run seed:dev"
+        "fresh:dev": "echo First remove type module from package.json && npm run seed:dev:undo && npm run migrate:dev:undo && npm run migrate:dev && npm run seed:dev",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "test:realdata": "cross-env NODE_ENV=development TEST_DB=1 vitest run --config vitest.realdata.config.js --silent=false --reporter=verbose"
     },
     "dependencies": {
         "@salesforce/cli": "^2.139.6",
@@ -24,8 +28,10 @@
         "validator": "^13.15.15"
     },
     "devDependencies": {
+        "@vitest/coverage-v8": "^5.0.3",
         "cross-env": "^7.0.3",
-        "sequelize-cli": "^6.3.0"
+        "sequelize-cli": "^6.3.0",
+        "vitest": "^5.0.3"
     },
     "overrides": {
         "minimatch": "^10.2.1",

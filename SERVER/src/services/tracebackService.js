@@ -138,11 +138,7 @@ async function setUpsertExternalId(sourceObjectId, targetObjectId, fieldId) {
     delete metadata.tracebackExternalIdField;
 
     await migrationSettingRepo.upsert(sourceObjectId, targetObjectId, { metadata });
-    log.info('Upsert External ID saved', {
-        sourceObjectId,
-        targetObjectId,
-        fieldName: upsertExternalId?.name || null,
-    });
+    // log.info('Upsert External ID saved', { sourceObjectId, targetObjectId, fieldName: upsertExternalId?.name || null, });
     return upsertExternalId;
 }
 
@@ -163,7 +159,7 @@ async function setOperation(sourceObjectId, targetObjectId, operation) {
 
     // operation is a proper DB column on MigrationSetting.
     await migrationSettingRepo.upsert(sourceObjectId, targetObjectId, { operation });
-    log.info('Operation saved', { sourceObjectId, targetObjectId, operation });
+    // log.info('Operation saved', { sourceObjectId, targetObjectId, operation });
     return operation;
 }
 

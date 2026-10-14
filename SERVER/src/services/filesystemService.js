@@ -17,7 +17,7 @@ async function saveObjectDescribes(orgId, objectDescribes) {
         await fsp.mkdir(dir, { recursive: true });
         const filepath = path.join(dir, `${timestamp}_objects.json`);
         await fsp.writeFile(filepath, JSON.stringify(objectDescribes, null, 2), 'utf8');
-        log.info('Object describes saved to file.', { orgId, filepath, count: objectDescribes.length });
+        // log.info('Object describes saved to file.', { orgId, filepath, count: objectDescribes.length });
         return filepath;
     } catch (err) {
         log.error('Error writing object describes to file.', err, { orgId, dir });
@@ -34,7 +34,7 @@ async function saveFieldDescribes(orgId, fieldDescribes) {
         await fsp.mkdir(dir, { recursive: true });
         const filepath = path.join(dir, `${timestamp}_fields.json`);
         await fsp.writeFile(filepath, JSON.stringify(fieldDescribes, null, 2), 'utf8');
-        log.info('Field describes saved to file.', { orgId, filepath, count: fieldDescribes.length });
+        // log.info('Field describes saved to file.', { orgId, filepath, count: fieldDescribes.length });
         return filepath;
     } catch (err) {
         log.error('Error writing field describes to file.', err, { orgId, dir });

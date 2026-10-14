@@ -18,7 +18,7 @@ async function upsertSourceKeys(rows) {
     const created = await RecordIdMap.bulkCreate(rows, {
         ignoreDuplicates: true,
     });
-    log.info('Upserted source record keys', { requested: rows.length, inserted: created.length });
+    // log.info('Upserted source record keys', { requested: rows.length, inserted: created.length });
     return created;
 }
 
@@ -71,7 +71,7 @@ async function setTargetIds(rows) {
         updateOnDuplicate: ['targetRecordId', 'migrationJobId'],
         conflictAttributes: ['sourceOrgId', 'targetOrgId', 'objectName', 'sourceRecordId'],
     });
-    log.info('Bulk set target record Ids', { count: result.length });
+    // log.info('Bulk set target record Ids', { count: result.length });
     return result;
 }
 

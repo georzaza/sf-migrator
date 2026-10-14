@@ -31,7 +31,8 @@ import metadataRepo from '../repositories/metadataRepository.js';
 import mappingService from './mappingService.js';
 import migrationSettingService from './migrationSettingService.js';
 import extractionService from './extractionService.js';
-import { parseTransformationRule, extractReferencedFields, evaluateTransformationRule } from '../utils/transformationRule.js';
+import recordExpansionService from './recordExpansionService.js';
+import { mappingToTree, evaluateTransform, collectTransformFields, toCellValue } from '../utils/transformTree.js';
 
 const log = logger.create('transformService');
 
@@ -72,30 +73,39 @@ async function runTransform({ sourceOrgId, targetOrgId }) {
     }
 
     const runId = randomUUID();
-    log.info('Transform started', { runId, sourceOrgId, targetOrgId });
 
     const fieldMappings = await mappingService.getFieldMappingsByOrgPair(sourceOrgId, targetOrgId);
     const settingsMap = await migrationSettingService.getEffectiveSettingsMap(sourceOrgId, targetOrgId);
+    const expansions = await recordExpansionService.getByOrgPair(sourceOrgId, targetOrgId);
 
-    // Group field mappings by target object.
+    // Target objects driven by an explode take the expansion path; a target with an
+    // expansion is fully defined by its variants, so its flat field mappings (if any)
+    // are not separately emitted.
+    const expansionByTarget = new Map(); // targetObjectId -> expansion
+    for (const exp of expansions) {
+        if (exp.targetObjectId) expansionByTarget.set(exp.targetObjectId, exp);
+    }
+
+    // Group field mappings by target object (excluding targets owned by an expansion).
     const byTarget = new Map(); // targetObjectId -> { targetObject, mappings: [] }
     for (const fm of fieldMappings) {
         if (!fm.targetObject?.name || !fm.targetObjectId) continue;
+        if (expansionByTarget.has(fm.targetObjectId)) continue;
         if (!byTarget.has(fm.targetObjectId)) {
             byTarget.set(fm.targetObjectId, { targetObject: fm.targetObject, mappings: [] });
         }
         byTarget.get(fm.targetObjectId).mappings.push(fm);
     }
 
-    if (byTarget.size === 0) {
-        log.warn('No field mappings found for org pair, nothing to transform', { runId, sourceOrgId, targetOrgId });
+    if (byTarget.size === 0 && expansionByTarget.size === 0) {
+        log.warn('No field mappings or expansions found for org pair, nothing to transform', { runId, sourceOrgId, targetOrgId });
         return { runId, sourceOrgId, targetOrgId, targetObjectCount: 0, successCount: 0, failedCount: 0, results: [] };
     }
 
     const ctx = createContext(sourceOrgId);
     const results = [];
 
-    const totalObjects = byTarget.size;
+    const totalObjects = byTarget.size + expansionByTarget.size;
     let completed = 0;
     setTransformProgress(sourceOrgId, targetOrgId, { total: totalObjects, completed, currentObject: null, results: [...results] });
 
@@ -107,10 +117,18 @@ async function runTransform({ sourceOrgId, targetOrgId }) {
         setTransformProgress(sourceOrgId, targetOrgId, { total: totalObjects, completed, currentObject: null, results: [...results] });
     }
 
+    for (const expansion of expansionByTarget.values()) {
+        const name = expansion.targetObject?.name || 'unknown';
+        setTransformProgress(sourceOrgId, targetOrgId, { total: totalObjects, completed, currentObject: name, results: [...results] });
+        const result = await transformTargetObjectExpanded({ runId, sourceOrgId, targetOrgId, expansion, ctx });
+        results.push(result);
+        completed += 1;
+        setTransformProgress(sourceOrgId, targetOrgId, { total: totalObjects, completed, currentObject: null, results: [...results] });
+    }
+
     const successCount = results.filter(r => r.status === 'success').length;
     const failedCount = results.length - successCount;
 
-    log.info('Transform completed', { runId, sourceOrgId, targetOrgId, targetObjectCount: results.length, successCount, failedCount });
 
     return { runId, sourceOrgId, targetOrgId, targetObjectCount: results.length, successCount, failedCount, results };
 }
@@ -181,17 +199,19 @@ async function transformTargetObject({ runId, sourceOrgId, targetOrgId, targetOb
         base.stg2Table = stg2Table;
         await ensureStg2Table(stg2Table, targetColumns);
 
-        // Collect relationship paths referenced by expression mappings, for nested-record assembly.
+        // Collect relationship paths referenced by every mapping (tree-derived), for
+        // nested-record assembly. Covers legacy expression rules and the new transform tree.
         const referencedPaths = new Set();
         for (const m of mappings) {
-            if (m.mappingType === 'expression' && m.transformationRule) {
-                const ast = parseTransformationRule(m.transformationRule);
-                extractReferencedFields(ast, referencedPaths);
+            try {
+                collectTransformFields(mappingToTree(m), referencedPaths);
+            } catch {
+                // A mapping that cannot be reduced to a tree (e.g. incomplete) contributes no paths.
             }
         }
 
         const drivingRows = await readAllRows(drivingTable);
-        log.info('Transforming target object', { runId, targetObjectName, drivingObjectName, rowCount: drivingRows.length });
+        // log.info('Transforming target object', { runId, targetObjectName, drivingObjectName, rowCount: drivingRows.length });
 
         const outRows = [];
         let successCount = 0;
@@ -232,7 +252,7 @@ async function transformTargetObject({ runId, sourceOrgId, targetOrgId, targetOb
         base.successCount = successCount;
         base.errorCount = errorCount;
         base.status = 'success';
-        log.info('Target object transformed', { runId, targetObjectName, rowCount: base.rowCount, successCount, errorCount, stg2Table });
+        // log.info('Target object transformed', { runId, targetObjectName, rowCount: base.rowCount, successCount, errorCount, stg2Table });
     } catch (error) {
         base.errorMessage = error.message || String(error);
         log.error('Target object transform failed', error, { runId, targetObjectName });
@@ -243,36 +263,143 @@ async function transformTargetObject({ runId, sourceOrgId, targetOrgId, targetOb
 }
 
 /**
- * Compute the stg2 value for a single field mapping.
- *  - as-is     -> the driving row's source field value (for lookups this is the source Id)
- *  - constant  -> the configured constant
- *  - expression-> evaluated against the assembled nested record
+ * Build the stg2 table for a target object defined by an explode (RecordExpansion).
+ * Each driving source row fans out into one target row per variant whose optional
+ * filter passes; a variant's field values are transform trees evaluated against
+ * the assembled nested record.
+ */
+async function transformTargetObjectExpanded({ runId, sourceOrgId, targetOrgId, expansion, ctx }) {
+    const targetObjectName = expansion.targetObject?.name;
+    const drivingObjectName = expansion.sourceObject?.name;
+    const startedAt = new Date();
+    const variants = Array.isArray(expansion.variants) ? expansion.variants : [];
+
+    const base = {
+        targetObject: targetObjectName,
+        drivingObject: drivingObjectName,
+        runId,
+        stg2Table: null,
+        rowCount: 0,
+        successCount: 0,
+        errorCount: 0,
+        status: 'failed',
+        errorMessage: null,
+        startedAt,
+        finishedAt: null,
+    };
+
+    try {
+        if (!targetObjectName) throw new Error('Expansion target object metadata missing');
+        if (!drivingObjectName) throw new Error('Expansion source object metadata missing');
+        if (variants.length === 0) throw new Error(`Expansion for ${targetObjectName} has no variants`);
+
+        const drivingTable = extractionService.getStageTableName(sourceOrgId, drivingObjectName);
+        if (!(await tableExists(drivingTable, ctx))) {
+            throw new Error(`Source data not staged for driving object ${drivingObjectName} (missing table ${drivingTable}). Run extraction first.`);
+        }
+
+        // Target columns = union of all variant field names (sanitized).
+        const targetColumns = [];
+        const seen = new Set();
+        const colByField = new Map();
+        for (const v of variants) {
+            for (const fieldName of Object.keys(v.fields || {})) {
+                const col = sanitizeColumnName(fieldName);
+                colByField.set(fieldName, col);
+                if (!seen.has(col)) { seen.add(col); targetColumns.push(col); }
+            }
+        }
+
+        const stg2Table = getStg2TableName(targetOrgId, targetObjectName);
+        base.stg2Table = stg2Table;
+        await ensureStg2Table(stg2Table, targetColumns);
+
+        // Relationship paths referenced across all variant trees (fields + filters).
+        const referencedPaths = new Set();
+        for (const v of variants) {
+            if (v.filter) { try { collectTransformFields(v.filter, referencedPaths); } catch { /* skip */ } }
+            for (const tree of Object.values(v.fields || {})) {
+                try { collectTransformFields(tree, referencedPaths); } catch { /* skip */ }
+            }
+        }
+
+        const drivingRows = await readAllRows(drivingTable);
+        // log.info('Expanding target object', { runId, targetObjectName, drivingObjectName, variantCount: variants.length, rowCount: drivingRows.length });
+
+        const outRows = [];
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const drivingRow of drivingRows) {
+            const record = await assembleRecord(ctx, drivingObjectName, drivingRow, referencedPaths);
+
+            for (const v of variants) {
+                // A variant with a filter is only emitted when that filter is truthy.
+                if (v.filter) {
+                    let keep;
+                    try { keep = isTruthy(evaluateTransform(v.filter, record)); } catch { keep = false; }
+                    if (!keep) continue;
+                }
+
+                const errors = [];
+                const values = {};
+                for (const [fieldName, tree] of Object.entries(v.fields || {})) {
+                    const col = colByField.get(fieldName);
+                    try {
+                        const value = evaluateTransform(tree, record);
+                        values[col] = value === undefined || value === null ? null : String(value);
+                    } catch (error) {
+                        values[col] = null;
+                        errors.push(`${fieldName}: ${error.message}`);
+                    }
+                }
+
+                const failed = errors.length > 0;
+                if (failed) errorCount += 1; else successCount += 1;
+
+                outRows.push({
+                    __srcId: getSourceId(drivingRow),
+                    __srcObject: drivingObjectName,
+                    __status: failed ? 'failed' : 'success',
+                    __error: failed ? errors.join('; ') : null,
+                    __runId: runId,
+                    values,
+                });
+            }
+        }
+
+        await insertStg2Rows(stg2Table, targetColumns, outRows);
+
+        base.rowCount = outRows.length;
+        base.successCount = successCount;
+        base.errorCount = errorCount;
+        base.status = 'success';
+        // log.info('Target object expanded', { runId, targetObjectName, rowCount: base.rowCount, successCount, errorCount, stg2Table });
+    } catch (error) {
+        base.errorMessage = error.message || String(error);
+        log.error('Target object expansion failed', error, { runId, targetObjectName });
+    }
+
+    base.finishedAt = new Date();
+    return base;
+}
+
+// Truthiness used by variant filters and the `if` node condition.
+function isTruthy(v) {
+    if (typeof v === 'boolean') return v;
+    return v !== null && v !== undefined && v !== '' && v !== false && v !== 'false' && v !== '0';
+}
+
+/**
+ * Compute the stg2 value for a single field mapping by evaluating its canonical
+ * transform tree against the assembled nested record. The tree folds legacy
+ * `as-is` / `constant` / `expression` mappings and the new `transform` JSONB into
+ * one representation (see utils/transformTree.js).
  */
 function computeFieldValue(mapping, drivingRow, record) {
-    const type = mapping.mappingType || 'as-is';
-
-    if (type === 'as-is') {
-        const sourceName = mapping.sourceField?.name;
-        if (!sourceName) {
-            throw new Error('as-is mapping has no source field');
-        }
-        const value = drivingRow[sourceName];
-        return value === undefined || value === null ? null : String(value);
-    }
-
-    if (type === 'constant') {
-        return mapping.constantValue === undefined || mapping.constantValue === null ? null : String(mapping.constantValue);
-    }
-
-    if (type === 'expression') {
-        if (!mapping.transformationRule) {
-            throw new Error('expression mapping has no transformation rule');
-        }
-        const result = evaluateTransformationRule(mapping.transformationRule, record);
-        return result === undefined || result === null ? null : String(result);
-    }
-
-    throw new Error(`Unknown mapping type "${type}"`);
+    const tree = mappingToTree(mapping);
+    const result = evaluateTransform(tree, record);
+    return toCellValue(result);
 }
 
 /**

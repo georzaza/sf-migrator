@@ -155,7 +155,7 @@ async function findFieldMappingsByTargetField(targetObjectId, targetFieldId) {
 
 async function createFieldMapping(data) {
     const mapping = await FieldMapping.create(data);
-    log.info('Field mapping created', { mappingId: mapping.id });
+    // log.info('Field mapping created', { mappingId: mapping.id });
     return FieldMapping.findByPk(mapping.id, { include: FIELD_MAPPING_INCLUDES });
 }
 
@@ -163,7 +163,7 @@ async function updateFieldMapping(id, data) {
     const mapping = await FieldMapping.findByPk(id);
     if (!mapping) throw new Error('Field mapping not found');
     await mapping.update(data);
-    log.info('Field mapping updated', { mappingId: id });
+    // log.info('Field mapping updated', { mappingId: id });
     return FieldMapping.findByPk(id, { include: FIELD_MAPPING_INCLUDES });
 }
 
@@ -171,12 +171,12 @@ async function deleteFieldMapping(id) {
     const mapping = await FieldMapping.findByPk(id);
     if (!mapping) throw new Error('Field mapping not found');
     await mapping.destroy();
-    log.info('Field mapping deleted', { mappingId: id });
+    // log.info('Field mapping deleted', { mappingId: id });
 }
 
 async function bulkDeleteFieldMappings(sourceObjectId, targetObjectId) {
     const count = await FieldMapping.destroy({ where: { sourceObjectId, targetObjectId } });
-    log.info('Field mappings deleted in bulk', { sourceObjectId, targetObjectId, count });
+    // log.info('Field mappings deleted in bulk', { sourceObjectId, targetObjectId, count });
     return count;
 }
 

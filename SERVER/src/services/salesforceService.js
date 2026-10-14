@@ -97,7 +97,7 @@ async function completeOAuth(sfOrgId, code) {
         if (shouldResetAnalysisStatus) {
             await orgRepo.updateAnalysisStatus(sfOrgId, 'idle').catch(() => {});
         }
-        log.info('OAuth2 authorized', { sfOrgId, userId: userInfo.id, organizationId: userInfo.organizationId });
+        // log.info('OAuth2 authorized', { sfOrgId, userId: userInfo.id, organizationId: userInfo.organizationId });
         return userInfo;
     } catch (err) {
         oauth2Map.delete(sfOrgId);
@@ -133,7 +133,7 @@ async function describeGlobal(sfOrgId) {
     const conn = await connectToOrg(sfOrgId);
     try {
         const describeResult = await conn.describeGlobal();
-        log.info('Issuing describe global', {orgId: sfOrgId})
+        // log.info('Issuing describe global', {orgId: sfOrgId})
 
         const objects = describeResult.sobjects
             .filter(() => true)
@@ -185,13 +185,7 @@ async function describeObjectMultiple(sfOrgId, objectNames) {
         });
     }
 
-    log.info('describeObjectMultiple is about to start', {
-        orgid: sfOrgId,
-        totalObjects: objectNames.length,
-        totalRequests: requestBodies.length,
-        requestBatchSize: BATCH_SIZE,
-        maxConcurrentRequests: CONCURRENCY,
-    });
+    // log.info('describeObjectMultiple is about to start', { orgid: sfOrgId, totalObjects: objectNames.length, totalRequests: requestBodies.length, requestBatchSize: BATCH_SIZE, maxConcurrentRequests: CONCURRENCY, });
 
     const limit = pLimit(CONCURRENCY);
     const allResponses = await Promise.all(
@@ -216,7 +210,7 @@ async function describeObjectMultiple(sfOrgId, objectNames) {
             }))
     );
 
-    log.info('describeObjectMultiple completed', {describedObjects: sobjectDescribes.length, orgId: sfOrgId });
+    // log.info('describeObjectMultiple completed', {describedObjects: sobjectDescribes.length, orgId: sfOrgId });
     return sobjectDescribes;
 }
 
@@ -282,7 +276,7 @@ async function insertRecords(sfOrgId, objectName, records) {
 
 function clearConnection(sfOrgId) {
     connectionPool.delete(sfOrgId);
-    log.info('Cleared cached connection', { sfOrgId });
+    // log.info('Cleared cached connection', { sfOrgId });
 }
 
 

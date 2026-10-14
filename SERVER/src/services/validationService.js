@@ -16,6 +16,7 @@ import metadataRepo from '../repositories/metadataRepository.js';
 import relationshipResolver from './relationshipResolver.js';
 import tracebackService from './tracebackService.js';
 import logger from '../lib/logger.js';
+import { collectTransformFields } from '../utils/transformTree.js';
 
 const log = logger.create('validationService');
 
@@ -70,6 +71,7 @@ async function validateFieldMapping(input) {
         targetFieldId,
         mappingType = 'as-is',
         transformationRule = null,
+        transform = null,
         excludeMappingId = null,
     } = input;
 
@@ -105,16 +107,22 @@ async function validateFieldMapping(input) {
         }
     }
 
-    // BLOCK/WARN: for expression mappings, validate that every referenced field
-    // path exists (traversing relationships). Missing relationships/fields throw;
-    // unresolvable (not-yet-analyzed) objects produce advisory warnings.
-    if (mappingType === 'expression' && transformationRule) {
+    // BLOCK/WARN: validate that every referenced field path exists (traversing
+    // relationships). Prefer the canonical transform tree; fall back to the legacy
+    // expression rule. Missing relationships/fields throw; unresolvable
+    // (not-yet-analyzed) objects produce advisory warnings.
+    if (transform || (mappingType === 'expression' && transformationRule)) {
         const sourceObject = await metadataRepo.findObjectById(sourceObjectId);
         if (sourceObject) {
-            const { warnings: refWarnings } = await relationshipResolver.validateTransformationReferences(
-                sourceObject.sfOrgId,
-                transformationRule,
-            );
+            const { warnings: refWarnings } = transform
+                ? await relationshipResolver.validateReferencePaths(
+                    sourceObject.sfOrgId,
+                    [...collectTransformFields(transform)],
+                )
+                : await relationshipResolver.validateTransformationReferences(
+                    sourceObject.sfOrgId,
+                    transformationRule,
+                );
             warnings.push(...refWarnings);
         }
     }

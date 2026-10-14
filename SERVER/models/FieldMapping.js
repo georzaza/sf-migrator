@@ -38,9 +38,19 @@ export default (sequelize, DataTypes) => {
             type: DataTypes.STRING,
             allowNull: true
         },
+        transform: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+            comment: 'Canonical Layer-1 transform node tree. Null = derived from legacy mappingType columns.'
+        },
     }, {
         validate: {
             mappingTypeValidation() {
+                // When a canonical transform tree is present it is the source of
+                // truth; the legacy per-type column requirements do not apply.
+                if (this.transform) {
+                    return;
+                }
                 // If type is expression, must have transformationRule
                 if (this.mappingType === 'expression' && !this.transformationRule) {
                     throw new Error('Transformation rule is required for expression mapping type');

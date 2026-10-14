@@ -11,6 +11,7 @@ import orgRepo from '../repositories/orgRepository.js';
 import metadataRepo from '../repositories/metadataRepository.js';
 import mappingService from './mappingService.js';
 import migrationSettingService from './migrationSettingService.js';
+import recordExpansionService from './recordExpansionService.js';
 import { buildExtractionPlan } from './extractionPlanBuilder.js';
 
 const log = logger.create('extractionService');
@@ -80,36 +81,35 @@ async function runExtraction({ sourceOrgId, targetOrgId = null, sourceObjectIds 
     }
     const runId = randomUUID();
 
-    log.info('Extraction started', { runId, sourceOrgId, targetOrgId });
+    // log.info('Extraction started', { runId, sourceOrgId, targetOrgId });
 
     const extractionDir = path.join(__dirname, '..', '..', 'data', sourceOrgId, 'Extraction');
     const soqlQueriesDir = path.join(extractionDir, 'SOQL_Queries');
     await fs.mkdir(soqlQueriesDir, { recursive: true });
-    log.info('Extraction directories ensured', { extractionDir, soqlQueriesDir });
+    // log.info('Extraction directories ensured', { extractionDir, soqlQueriesDir });
 
     const statsTableName = getExtractionStatsTableName(sourceOrgId);
     await ensureExtractionStatsTable(statsTableName);
-    log.info('Extraction stats table ready', { statsTableName });
+    // log.info('Extraction stats table ready', { statsTableName });
 
     const fieldMappings = targetOrgId
         ? await mappingService.getFieldMappingsByOrgPair(sourceOrgId, targetOrgId)
         : await mappingService.getFieldMappingsBySourceOrg(sourceOrgId);
 
+    const recordExpansions = targetOrgId
+        ? await recordExpansionService.getByOrgPair(sourceOrgId, targetOrgId)
+        : await recordExpansionService.getBySourceOrg(sourceOrgId);
+
     const extractionPlan = await buildExtractionPlan({
         sourceOrgId,
         fieldMappings,
+        recordExpansions,
         metadataRepo,
     });
     const sourceObjects = extractionPlan.objects;
     const requiredFieldsByObjectId = extractionPlan.fieldsByObjectId;
 
-    log.info('Source objects resolved for extraction', {
-        runId,
-        sourceOrgId,
-        targetOrgId,
-        objectCount: sourceObjects.length,
-        objects: sourceObjects.map(o => o.name),
-    });
+    // log.info('Source objects resolved for extraction', { runId, sourceOrgId, targetOrgId, objectCount: sourceObjects.length, objects: sourceObjects.map(o => o.name), });
 
     if (sourceObjects.length === 0) {
         log.warn('No mapped source objects found, aborting extraction', { runId, sourceOrgId, targetOrgId });
@@ -135,10 +135,10 @@ async function runExtraction({ sourceOrgId, targetOrgId = null, sourceObjectIds 
         const safeObjectFileName = sanitizeForFileName(objectName);
         extractionProgress.set(sourceOrgId, { objectName, remaining: sourceObjects.length - i - 1 });
 
-        log.info('Starting object extraction', { runId, sourceOrgId, objectName, sourceObjectId });
+        // log.info('Starting object extraction', { runId, sourceOrgId, objectName, sourceObjectId });
 
         if (subset && !subset.has(String(sourceObjectId))) {
-            log.info('Skipping source object — not in requested subset', { runId, objectName, sourceObjectId });
+            // log.info('Skipping source object — not in requested subset', { runId, objectName, sourceObjectId });
             extractionProgress.set(sourceOrgId, { objectName, remaining: sourceObjects.length - i - 1 });
             continue;
         }
@@ -183,7 +183,7 @@ async function runExtraction({ sourceOrgId, targetOrgId = null, sourceObjectIds 
                 }
                 if (compoundParentNames.has(name)) {
                     const components = componentsByParent.get(name) || [];
-                    log.info('Substituting compound parent with components', { objectName, parent: name, components });
+                    // log.info('Substituting compound parent with components', { objectName, parent: name, components });
                     for (const c of components) resolved.push(c);
                     continue;
                 }
@@ -194,44 +194,41 @@ async function runExtraction({ sourceOrgId, targetOrgId = null, sourceObjectIds 
             if (!fields.includes('Id')) {
                 fields.unshift('Id');
             }
-            log.info('Fields resolved for object', { objectName, fieldCount: fields.length, fields });
+            // log.info('Fields resolved for object', { objectName, fieldCount: fields.length, fields });
 
             const objectFilter = sanitizeRuntimeFilter(sourceObject.extractFilter);
             const soql = `SELECT ${fields.join(', ')} FROM ${objectName}${buildWhereSuffix(objectFilter)}`;
             console.log('Generated SOQL:', soql);
             queryFilePath = path.join(soqlQueriesDir, `${safeObjectFileName}.query`);
             await fs.writeFile(queryFilePath, soql, 'utf8');
-            log.info('SOQL query file written', { queryFilePath });
+            // log.info('SOQL query file written', { queryFilePath });
 
             csvFilePath = path.join(extractionDir, `${safeObjectFileName}.csv`);
-            log.info('Starting jsforce Bulk V2 export', { objectName, csvFilePath });
+            // log.info('Starting jsforce Bulk V2 export', { objectName, csvFilePath });
 
             await runBulk2Export({ conn, soql, outputCsvPath: csvFilePath });
 
             const { headers, rows } = await parseCsvFile(csvFilePath);
-            log.info('CSV parsed', { objectName, csvFilePath, rowCount: rows.length, columnCount: headers.length });
+            // log.info('CSV parsed', { objectName, csvFilePath, rowCount: rows.length, columnCount: headers.length });
 
             stgTableName = getStageTableName(sourceOrgId, objectName);
-            log.info('Loading rows to staging table', { stgTableName, rowCount: rows.length });
+            // log.info('Loading rows to staging table', { stgTableName, rowCount: rows.length });
             await loadRowsToDynamicTable(stgTableName, headers, rows);
 
             validatedRowCount = await validateLoadedTable(stgTableName, rows.length);
-            log.info('Staging table validated', { stgTableName, validatedRowCount });
+            // log.info('Staging table validated', { stgTableName, validatedRowCount });
 
             recordsExported = rows.length;
             status = 'success';
-            log.info('Object extraction succeeded', { runId, objectName, recordsExported, stgTableName });
+            // log.info('Object extraction succeeded', { runId, objectName, recordsExported, stgTableName });
         } catch (error) {
             errorMessage = error.message || String(error);
-            log.error('Object extraction failed', error, {
-                sourceOrgId,
-                objectName,
-            });
+            log.error('Object extraction failed', error, { sourceOrgId, objectName, });
         }
 
         const finishedAt = new Date();
 
-        log.info('Writing extraction stat', { runId, objectName, status, recordsExported, stgTableName, durationMs: new Date() - startedAt });
+        // log.info('Writing extraction stat', { runId, objectName, status, recordsExported, stgTableName, durationMs: new Date() - startedAt });
         await insertExtractionStat(statsTableName, {
             runId,
             sourceObjectId,
@@ -268,7 +265,7 @@ async function runExtraction({ sourceOrgId, targetOrgId = null, sourceObjectIds 
     const failedCount = results.length - successCount;
 
     extractionProgress.delete(sourceOrgId);
-    log.info('Extraction completed', { runId, sourceOrgId, targetOrgId, totalObjects: results.length, successCount, failedCount });
+    // log.info('Extraction completed', { runId, sourceOrgId, targetOrgId, totalObjects: results.length, successCount, failedCount });
 
     return {
         runId,
@@ -290,7 +287,7 @@ async function runExtractionForTargetOrg({ targetOrgId }) {
         throw new Error('targetOrgId is required');
     }
 
-    log.info('Target-org extraction started', { targetOrgId });
+    // log.info('Target-org extraction started', { targetOrgId });
 
     const targetOrg = await orgRepo.findById(targetOrgId);
     if (!targetOrg) {
@@ -319,7 +316,7 @@ async function runExtractionForTargetOrg({ targetOrgId }) {
             .filter(Boolean)
     ));
 
-    log.info('Source orgs identified for target-org extraction', { targetOrgId, sourceOrgIds, sourceOrgCount: sourceOrgIds.length });
+    // log.info('Source orgs identified for target-org extraction', { targetOrgId, sourceOrgIds, sourceOrgCount: sourceOrgIds.length });
 
     const resultsBySourceOrg = [];
     const createdStageTables = [];
@@ -328,7 +325,7 @@ async function runExtractionForTargetOrg({ targetOrgId }) {
     let failedCount = 0;
 
     for (const sourceOrgId of sourceOrgIds) {
-        log.info('Running extraction for source org', { targetOrgId, sourceOrgId });
+        // log.info('Running extraction for source org', { targetOrgId, sourceOrgId });
         try {
             const sourceSummary = await runExtraction({ sourceOrgId, targetOrgId });
             totalObjects += sourceSummary.totalObjects || 0;
@@ -342,7 +339,7 @@ async function runExtractionForTargetOrg({ targetOrgId }) {
             }
 
 
-            log.info('Source org extraction succeeded', { targetOrgId, sourceOrgId, objects: sourceSummary.totalObjects, success: sourceSummary.successCount, failed: sourceSummary.failedCount });
+            // log.info('Source org extraction succeeded', { targetOrgId, sourceOrgId, objects: sourceSummary.totalObjects, success: sourceSummary.successCount, failed: sourceSummary.failedCount });
             resultsBySourceOrg.push({
                 sourceOrgId,
                 status: 'success',
@@ -361,7 +358,7 @@ async function runExtractionForTargetOrg({ targetOrgId }) {
 
     const uniqueStageTables = Array.from(new Set(createdStageTables));
 
-    log.info('Target-org extraction completed', { targetOrgId, totalSourceOrgs: sourceOrgIds.length, totalObjects, successCount, failedCount, createdStageTables: uniqueStageTables });
+    // log.info('Target-org extraction completed', { targetOrgId, totalSourceOrgs: sourceOrgIds.length, totalObjects, successCount, failedCount, createdStageTables: uniqueStageTables });
 
     return {
         targetOrgId,
@@ -403,7 +400,7 @@ function dedupeFieldNames(fieldNames) {
 }
 
 async function runBulk2Export({ conn, soql, outputCsvPath }) {
-    log.info('jsforce Bulk V2: starting query stream', { outputCsvPath });
+    // log.info('jsforce Bulk V2: starting query stream', { outputCsvPath });
     const recordStream = await conn.bulk2.query(soql);
     await new Promise((resolve, reject) => {
         const writeStream = createWriteStream(outputCsvPath);
@@ -522,7 +519,7 @@ async function ensureDynamicTable(tableName, columns) {
     const quotedTableName = quoteIdentifier(tableName);
     const quotedColumns = columns.map(c => `${quoteIdentifier(c)} TEXT`).join(', ');
 
-    log.info('DB: ensuring staging table exists', { tableName, columnCount: columns.length });
+    // log.info('DB: ensuring staging table exists', { tableName, columnCount: columns.length });
     await db.sequelize.query(`CREATE TABLE IF NOT EXISTS ${quotedTableName} (${quotedColumns});`);
 
     for (const col of columns) {
@@ -532,7 +529,7 @@ async function ensureDynamicTable(tableName, columns) {
 
 async function truncateTable(tableName) {
     const quotedTableName = quoteIdentifier(tableName);
-    log.info('DB: truncating staging table', { tableName });
+    // log.info('DB: truncating staging table', { tableName });
     await db.sequelize.query(`TRUNCATE TABLE ${quotedTableName};`);
 }
 
@@ -560,7 +557,7 @@ async function insertRows(tableName, columns, rows) {
 
 async function validateLoadedTable(tableName, expectedRows) {
     const quotedTableName = quoteIdentifier(tableName);
-    log.info('DB: validating staging table row count', { tableName, expectedRows });
+    // log.info('DB: validating staging table row count', { tableName, expectedRows });
     const [rows] = await db.sequelize.query(`SELECT COUNT(*)::int AS count FROM ${quotedTableName};`);
     const count = rows?.[0]?.count ?? 0;
 
@@ -573,7 +570,7 @@ async function validateLoadedTable(tableName, expectedRows) {
 }
 
 async function ensureExtractionStatsTable(tableName) {
-    log.info('DB: ensuring extraction stats table', { tableName });
+    // log.info('DB: ensuring extraction stats table', { tableName });
     const quotedTable = quoteIdentifier(tableName);
 
     await db.sequelize.query(`
@@ -597,7 +594,7 @@ async function ensureExtractionStatsTable(tableName) {
 }
 
 async function insertExtractionStat(tableName, row) {
-    log.info('DB: inserting extraction stat', { tableName, runId: row.runId, objectName: row.objectName, status: row.status });
+    // log.info('DB: inserting extraction stat', { tableName, runId: row.runId, objectName: row.objectName, status: row.status });
     const quotedTable = quoteIdentifier(tableName);
 
     await db.sequelize.query(`
@@ -670,7 +667,11 @@ async function getExtractionPreview({ sourceOrgId, targetOrgId = null }) {
         ? await mappingService.getFieldMappingsByOrgPair(sourceOrgId, targetOrgId)
         : await mappingService.getFieldMappingsBySourceOrg(sourceOrgId);
 
-    const plan = await buildExtractionPlan({ sourceOrgId, fieldMappings, metadataRepo });
+    const recordExpansions = targetOrgId
+        ? await recordExpansionService.getByOrgPair(sourceOrgId, targetOrgId)
+        : await recordExpansionService.getBySourceOrg(sourceOrgId);
+
+    const plan = await buildExtractionPlan({ sourceOrgId, fieldMappings, recordExpansions, metadataRepo });
 
     const directlyMapped = new Set(
         fieldMappings.map(m => m.sourceObjectId).filter(Boolean).map(String),

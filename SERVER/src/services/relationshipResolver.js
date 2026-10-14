@@ -40,10 +40,10 @@ const log = logger.create('relationshipResolver');
 function triggerBackgroundDescribe(sfOrgId, objectName) {
     Promise.resolve()
         .then(async () => {
-            log.info('Background describe started for missing object', { sfOrgId, objectName });
+            // log.info('Background describe started for missing object', { sfOrgId, objectName });
             const describe = await sfService.describeObject(sfOrgId, objectName);
             await metadataService.saveObjectMetadata(sfOrgId, describe);
-            log.info('Background describe completed', { sfOrgId, objectName });
+            // log.info('Background describe completed', { sfOrgId, objectName });
         })
         .catch((error) => {
             log.warn('Background describe failed', { sfOrgId, objectName, message: error.message });
@@ -161,17 +161,34 @@ async function validatePath(ctx, refString) {
  * @returns {Promise<{ warnings: Array<{ code: string, message: string }> }>}
  */
 async function validateTransformationReferences(sfOrgId, transformationRule) {
-    const warnings = [];
-
     const ast = parseTransformationRule(transformationRule);
     const refStrings = [...extractReferencedFields(ast)];
-    if (refStrings.length === 0) {
+    return validateReferencePaths(sfOrgId, refStrings);
+}
+
+/**
+ * Validate a set of already-collected field reference paths against the org
+ * metadata. Used by the transform-tree path (and by the legacy rule path above).
+ *
+ * Throws an Error (code 'transformation-reference-invalid') on the first
+ * non-existent relationship/field. Returns advisory warnings for references
+ * that could not be fully verified (missing object metadata).
+ *
+ * @param {string} sfOrgId
+ * @param {string[]} refStrings  dotted paths, e.g. "Account.Owner.Name"
+ * @returns {Promise<{ warnings: Array<{ code: string, message: string }> }>}
+ */
+async function validateReferencePaths(sfOrgId, refStrings) {
+    const warnings = [];
+
+    const paths = (refStrings || []).filter((r) => typeof r === 'string' && r.includes('.'));
+    if (paths.length === 0) {
         return { warnings };
     }
 
     const ctx = await buildOrgContext(sfOrgId);
 
-    for (const refString of refStrings) {
+    for (const refString of paths) {
         const result = await validatePath(ctx, refString);
         if (result.error) {
             const error = new Error(result.error);
@@ -185,7 +202,7 @@ async function validateTransformationReferences(sfOrgId, transformationRule) {
 
     log.debug('Transformation references validated', {
         sfOrgId,
-        referenceCount: refStrings.length,
+        referenceCount: paths.length,
         warningCount: warnings.length,
     });
 
@@ -194,4 +211,5 @@ async function validateTransformationReferences(sfOrgId, transformationRule) {
 
 export default {
     validateTransformationReferences,
+    validateReferencePaths,
 };

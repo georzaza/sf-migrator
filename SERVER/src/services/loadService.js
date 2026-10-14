@@ -78,7 +78,7 @@ async function runLoad({ sourceOrgId, targetOrgId }) {
     }
 
     const runId = randomUUID();
-    log.info('Load started', { runId, sourceOrgId, targetOrgId });
+    // log.info('Load started', { runId, sourceOrgId, targetOrgId });
 
     const { loadOrder, deferredFields } = await dependencyService.getLoadPlan(sourceOrgId, targetOrgId);
     if (loadOrder.length === 0) {
@@ -157,7 +157,7 @@ async function runLoad({ sourceOrgId, targetOrgId }) {
         loadDir,
         results,
     };
-    log.info('Load completed', { runId, sourceOrgId, targetOrgId, objectCount: results.length });
+    // log.info('Load completed', { runId, sourceOrgId, targetOrgId, objectCount: results.length });
     return summary;
 }
 
@@ -243,7 +243,7 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
         const runId = await getLatestRunId(stg2Table);
         if (!runId) {
             result.status = 'success';
-            log.info('No stg2 rows to load', { targetObjectName });
+            // log.info('No stg2 rows to load', { targetObjectName });
             return result;
         }
         const stg2Rows = await readSuccessRows(stg2Table, runId);
@@ -469,10 +469,7 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
         } else {
             result.status = 'success';
         }
-        log.info('Object loaded (pass 1)', {
-            targetObjectName, operation, total: result.total, loaded: result.loaded,
-            failed: result.failed, skipped: result.skipped,
-        });
+        // log.info('Object loaded (pass 1)', { targetObjectName, operation, total: result.total, loaded: result.loaded, failed: result.failed, skipped: result.skipped, });
     } catch (error) {
         result.errorMessage = error.message || String(error);
         log.error('Object load failed (pass 1)', error, { targetObjectName });
@@ -547,9 +544,7 @@ async function loadObjectPass2({ ctx, node, mappings, deferredForObject, result 
             }));
             await appendErrorCsv(ctx.loadDir, targetObjectName, rows);
         }
-        log.info('Object deferred lookups updated (pass 2)', {
-            targetObjectName, updated: result.deferredUpdated, failed: deferredFailed,
-        });
+        // log.info('Object deferred lookups updated (pass 2)', { targetObjectName, updated: result.deferredUpdated, failed: deferredFailed, });
         void targetObjectId;
     } catch (error) {
         log.error('Object deferred update failed (pass 2)', error, { targetObjectName });

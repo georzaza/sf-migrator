@@ -174,6 +174,17 @@
                     />
                 </div>
 
+                <div v-if="selectedSourceObject && selectedTargetObject" class="panel-group">
+                    <Button
+                        label="Record Expansion (Explode)"
+                        icon="pi pi-clone"
+                        severity="secondary"
+                        outlined
+                        class="w-full"
+                        @click="showExpansionDialog = true"
+                    />
+                </div>
+
                 <div class="panel-group">
                     <label>Mapping Type</label>
                     <Dropdown
@@ -188,13 +199,37 @@
                 </div>
 
                 <div v-if="mappingType === 'expression'" class="panel-group">
-                    <label>Transformation Rule</label>
-                    <Textarea
-                        v-model="transformationRule"
-                        rows="4"
-                        placeholder="UNDER DEVELOPMENT. Will support {Object.Field}, {Object.Field1 || Object.Field2}, {SUBSTR(Object.Field, 2, 5)}, etc."
-                        class="w-full"
+                    <label>Transformation</label>
+                    <SelectButton
+                        v-model="expressionMode"
+                        :options="expressionModes"
+                        optionLabel="label"
+                        optionValue="value"
+                        :allowEmpty="false"
+                        class="mb-2"
                     />
+
+                    <template v-if="expressionMode === 'formula'">
+                        <Textarea
+                            v-model="transformationRule"
+                            rows="4"
+                            placeholder="e.g. IF(LEN({Account.Name}) < 5, '', {Account.Name})"
+                            class="w-full"
+                        />
+                        <small class="formula-hint">
+                            Field refs: <code>{Object.Field}</code> or <code>{Object.Rel.Field}</code>.
+                            Concatenate with <code>||</code>, arithmetic <code>+ - * /</code>,
+                            compare <code>= != &lt; &lt;= &gt; &gt;=</code>.
+                            Functions: <code>IF(cond, then, else)</code>, <code>COALESCE(a, b)</code>,
+                            <code>SUBSTR</code>, <code>LEN</code>, <code>UPPER</code>, <code>LOWER</code>,
+                            <code>TRIM</code>, <code>DATE</code>, <code>DATETIME</code>,
+                            <code>ADDDAYS</code>, <code>ADDHOURS</code>.
+                        </small>
+                    </template>
+
+                    <template v-else>
+                        <TransformNodeEditor v-model="transformTree" :sourceFields="sourceFields" />
+                    </template>
                 </div>
 
                 <div v-if="mappingType === 'constant'" class="panel-group">
@@ -346,6 +381,15 @@
             <div class="section-header">
                 <h2>All Field Mappings</h2>
                 <div class="header-controls">
+                    <Button
+                        label="Formula Guide"
+                        icon="pi pi-book"
+                        size="small"
+                        severity="help"
+                        outlined
+                        @click="showDslGuide = true"
+                        v-tooltip.top="'How to write transformation formulas'"
+                    />
                     <Button
                         label="Export CSV"
                         icon="pi pi-download"
@@ -730,6 +774,28 @@
             :sourceObjectLabel="selectedSourceObject?.label"
             :targetObjectLabel="selectedTargetObject?.label"
         />
+
+        <!-- Record Expansion (explode) Dialog -->
+        <RecordExpansionDialog
+            v-model:visible="showExpansionDialog"
+            :sourceOrgId="selectedSourceOrg?.id"
+            :targetOrgId="selectedTargetOrg?.id"
+            :sourceObject="selectedSourceObject"
+            :targetObject="selectedTargetObject"
+            :sourceFields="sourceFields"
+            :targetFields="targetFields"
+        />
+
+        <Dialog
+            v-model:visible="showDslGuide"
+            header="Transformation Formula Guide"
+            modal
+            dismissableMask
+            :style="{ width: '820px' }"
+            :breakpoints="{ '960px': '95vw' }"
+        >
+            <div class="dsl-guide" v-html="dslGuideHtml"></div>
+        </Dialog>
     </div>
 </template>
 
@@ -743,13 +809,21 @@ import { useToast } from 'primevue/usetoast';
 import { FilterMatchMode } from '@primevue/core/api';
 import { findOrgById, loadMigrationSelection, saveMigrationSelection } from '@/utils/migrationSelection';
 import ObjectMigrationSettingsDialog from '@/components/mapping/ObjectMigrationSettingsDialog.vue';
+import TransformNodeEditor from '@/components/mapping/TransformNodeEditor.vue';
+import RecordExpansionDialog from '@/components/mapping/RecordExpansionDialog.vue';
 import ValidationMessages from '@/components/common/ValidationMessages.vue';
+import { marked } from 'marked';
+import dslGuideMarkdown from '@/assets/docs/DSL.md?raw';
 
 const router = useRouter();
 const orgStore = useOrgStore();
 const mappingStore = useMappingStore();
 const metadataStore = useMetadataStore();
 const toast = useToast();
+
+// Formula/DSL help guide (rendered from the bundled markdown doc).
+const showDslGuide = ref(false);
+const dslGuideHtml = computed(() => marked.parse(dslGuideMarkdown));
 
 // State
 const selectedSourceOrg = ref(null);
@@ -769,6 +843,13 @@ const selectedTargetField = ref(null);
 const mappingType = ref('as-is');
 const transformationRule = ref(null);
 const constantValue = ref(null);
+// Expression sub-mode: raw formula vs. the visual tree builder.
+const expressionMode = ref('formula');
+const expressionModes = [
+    { label: 'Formula', value: 'formula' },
+    { label: 'Builder', value: 'builder' },
+];
+const transformTree = ref({ kind: 'field', path: '' });
 const showDeleteDialog = ref(false);
 const fieldMappingToDelete = ref(null);
 const currentObjectMapping = ref(null);
@@ -783,6 +864,7 @@ const importResult = ref(null);
 
 // Migration settings dialog + validation warnings
 const showSettingsDialog = ref(false);
+const showExpansionDialog = ref(false);
 const fieldWarnings = ref([]);
 const objectWarnings = ref([]);
 
@@ -899,6 +981,9 @@ const canCreateMapping = computed(() => {
     if (targetFieldNotWritable.value) return false;
 
     if (mappingType.value === 'expression') {
+        if (expressionMode.value === 'builder') {
+            return !treeHasEmptyField(transformTree.value);
+        }
         return !!transformationRule.value;
     }
 
@@ -1303,6 +1388,19 @@ function onMappingTypeChange() {
     }
 }
 
+// Shallow completeness check for the visual builder: every `field` node must
+// have a non-empty path. Deeper semantic validation is enforced server-side.
+function treeHasEmptyField(node) {
+    if (!node || typeof node !== 'object') return true;
+    if (node.kind === 'field') return !node.path || !String(node.path).trim();
+    if (node.kind === 'concat') return (node.parts || []).some(treeHasEmptyField);
+    if (node.kind === 'coalesce' || node.kind === 'func') return (node.args || []).some(treeHasEmptyField);
+    if (node.kind === 'compare' || node.kind === 'binop') return treeHasEmptyField(node.left) || treeHasEmptyField(node.right);
+    if (node.kind === 'if') return treeHasEmptyField(node.cond) || treeHasEmptyField(node.then) || (node.else ? treeHasEmptyField(node.else) : false);
+    if (node.kind === 'valueMap') return treeHasEmptyField(node.input);
+    return false;
+}
+
 async function createFieldMapping() {
     if (!selectedSourceObject.value || !selectedTargetObject.value) {
         toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please select source and target objects', life: 3000 });
@@ -1319,8 +1417,13 @@ async function createFieldMapping() {
         return;
     }
 
-    if (mappingType.value === 'expression' && !transformationRule.value) {
+    if (mappingType.value === 'expression' && expressionMode.value === 'formula' && !transformationRule.value) {
         toast.add({ severity: 'warn', summary: 'Warning', detail: 'Please provide a transformation rule', life: 3000 });
+        return;
+    }
+
+    if (mappingType.value === 'expression' && expressionMode.value === 'builder' && treeHasEmptyField(transformTree.value)) {
+        toast.add({ severity: 'warn', summary: 'Warning', detail: 'Complete every field reference in the builder', life: 3000 });
         return;
     }
 
@@ -1346,7 +1449,11 @@ async function createFieldMapping() {
         }
 
         if (mappingType.value === 'expression') {
-            data.transformationRule = transformationRule.value;
+            if (expressionMode.value === 'builder') {
+                data.transform = JSON.parse(JSON.stringify(transformTree.value));
+            } else {
+                data.transformationRule = transformationRule.value;
+            }
         }
 
         if (mappingType.value === 'constant') {
@@ -1389,6 +1496,7 @@ function resetFieldSelection() {
     selectedTargetField.value = null;
     transformationRule.value = null;
     constantValue.value = null;
+    transformTree.value = { kind: 'field', path: '' };
 }
 
 function confirmDeleteFieldMapping(fieldMapping) {
@@ -1560,6 +1668,66 @@ onMounted(async () => {
     margin: 0 auto;
 }
 
+.dsl-guide {
+    line-height: 1.6;
+}
+
+.dsl-guide :deep(h1) {
+    font-size: 1.5rem;
+    margin: 0 0 1rem;
+}
+
+.dsl-guide :deep(h2) {
+    font-size: 1.2rem;
+    margin: 1.5rem 0 0.5rem;
+    border-bottom: 1px solid var(--surface-border);
+    padding-bottom: 0.25rem;
+}
+
+.dsl-guide :deep(h3) {
+    font-size: 1.05rem;
+    margin: 1rem 0 0.5rem;
+}
+
+.dsl-guide :deep(code) {
+    background: var(--surface-100);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.dsl-guide :deep(pre) {
+    background: var(--surface-100);
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+
+.dsl-guide :deep(pre code) {
+    background: none;
+    padding: 0;
+}
+
+.dsl-guide :deep(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.75rem 0;
+}
+
+.dsl-guide :deep(th),
+.dsl-guide :deep(td) {
+    border: 1px solid var(--surface-border);
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+}
+
+.dsl-guide :deep(blockquote) {
+    border-left: 3px solid var(--primary-color);
+    margin: 0.75rem 0;
+    padding: 0.25rem 0 0.25rem 1rem;
+    color: var(--text-color-secondary);
+}
+
 .workspace-header {
     margin-bottom: 2rem;
     display: flex;
@@ -1651,6 +1819,19 @@ onMounted(async () => {
     margin-bottom: 0.5rem;
     font-weight: 600;
     font-size: 0.95rem;
+}
+
+.formula-hint {
+    color: var(--text-color-secondary, #6c757d);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.formula-hint code {
+    background: var(--surface-100, #f1f3f5);
+    border-radius: 3px;
+    padding: 0 0.25rem;
+    font-size: 0.78rem;
 }
 
 .selector-with-button {

@@ -22,6 +22,7 @@ import tracebackService from '../services/tracebackService.js';
 import sourceObjectFilterService from '../services/sourceObjectFilterService.js';
 import loadService from '../services/loadService.js';
 import validationService from '../services/validationService.js';
+import recordExpansionService from '../services/recordExpansionService.js';
 import probeUrl from '../utils/probeUrl.js';
 import sendResponse from '../utils/sendResponse.js';
 import logger from '../lib/logger.js';
@@ -32,7 +33,7 @@ const router = express.Router();
 
 router.get('/', authMiddleware, async (req, res) => {
     const action = req.get('action')?.toLowerCase();
-    log.info(`Received /api GET request with action: ${action}`);
+    // log.info(`Received /api GET request with action: ${action}`);
 
     if (action === 'get-orgs') {
         try {
@@ -192,6 +193,21 @@ router.get('/', authMiddleware, async (req, res) => {
         } catch (error) {
             log.error('Failed to retrieve field mappings', error, { mappingId });
             sendResponse(res, 500, false, 'Failed to retrieve field mappings');
+        }
+    }
+
+    else if (action === 'get-record-expansions') {
+        const sourceOrgId = req.headers.sourceorgid;
+        const targetOrgId = req.headers.targetorgid;
+        if (!sourceOrgId || !targetOrgId) {
+            return sendResponse(res, 400, false, 'Source and target Org IDs are required');
+        }
+        try {
+            const expansions = await recordExpansionService.getByOrgPair(sourceOrgId, targetOrgId);
+            sendResponse(res, 200, true, 'Record expansions retrieved successfully', expansions);
+        } catch (error) {
+            log.error('Failed to retrieve record expansions', error, { sourceOrgId, targetOrgId });
+            sendResponse(res, 500, false, 'Failed to retrieve record expansions');
         }
     }
 
@@ -416,14 +432,14 @@ router.get('/', authMiddleware, async (req, res) => {
 
 router.post('/', authMiddleware, async (req, res) => {
     const action = req.headers.action?.toLowerCase();
-    log.info(`Received /api POST request with action: ${action}`);
+    // log.info(`Received /api POST request with action: ${action}`);
 
     if (action === 'analyze-org') {
         const { orgId, options } = req.body;
         if (!orgId) {
             return sendResponse(res, 400, false, 'No org provided.');
         }
-        log.info('Starting org analysis', { orgId });
+        // log.info('Starting org analysis', { orgId });
         try {
             // Verify OAuth connection exists BEFORE going async — so we can return 401 synchronously
             const conn = await sfService.connectToOrg(orgId);
@@ -436,7 +452,7 @@ router.post('/', authMiddleware, async (req, res) => {
                 .then(async () => {
                     // STEP 3: all analysis completed, update db
                     await orgRepo.updateAnalysisStatus(orgId, 'complete');
-                    log.info('Org analysis completed', { orgId });
+                    // log.info('Org analysis completed', { orgId });
                 })
                 .catch(async (error) => {
                     log.error('Org analysis failed', error, { orgId });
@@ -485,7 +501,7 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 
     else if (action === 'create-field-mapping') {
-        const { sourceObjectId, targetObjectId, sourceFieldId, targetFieldId, mappingType, transformationRule, constantValue } = req.body;
+        const { sourceObjectId, targetObjectId, sourceFieldId, targetFieldId, mappingType, transformationRule, constantValue, transform } = req.body;
         if (!sourceObjectId || !targetObjectId || !targetFieldId) {
             return sendResponse(res, 400, false, 'Source object ID, target object ID, and target field ID are required');
         }
@@ -497,7 +513,8 @@ router.post('/', authMiddleware, async (req, res) => {
                 targetFieldId,
                 mappingType: mappingType || 'as-is',
                 transformationRule,
-                constantValue
+                constantValue,
+                transform
             });
             sendResponse(res, 201, true, 'Field mapping created successfully', mapping);
         } catch (error) {
@@ -514,7 +531,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
         const extractionMode = sourceOrgId ? 'source-org' : 'target-org';
         const isSubset = Array.isArray(sourceObjectIds) && sourceObjectIds.length > 0;
-        log.info('Extraction request received', { extractionMode, sourceOrgId, targetOrgId, subsetSize: isSubset ? sourceObjectIds.length : null });
+        // log.info('Extraction request received', { extractionMode, sourceOrgId, targetOrgId, subsetSize: isSubset ? sourceObjectIds.length : null });
 
         try {
             // Set extraction status to running
@@ -539,14 +556,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
             extractionPromise
                 .then(async (summary) => {
-                    log.info('Extraction completed', {
-                        extractionMode,
-                        sourceOrgId,
-                        targetOrgId,
-                        totalObjects: summary.totalObjects,
-                        successCount: summary.successCount,
-                        failedCount: summary.failedCount,
-                    });
+                    // log.info('Extraction completed', { extractionMode, sourceOrgId, targetOrgId, totalObjects: summary.totalObjects, successCount: summary.successCount, failedCount: summary.failedCount });
                     await orgRepo.update(orgId, {
                         extractionStatus: 'complete',
                         extractionSummary: summary,
@@ -584,7 +594,7 @@ router.post('/', authMiddleware, async (req, res) => {
             return sendResponse(res, 400, false, 'sourceOrgId and targetOrgId are required');
         }
 
-        log.info('Transform request received', { sourceOrgId, targetOrgId });
+        // log.info('Transform request received', { sourceOrgId, targetOrgId });
 
         try {
             transformService.setTransformStatus(sourceOrgId, targetOrgId, { status: 'running', summary: null, error: null });
@@ -594,13 +604,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
             transformService.runTransform({ sourceOrgId, targetOrgId })
                 .then((summary) => {
-                    log.info('Transform completed', {
-                        sourceOrgId,
-                        targetOrgId,
-                        targetObjectCount: summary.targetObjectCount,
-                        successCount: summary.successCount,
-                        failedCount: summary.failedCount,
-                    });
+                    // log.info('Transform completed', { sourceOrgId, targetOrgId, targetObjectCount: summary.targetObjectCount, successCount: summary.successCount, failedCount: summary.failedCount, });
                     transformService.setTransformStatus(sourceOrgId, targetOrgId, { status: 'complete', summary, error: null });
                 })
                 .catch((error) => {
@@ -620,7 +624,7 @@ router.post('/', authMiddleware, async (req, res) => {
             return sendResponse(res, 400, false, 'sourceOrgId and targetOrgId are required');
         }
 
-        log.info('Load request received', { sourceOrgId, targetOrgId });
+        // log.info('Load request received', { sourceOrgId, targetOrgId });
 
         try {
             loadService.setLoadStatus(sourceOrgId, targetOrgId, { status: 'running', summary: null, error: null });
@@ -630,11 +634,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
             loadService.runLoad({ sourceOrgId, targetOrgId })
                 .then((summary) => {
-                    log.info('Load completed', {
-                        sourceOrgId,
-                        targetOrgId,
-                        objectCount: summary.objectCount,
-                    });
+                    // log.info('Load completed', { sourceOrgId, targetOrgId, objectCount: summary.objectCount});
                     loadService.setLoadStatus(sourceOrgId, targetOrgId, { status: 'complete', summary, error: null });
                 })
                 .catch((error) => {
@@ -658,7 +658,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
 router.put('/', authMiddleware, async (req, res) => {
     const action = req.headers.action?.toLowerCase();
-    log.info(`Received /api PUT request with action: ${action}`);
+    // log.info(`Received /api PUT request with action: ${action}`);
 
     if (action === 'update-org') {
         const orgId = req.headers.orgid;
@@ -747,6 +747,20 @@ router.put('/', authMiddleware, async (req, res) => {
         }
     }
 
+    else if (action === 'upsert-record-expansion') {
+        const { sourceObjectId, targetObjectId, variants } = req.body;
+        if (!sourceObjectId || !targetObjectId) {
+            return sendResponse(res, 400, false, 'Source and target object IDs are required');
+        }
+        try {
+            const expansion = await recordExpansionService.upsertExpansion(sourceObjectId, targetObjectId, variants);
+            sendResponse(res, 200, true, 'Record expansion saved successfully', expansion);
+        } catch (error) {
+            log.error('Failed to save record expansion', error, { sourceObjectId, targetObjectId });
+            sendResponse(res, 500, false, error.message || 'Failed to save record expansion');
+        }
+    }
+
     else if (action === 'set-source-extract-filter') {
         const { sourceObjectId, extractFilter } = req.body;
         if (!sourceObjectId) {
@@ -807,7 +821,7 @@ router.put('/', authMiddleware, async (req, res) => {
 
 router.delete('/', authMiddleware, async (req, res) => {
     const action = req.headers.action?.toLowerCase();
-    log.info(`Received /api DELETE request with action: ${action}`);
+    // log.info(`Received /api DELETE request with action: ${action}`);
 
     if (action === 'delete-org') {
         const orgId = req.headers.orgid;
@@ -834,6 +848,20 @@ router.delete('/', authMiddleware, async (req, res) => {
         } catch (error) {
             log.error('Failed to delete object mapping', error, { mappingId });
             sendResponse(res, 500, false, error.message || 'Failed to delete object mapping');
+        }
+    }
+
+    else if (action === 'delete-record-expansion') {
+        const expansionId = req.headers.expansionid;
+        if (!expansionId) {
+            return sendResponse(res, 400, false, 'Expansion ID is required');
+        }
+        try {
+            await recordExpansionService.deleteExpansion(expansionId);
+            sendResponse(res, 200, true, 'Record expansion deleted successfully');
+        } catch (error) {
+            log.error('Failed to delete record expansion', error, { expansionId });
+            sendResponse(res, 500, false, error.message || 'Failed to delete record expansion');
         }
     }
 

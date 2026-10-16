@@ -21,6 +21,7 @@ import metadataRepo from '../repositories/metadataRepository.js';
 import migrationSettingRepo from '../repositories/migrationSettingRepository.js';
 import mappingRepo from '../repositories/mappingRepository.js';
 import logger from '../lib/logger.js';
+import { validateReferenceResolution } from '../utils/referenceResolution.js';
 
 const log = logger.create('upsertKeyService');
 
@@ -187,6 +188,29 @@ async function getMappedTargetFieldNames(sourceObjectId, targetObjectId) {
     );
 }
 
+async function validateReferenceFields(sourceObjectId, targetObjectId, config) {
+    const resolution = validateReferenceResolution(config);
+    if (resolution.strategy === 'match-existing') {
+        for (const [objectId, name] of [[sourceObjectId, resolution.sourceField], [targetObjectId, resolution.targetField]]) {
+            const fields = await metadataRepo.findFieldsByObjectId(objectId);
+            if (!fields.some((field) => field.name === name)) {
+                throw new Error(`Reference match field ${name} does not belong to object ${objectId}`);
+            }
+        }
+    }
+    return resolution;
+}
+
+async function setReferenceResolution(sourceObjectId, targetObjectId, config) {
+    if (!sourceObjectId || !targetObjectId) throw new Error('sourceObjectId and targetObjectId are required');
+    const referenceResolution = await validateReferenceFields(sourceObjectId, targetObjectId, config);
+    const existing = await migrationSettingRepo.findByObjectPair(sourceObjectId, targetObjectId);
+    await migrationSettingRepo.upsert(sourceObjectId, targetObjectId, {
+        metadata: { ...(existing?.metadata || {}), referenceResolution },
+    });
+    return referenceResolution;
+}
+
 export default {
     listExternalIdCandidates,
     getUpsertConfig,
@@ -194,4 +218,6 @@ export default {
     setOperation,
     isUpsertExternalIdMapped,
     getMappedTargetFieldNames,
+    validateReferenceFields,
+    setReferenceResolution,
 };

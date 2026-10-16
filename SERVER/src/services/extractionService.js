@@ -105,6 +105,7 @@ async function runExtraction({ sourceOrgId, targetOrgId = null, sourceObjectIds 
         fieldMappings,
         recordExpansions,
         metadataRepo,
+        referenceResolutions: await migrationSettingService.getReferenceResolutions(sourceOrgId, targetOrgId),
     });
     const sourceObjects = extractionPlan.objects;
     const requiredFieldsByObjectId = extractionPlan.fieldsByObjectId;
@@ -671,7 +672,8 @@ async function getExtractionPreview({ sourceOrgId, targetOrgId = null }) {
         ? await recordExpansionService.getByOrgPair(sourceOrgId, targetOrgId)
         : await recordExpansionService.getBySourceOrg(sourceOrgId);
 
-    const plan = await buildExtractionPlan({ sourceOrgId, fieldMappings, recordExpansions, metadataRepo });
+    const referenceResolutions = await migrationSettingService.getReferenceResolutions(sourceOrgId, targetOrgId);
+    const plan = await buildExtractionPlan({ sourceOrgId, fieldMappings, recordExpansions, referenceResolutions, metadataRepo });
 
     const directlyMapped = new Set(
         fieldMappings.map(m => m.sourceObjectId).filter(Boolean).map(String),

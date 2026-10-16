@@ -40,7 +40,7 @@ function extractReferenceTargetNames(referenceTo) {
     return names;
 }
 
-async function buildExtractionPlan({ sourceOrgId, fieldMappings, recordExpansions, metadataRepo }) {
+async function buildExtractionPlan({ sourceOrgId, fieldMappings, recordExpansions, referenceResolutions = [], metadataRepo }) {
     if (!sourceOrgId) throw new Error('sourceOrgId is required');
     if (!metadataRepo) throw new Error('metadataRepo is required');
     const mappings = Array.isArray(fieldMappings) ? fieldMappings : [];
@@ -175,6 +175,15 @@ async function buildExtractionPlan({ sourceOrgId, fieldMappings, recordExpansion
                 addField,
             });
         }
+    }
+
+    for (const setting of referenceResolutions) {
+        const config = setting.metadata?.referenceResolution;
+        if (config?.strategy !== 'match-existing') continue;
+        const object = objectsById.get(setting.sourceObjectId);
+        if (!object) throw new Error('Reference resolution source object not found');
+        ensureObject(object);
+        addField(object.id, config.sourceField);
     }
 
     const objects = Array.from(planObjects.values()).filter(o => !!o.name);

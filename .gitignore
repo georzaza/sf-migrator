@@ -37,7 +37,4 @@ SERVER/.env.production
 seeders copy/
 seeders/
 
-
 SERVER/.sfdx
-
-

@@ -33,6 +33,9 @@ import transformService from './transformService.js';
 import tracebackService from './tracebackService.js';
 import bulkIngestService from './bulkIngestService.js';
 import recordIdMapRepository from '../repositories/recordIdMapRepository.js';
+import migrationSettingService from './migrationSettingService.js';
+import extractionService from './extractionService.js';
+import { validateReferenceResolution, normalizeReferenceKey, buildTargetMatchIndex } from '../utils/referenceResolution.js';
 
 const log = logger.create('loadService');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -224,8 +227,8 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
             if (!seen.has(col)) { seen.add(col); targetColumns.push(col); }
 
             if (m.mappingType === 'as-is' && Array.isArray(m.sourceField?.referenceTo) && m.sourceField.referenceTo.length > 0) {
-                const referencedObjectName = getFirstReferenceTargetName(m.sourceField.referenceTo);
-                if (referencedObjectName) lookupRemap.set(col, referencedObjectName);
+                const referencedObjects = m.sourceField.referenceTo.map((ref) => getFirstReferenceTargetName([ref])).filter(Boolean);
+                if (referencedObjects.length) lookupRemap.set(col, referencedObjects);
             }
         }
 
@@ -281,7 +284,7 @@ async function loadObjectPass1({ ctx, node, mappings, deferredForObject }) {
                     if (targetParentId) {
                         values[col] = targetParentId;
                     } else {
-                        rowError = `Lookup ${col}: parent ${parentObj} record ${raw} was not loaded`;
+                        rowError = `Lookup ${col}: parent ${parentObj} record ${raw} was not loaded or had no unique target match`;
                         break;
                     }
                 }
@@ -581,14 +584,54 @@ function getFirstReferenceTargetName(referenceTo) {
 }
 
 /**
- * Resolve source -> target record Ids for one source object, primarily from
- * RecordIdMap (populated by pass-1 loads). Used to remap lookup columns.
- *
- * No SOQL fallback: with the new traceback model the chosen key field can be
- * anything (or a tuple), so we can't generically rediscover existing records
- * from the target org. RecordIdMap is the source of truth.
+ * Resolve source -> target record Ids through the configured parent strategy.
+ * Existing-target matching is opt-in; otherwise RecordIdMap remains authoritative.
  */
 async function getIdMap(ctx, sourceObjectName, sourceRecordIds = [], refresh = false) {
+    if (Array.isArray(sourceObjectName)) {
+        if (sourceObjectName.length === 1) return getIdMap(ctx, sourceObjectName[0], sourceRecordIds, refresh);
+        const combined = new Map();
+        for (const parent of sourceObjectName) {
+            const parentMap = await getIdMap(ctx, parent, sourceRecordIds, refresh);
+            for (const id of uniqueStrings(sourceRecordIds)) {
+                const targetId = parentMap.get(id);
+                if (targetId) combined.set(id, targetId);
+            }
+        }
+        return combined;
+    }
+    ctx.referenceResolutions ??= await migrationSettingService.getReferenceResolutions(ctx.sourceOrgId, ctx.targetOrgId);
+    const settings = ctx.referenceResolutions.filter((setting) => setting.sourceObject?.name === sourceObjectName);
+    if (settings.length > 1) throw new Error(`Multiple reference resolution pairs configured for ${sourceObjectName}`);
+    const setting = settings[0];
+    if (setting) {
+        if (refresh) ctx.idMaps.delete(sourceObjectName);
+        if (!ctx.idMaps.has(sourceObjectName)) {
+            const config = validateReferenceResolution(setting.metadata.referenceResolution);
+            ctx.targetMatchIndexes ??= new Map();
+            const indexKey = JSON.stringify([setting.targetObject.name, config.targetField, config.normalizer]);
+            if (!ctx.targetMatchIndexes.has(indexKey)) {
+                ctx.targetMatchIndexes.set(indexKey, await buildTargetMatchIndex(
+                    ctx.conn, setting.targetObject.name, config.targetField, config.normalizer,
+                ));
+            }
+            const table = extractionService.getStageTableName(ctx.sourceOrgId, sourceObjectName);
+            if (!(await tableExists(table))) {
+                throw new Error(`Reference match data missing for ${sourceObjectName}. Run extraction first.`);
+            }
+            const [rows] = await db.sequelize.query(
+                `SELECT "Id", ${quoteIdentifier(config.sourceField)} FROM ${quoteIdentifier(table)};`,
+            );
+            const index = ctx.targetMatchIndexes.get(indexKey);
+            const map = new Map();
+            for (const row of rows) {
+                const key = normalizeReferenceKey(row[config.sourceField], config.normalizer);
+                map.set(String(row.Id), key === null ? null : index.get(key) || null);
+            }
+            ctx.idMaps.set(sourceObjectName, map);
+        }
+        return ctx.idMaps.get(sourceObjectName);
+    }
     if (refresh) ctx.idMaps.delete(sourceObjectName);
     if (!ctx.idMaps.has(sourceObjectName)) ctx.idMaps.set(sourceObjectName, new Map());
 
@@ -605,8 +648,14 @@ async function getIdMap(ctx, sourceObjectName, sourceRecordIds = [], refresh = f
     for (const row of rows) {
         if (row.targetRecordId) map.set(String(row.sourceRecordId), row.targetRecordId);
     }
+    for (const id of missingIds) {
+        if (!map.has(id)) map.set(id, null);
+    }
+
     return map;
 }
+
+export { getIdMap };
 
 function uniqueStrings(values) {
     const list = values === null || values === undefined

@@ -27,7 +27,7 @@ async function findAllByOrgPair(sourceOrgId, targetOrgId) {
     return MigrationSetting.findAll({
         include: [
             { model: SfObjectMetadata, as: 'sourceObject', attributes: ['id', 'name', 'label', 'sfOrgId'], where: { sfOrgId: sourceOrgId } },
-            { model: SfObjectMetadata, as: 'targetObject', attributes: ['id', 'name', 'label', 'sfOrgId'], where: { sfOrgId: targetOrgId } },
+            { model: SfObjectMetadata, as: 'targetObject', attributes: ['id', 'name', 'label', 'sfOrgId'], ...(targetOrgId ? { where: { sfOrgId: targetOrgId } } : {}) },
         ],
     });
 }

@@ -59,7 +59,7 @@ async function getLoadPlan(sourceOrgId, targetOrgId) {
     const fieldMappings = fieldMappingsRaw.filter((m) => {
         const targets = settingsMap.get(m.sourceObjectId);
         const setting = targets?.get(m.targetObjectId);
-        return true;
+        return setting?.referenceResolution?.strategy !== 'match-existing';
     });
     if (fieldMappings.length !== fieldMappingsRaw.length) {
         // log.info('Filtered disabled object pairs from load plan', { removed: fieldMappingsRaw.length - fieldMappings.length, kept: fieldMappings.length, });

@@ -53,7 +53,8 @@ export default (sequelize, DataTypes) => {
         },
         metadata: {
             type: DataTypes.JSONB,
-            allowNull: true
+            allowNull: true,
+            comment: 'Includes referenceResolution: strategy, sourceField, targetField, normalizer'
         }
     }, {
         indexes: [

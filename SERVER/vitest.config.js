@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
     test: {
         environment: 'node',
-        include: ['test/transform/**/*.test.js', 'test/expansion/**/*.test.js'],
+        include: ['test/transform/**/*.test.js', 'test/expansion/**/*.test.js', 'test/reference/**/*.test.js'],
         coverage: {
             provider: 'v8',
             reporter: ['text', 'html'],

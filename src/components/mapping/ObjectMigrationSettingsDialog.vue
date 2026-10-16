@@ -16,6 +16,7 @@
 import { ref, watch, computed } from 'vue';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { usePipelineStore } from '@/stores/pipelineStore';
+import { useMetadataStore } from '@/stores/metadataStore';
 import { useToast } from 'primevue/usetoast';
 import UpsertConfigSelect from '@/components/pipeline/UpsertConfigSelect.vue';
 
@@ -46,18 +47,48 @@ const emit = defineEmits(['update:visible', 'saved']);
 
 const settingsStore = useSettingsStore();
 const pipelineStore = usePipelineStore();
+const metadataStore = useMetadataStore();
 const toast = useToast();
 
 const defaultForm = () => ({
     batchSize: 200,
     sortToAvoidLocks: false,
+    referenceStrategy: 'id-map',
+    sourceField: null,
+    targetField: null,
+    normalizer: 'none',
 });
 
 const form = ref(defaultForm());
 const saving = ref(false);
 const errorMessage = ref('');
+const loading = ref(true);
+const loaded = ref(false);
 // undefined = user has not changed the upsert config in this dialog session.
 const pendingUpsertConfig = ref(undefined);
+
+const strategyOptions = [
+    { label: 'Use migrated record IDs (default)', value: 'id-map' },
+    { label: 'Match existing target records', value: 'match-existing' },
+];
+const normalizerOptions = [
+    { label: 'None (exact match)', value: 'none' },
+    { label: 'Local part (before @)', value: 'localPart' },
+    { label: 'Lowercase', value: 'lowercase' },
+    { label: 'Local part + lowercase', value: 'localPartLowercase' },
+];
+const sourceFields = computed(() => metadataStore.getFields(props.sourceObjectId));
+const targetFields = computed(() => metadataStore.getFields(props.targetObjectId));
+const matchExisting = computed(() => form.value.referenceStrategy === 'match-existing');
+const canSave = computed(() =>
+    props.visible && props.sourceObjectId && props.targetObjectId &&
+    loaded.value && !loading.value && !saving.value &&
+    (!matchExisting.value || (
+        sourceFields.value.some(field => field.name === form.value.sourceField) &&
+        targetFields.value.some(field => field.name === form.value.targetField) &&
+        normalizerOptions.some(option => option.value === form.value.normalizer)
+    )),
+);
 
 const dialogHeader = computed(() => {
     const src = props.sourceObjectLabel || 'Source';
@@ -65,27 +96,45 @@ const dialogHeader = computed(() => {
     return `Migration Settings: ${src} → ${tgt}`;
 });
 
-watch(() => props.visible, async (val) => {
-    if (!val) return;
+watch(() => [props.visible, props.sourceObjectId, props.targetObjectId], async ([visible, sourceObjectId, targetObjectId], _, onCleanup) => {
+    let cancelled = false;
+    onCleanup(() => { cancelled = true; });
+    loaded.value = false;
+    loading.value = true;
+    if (!visible) return;
 
     errorMessage.value = '';
     form.value = defaultForm();
     pendingUpsertConfig.value = undefined;
 
-    if (!props.sourceObjectId || !props.targetObjectId) return;
+    if (!sourceObjectId || !targetObjectId) return;
 
     try {
-        const setting = await settingsStore.loadSetting(props.sourceObjectId, props.targetObjectId);
+        const [setting] = await Promise.all([
+            settingsStore.loadSetting(sourceObjectId, targetObjectId),
+            metadataStore.loadFields(sourceObjectId),
+            metadataStore.loadFields(targetObjectId),
+        ]);
+        if (cancelled) return;
         if (setting) {
+            const referenceResolution = setting.metadata?.referenceResolution;
             form.value = {
                 batchSize: setting.batchSize ?? 200,
                 sortToAvoidLocks: setting.sortToAvoidLocks ?? false,
+                referenceStrategy: referenceResolution?.strategy ?? 'id-map',
+                sourceField: referenceResolution?.sourceField ?? null,
+                targetField: referenceResolution?.targetField ?? null,
+                normalizer: referenceResolution?.normalizer ?? 'none',
             };
         }
+        loaded.value = true;
     } catch (error) {
+        if (cancelled) return;
         errorMessage.value = error.response?.data?.message || error.message || 'Failed to load settings';
+    } finally {
+        if (!cancelled) loading.value = false;
     }
-});
+}, { immediate: true });
 
 function onClose() {
     emit('update:visible', false);
@@ -97,8 +146,11 @@ function onUpsertConfigChange(config) {
 }
 
 async function onSave() {
-    if (!props.sourceObjectId || !props.targetObjectId) return;
+    if (!canSave.value) return;
 
+    const sourceObjectId = props.sourceObjectId;
+    const targetObjectId = props.targetObjectId;
+    const upsertConfig = matchExisting.value ? undefined : pendingUpsertConfig.value;
     saving.value = true;
     errorMessage.value = '';
 
@@ -106,12 +158,18 @@ async function onSave() {
         const payload = {
             batchSize: form.value.batchSize,
             sortToAvoidLocks: form.value.sortToAvoidLocks,
+            referenceResolution: matchExisting.value ? {
+                strategy: 'match-existing',
+                sourceField: form.value.sourceField,
+                targetField: form.value.targetField,
+                normalizer: form.value.normalizer,
+            } : { strategy: 'id-map' },
         };
 
-        await settingsStore.saveSetting(props.sourceObjectId, props.targetObjectId, payload);
-        if (pendingUpsertConfig.value !== undefined) {
-            const cfg = pendingUpsertConfig.value;
-            await pipelineStore.saveUpsertConfig(props.sourceObjectId, props.targetObjectId, {
+        await settingsStore.saveSetting(sourceObjectId, targetObjectId, payload);
+        if (upsertConfig !== undefined) {
+            const cfg = upsertConfig;
+            await pipelineStore.saveUpsertConfig(sourceObjectId, targetObjectId, {
                 operation: cfg.operation,
                 externalIdFieldId: cfg.externalIdFieldId,
             });
@@ -142,11 +200,76 @@ async function onSave() {
 
         <form class="settings-form" @submit.prevent="onSave">
             <div class="field-row">
+                <label for="setting-reference-strategy">Parent Reference Matching</label>
+                <Select
+                    inputId="setting-reference-strategy"
+                    v-model="form.referenceStrategy"
+                    :options="strategyOptions"
+                    optionLabel="label"
+                    optionValue="value"
+                    :disabled="loading || !loaded || saving"
+                    :loading="loading"
+                    class="w-full"
+                />
+                <small class="field-hint">
+                    Controls how child references to this parent object pair resolve. Rerun extraction after changing reference matching settings.
+                </small>
+            </div>
+
+            <template v-if="matchExisting">
+                <Message severity="info" :closable="false">
+                    Match-existing only references existing target records; it never loads this object.
+                    Missing or duplicate matches cause dependent child records to be skipped.
+                </Message>
+                <div class="field-row">
+                    <label for="setting-source-field">Source Match Field</label>
+                    <Select
+                        inputId="setting-source-field"
+                        v-model="form.sourceField"
+                        :options="sourceFields"
+                        optionLabel="name"
+                        optionValue="name"
+                        placeholder="Select source field"
+                        filter
+                        :disabled="loading || !loaded || saving"
+                        class="w-full"
+                    />
+                </div>
+                <div class="field-row">
+                    <label for="setting-target-field">Target Match Field</label>
+                    <Select
+                        inputId="setting-target-field"
+                        v-model="form.targetField"
+                        :options="targetFields"
+                        optionLabel="name"
+                        optionValue="name"
+                        placeholder="Select target field"
+                        filter
+                        :disabled="loading || !loaded || saving"
+                        class="w-full"
+                    />
+                </div>
+                <div class="field-row">
+                    <label for="setting-normalizer">Match Value Normalizer</label>
+                    <Select
+                        inputId="setting-normalizer"
+                        v-model="form.normalizer"
+                        :options="normalizerOptions"
+                        optionLabel="label"
+                        optionValue="value"
+                        :disabled="loading || !loaded || saving"
+                        class="w-full"
+                    />
+                </div>
+            </template>
+
+            <div v-show="!matchExisting" class="field-row">
                 <label>Load Operation &amp; External ID</label>
                 <UpsertConfigSelect
                     :sourceObjectId="sourceObjectId"
                     :targetObjectId="targetObjectId"
                     :autoSave="false"
+                    :disabled="loading || !loaded || saving"
                     @change="onUpsertConfigChange"
                 />
                 <small class="field-hint">
@@ -196,7 +319,7 @@ async function onSave() {
 
         <template #footer>
             <Button label="Cancel" icon="pi pi-times" text @click="onClose" />
-            <Button label="Save" icon="pi pi-check" :loading="saving" @click="onSave" />
+            <Button label="Save" icon="pi pi-check" :loading="saving" :disabled="!canSave" @click="onSave" />
         </template>
     </Dialog>
 </template>

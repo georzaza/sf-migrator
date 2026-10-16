@@ -5,6 +5,7 @@
 import migrationSettingRepo from '../repositories/migrationSettingRepository.js';
 import metadataRepo from '../repositories/metadataRepository.js';
 import logger from '../lib/logger.js';
+import tracebackService from './tracebackService.js';
 
 const log = logger.create('migrationSettingService');
 
@@ -40,7 +41,9 @@ async function getEffectiveSettingsMap(sourceOrgId, targetOrgId) {
     const rows = await migrationSettingRepo.findAllByOrgPair(sourceOrgId, targetOrgId);
     for (const row of rows) {
         if (!out.has(row.sourceObjectId)) out.set(row.sourceObjectId, new Map());
-        out.get(row.sourceObjectId).set(row.targetObjectId, {});
+        out.get(row.sourceObjectId).set(row.targetObjectId, {
+            referenceResolution: row.metadata?.referenceResolution || { strategy: 'id-map' },
+        });
     }
     return out;
 }
@@ -69,13 +72,26 @@ async function upsertSetting(sourceObjectId, targetObjectId, updates = {}) {
         }
     }
 
+    const resolution = updates.referenceResolution !== undefined ? updates.referenceResolution : updates.metadata?.referenceResolution;
+    if (resolution !== undefined) {
+        const referenceResolution = await tracebackService.validateReferenceFields(sourceObjectId, targetObjectId, resolution);
+        const existing = await migrationSettingRepo.findByObjectPair(sourceObjectId, targetObjectId);
+        fields.metadata = { ...(existing?.metadata || {}), ...(fields.metadata || {}), referenceResolution };
+    }
+
     const setting = await migrationSettingRepo.upsert(sourceObjectId, targetObjectId, fields);
     // log.info('Migration setting saved', { sourceObjectId, targetObjectId, settingId: setting.id });
     return setting;
+}
+
+async function getReferenceResolutions(sourceOrgId, targetOrgId = null) {
+    const rows = await migrationSettingRepo.findAllByOrgPair(sourceOrgId, targetOrgId);
+    return rows.filter((row) => row.metadata?.referenceResolution?.strategy === 'match-existing');
 }
 
 export default {
     getSetting,
     upsertSetting,
     getEffectiveSettingsMap,
+    getReferenceResolutions,
 };

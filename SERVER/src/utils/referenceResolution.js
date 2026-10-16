@@ -32,7 +32,8 @@ function normalizeReferenceKey(value, normalizer = 'none') {
 }
 
 async function buildTargetMatchIndex(conn, objectName, matchField, normalizer) {
-    const stream = await conn.bulk2.query(`SELECT Id, ${assertApiName(matchField)} FROM ${assertApiName(objectName)}`);
+    const fields = assertApiName(matchField) === 'Id' ? 'Id' : `Id, ${matchField}`;
+    const stream = await conn.bulk2.query(`SELECT ${fields} FROM ${assertApiName(objectName)}`);
     const index = new Map();
     for await (const row of stream) {
         const key = normalizeReferenceKey(row[matchField], normalizer);

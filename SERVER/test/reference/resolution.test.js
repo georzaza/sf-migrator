@@ -8,7 +8,7 @@ vi.mock('fs/promises', () => ({ default: { mkdir: vi.fn(), writeFile: vi.fn() } 
 vi.mock('../../src/services/transformService.js', () => ({ default: { getStg2TableName: () => 'stg2_Contact' } }));
 vi.mock('../../src/services/tracebackService.js', () => ({ default: { getUpsertConfig: vi.fn() } }));
 vi.mock('../../src/services/bulkIngestService.js', () => ({ default: { buildConnection: vi.fn(), ingestRecords: vi.fn() } }));
-vi.mock('../../src/services/extractionService.js', () => ({ default: { getStageTableName: () => 'stg1_User' } }));
+vi.mock('../../src/services/extractionService.js', () => ({ default: { getStageTableName: vi.fn() } }));
 vi.mock('../../src/services/migrationSettingService.js', () => ({
     default: { getReferenceResolutions: vi.fn(), getEffectiveSettingsMap: vi.fn() },
 }));
@@ -21,6 +21,7 @@ import idMapRepo from '../../src/repositories/recordIdMapRepository.js';
 import loadService, { getIdMap } from '../../src/services/loadService.js';
 import tracebackService from '../../src/services/tracebackService.js';
 import bulkIngestService from '../../src/services/bulkIngestService.js';
+import extractionService from '../../src/services/extractionService.js';
 import dependencyService from '../../src/services/dependencyService.js';
 import { buildExtractionPlan } from '../../src/services/extractionPlanBuilder.js';
 
@@ -36,6 +37,7 @@ beforeEach(() => {
     vi.resetAllMocks();
     settings.getReferenceResolutions.mockResolvedValue([parent]);
     idMapRepo.findByObject.mockResolvedValue([]);
+    extractionService.getStageTableName.mockReturnValue('stg1_User');
 });
 
 describe('reference keys', () => {
@@ -70,6 +72,12 @@ describe('reference keys', () => {
         expect(conn.bulk2.query).toHaveBeenCalledWith('SELECT Id, Login__c FROM ExistingUser__c');
         await expect(buildTargetMatchIndex(conn, 'User WHERE true', 'Name', 'none')).rejects.toThrow(/API name/);
         expect(conn.bulk2.query).toHaveBeenCalledTimes(1);
+    });
+
+    test('allows Id as a target match field without selecting it twice', async () => {
+        const conn = { bulk2: { query: vi.fn().mockResolvedValue(Readable.from([{ Id: 'existing-id' }])) } };
+        expect((await buildTargetMatchIndex(conn, 'User', 'Id', 'none')).get('existing-id')).toBe('existing-id');
+        expect(conn.bulk2.query).toHaveBeenCalledWith('SELECT Id FROM User');
     });
 });
 
@@ -131,6 +139,12 @@ describe('lookup ID resolution', () => {
     test('requires extracted parent data', async () => {
         db.sequelize.query.mockResolvedValue([[{ exists: false }]]);
         await expect(getIdMap(context(), 'User', ['source-user'])).rejects.toThrow(/Run extraction/);
+    });
+
+    test('rejects unsafe staging identifiers before issuing a database query', async () => {
+        extractionService.getStageTableName.mockReturnValue('stg1_User"; DROP TABLE users; --');
+        await expect(getIdMap(context(), 'User', ['source-user'])).rejects.toThrow(/Invalid reference staging table/);
+        expect(db.sequelize.query).not.toHaveBeenCalled();
     });
 
     test('loads children with matched IDs, skips unresolved children and leaves null lookups alone', async () => {

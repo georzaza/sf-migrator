@@ -616,6 +616,7 @@ async function getIdMap(ctx, sourceObjectName, sourceRecordIds = [], refresh = f
                 ));
             }
             const table = extractionService.getStageTableName(ctx.sourceOrgId, sourceObjectName);
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error('Invalid reference staging table name');
             if (!(await tableExists(table))) {
                 throw new Error(`Reference match data missing for ${sourceObjectName}. Run extraction first.`);
             }

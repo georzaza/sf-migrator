@@ -620,12 +620,13 @@ async function getIdMap(ctx, sourceObjectName, sourceRecordIds = [], refresh = f
                 throw new Error(`Reference match data missing for ${sourceObjectName}. Run extraction first.`);
             }
             const [rows] = await db.sequelize.query(
-                `SELECT "Id", ${quoteIdentifier(config.sourceField)} FROM ${quoteIdentifier(table)};`,
+                `SELECT "Id", to_jsonb(parent) ->> $1 AS "__matchKey" FROM ${quoteIdentifier(table)} AS parent;`,
+                { bind: [config.sourceField] },
             );
             const index = ctx.targetMatchIndexes.get(indexKey);
             const map = new Map();
             for (const row of rows) {
-                const key = normalizeReferenceKey(row[config.sourceField], config.normalizer);
+                const key = normalizeReferenceKey(row.__matchKey, config.normalizer);
                 map.set(String(row.Id), key === null ? null : index.get(key) || null);
             }
             ctx.idMaps.set(sourceObjectName, map);

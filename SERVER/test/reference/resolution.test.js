@@ -87,10 +87,10 @@ describe('lookup ID resolution', () => {
 
     test('matches extracted parent keys, caches queries and rejects missing or ambiguous keys', async () => {
         db.sequelize.query.mockResolvedValueOnce([[{ exists: true }]]).mockResolvedValueOnce([[
-            { Id: 'source-bob', Username: 'BOB@source' },
-            { Id: 'source-alice', Username: 'alice@source' },
-            { Id: 'source-missing', Username: 'missing@source' },
-            { Id: 'source-null', Username: null },
+            { Id: 'source-bob', __matchKey: 'BOB@source' },
+            { Id: 'source-alice', __matchKey: 'alice@source' },
+            { Id: 'source-missing', __matchKey: 'missing@source' },
+            { Id: 'source-null', __matchKey: null },
         ]]);
         const ctx = context();
         const map = await getIdMap(ctx, 'User', ['source-bob', 'source-alice']);
@@ -102,6 +102,10 @@ describe('lookup ID resolution', () => {
         expect(await getIdMap(ctx, 'User', ['source-missing'])).toBe(map);
         expect(ctx.conn.bulk2.query).toHaveBeenCalledTimes(1);
         expect(db.sequelize.query).toHaveBeenCalledTimes(2);
+        expect(db.sequelize.query).toHaveBeenLastCalledWith(
+            expect.stringContaining('to_jsonb(parent) ->> $1'),
+            { bind: ['Username'] },
+        );
         expect(settings.getReferenceResolutions).toHaveBeenCalledTimes(1);
         expect(idMapRepo.findByObject).not.toHaveBeenCalled();
     });
@@ -158,10 +162,10 @@ describe('lookup ID resolution', () => {
                 { __srcId: 'c3', OwnerId: 'source-missing' },
                 { __srcId: 'c4', OwnerId: null },
             ]];
-            if (sql.includes('SELECT "Id", "Username"')) return [[
-                { Id: 'source-bob', Username: 'BOB@source' },
-                { Id: 'source-alice', Username: 'alice@source' },
-                { Id: 'source-missing', Username: 'missing@source' },
+            if (sql.includes('to_jsonb(parent)')) return [[
+                { Id: 'source-bob', __matchKey: 'BOB@source' },
+                { Id: 'source-alice', __matchKey: 'alice@source' },
+                { Id: 'source-missing', __matchKey: 'missing@source' },
             ]];
             return [[]];
         });
